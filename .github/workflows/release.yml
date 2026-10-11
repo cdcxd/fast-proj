@@ -1,0 +1,33 @@
+name: Release
+
+# Push a tag like `utm-v0.1.0` to publish packages/utm. Requires npm trusted publishing for this repository and
+# workflow (or an NPM_TOKEN secret for the first publish).
+on:
+  push:
+    tags: ['utm-v*']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+      - name: Check tag matches package version
+        run: test "utm-v$(node -p "require('./packages/utm/package.json').version")" = "$GITHUB_REF_NAME"
+      - run: npm publish --provenance --access public
+        working-directory: packages/utm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

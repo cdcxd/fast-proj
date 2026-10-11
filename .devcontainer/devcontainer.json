@@ -1,14 +1,14 @@
 {
   "name": "fast-proj",
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "image": "mcr.microsoft.com/devcontainers/base:2.1.8-noble",
   "features": {
     "ghcr.io/devcontainers/features/node:1": { "version": "24" },
-    "ghcr.io/devcontainers-extra/features/bun:1": {}
+    "ghcr.io/devcontainers-extra/features/bun:1": { "version": "1.4.2" }
   },
-  "postCreateCommand": "bun install",
+  "postCreateCommand": "bun install && bunx playwright install --with-deps chromium",
   "customizations": {
     "vscode": {
-      "extensions": ["oven.bun-vscode"]
+      "extensions": ["oven.bun-vscode", "oxc.oxc-vscode"]
     }
   }
 }

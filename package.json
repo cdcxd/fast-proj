@@ -13,15 +13,18 @@
     "lint": "oxlint --deny-warnings",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "check": "bun run format:check && bun run lint && bun run typecheck && bun run test"
+    "check": "bun run format:check && bun run lint && bun run typecheck && bun run build && bun run test"
   },
   "devDependencies": {
-    "@types/proj4": "^2.19.0",
+    "@types/node": "^26.6.5",
     "oxfmt": "^0.72.0",
     "oxlint": "^1.87.0",
     "playwright": "^1.64.0",
     "proj4": "^2.22.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3"
+  },
+  "engines": {
+    "node": ">=22.12"
   }
 }

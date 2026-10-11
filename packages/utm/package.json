@@ -1,6 +1,6 @@
 {
   "name": "@fast-proj/utm",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Fast UTM <-> WGS84 conversion with batch typed-array APIs",
   "keywords": [
     "geodesy",
@@ -26,11 +26,24 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./geojson": {
+      "types": "./dist/geojson.d.ts",
+      "default": "./dist/geojson.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepack": "bun run build",
     "test": "vitest run",
     "bench": "bun run build && node bench/run.mjs && bun bench/run.mjs && node bench/run.mjs --browser"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
