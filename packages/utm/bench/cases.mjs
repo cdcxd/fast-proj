@@ -1,4 +1,4 @@
-export function runCases(proj4, utm, { n = 10000, runs = 31, reps = 5 } = {}) {
+export function runCases(proj4, utm, lineString, { n = 10000, runs = 31, reps = 5 } = {}) {
   const xs = new Float64Array(n);
   const ys = new Float64Array(n);
   const lonIn = new Float64Array(n);
@@ -46,6 +46,16 @@ export function runCases(proj4, utm, { n = 10000, runs = 31, reps = 5 } = {}) {
       },
     ],
     ['WGS84 → UTM', 'fromLonLat (output buffers)', () => conv.fromLonLat(lonIn, latIn, a, b)],
+    [
+      'flat UTM → GeoJSON LineString',
+      'proj4 converter.forward',
+      () => {
+        const coordinates = [];
+        for (let i = 0; i < n; i++) coordinates.push(inv.forward([xy[2 * i], xy[2 * i + 1]]));
+        return { type: 'LineString', coordinates };
+      },
+    ],
+    ['flat UTM → GeoJSON LineString', 'lineString (`/geojson`)', () => lineString(conv, xy)],
   ];
 
   return cases.map(([direction, method, fn]) => {

@@ -12,8 +12,9 @@ const n = 10000;
 async function inProcess() {
   const { default: proj4 } = await import('proj4');
   const { utm } = await import('../dist/index.js');
+  const { lineString } = await import('../dist/geojson.js');
   const runtime = typeof Bun === 'undefined' ? `Node ${process.version}` : `Bun ${Bun.version}`;
-  return { runtime, rows: (await import('./cases.mjs')).runCases(proj4, utm, { n, runs }) };
+  return { runtime, rows: (await import('./cases.mjs')).runCases(proj4, utm, lineString, { n, runs }) };
 }
 
 async function inBrowser() {
@@ -40,8 +41,9 @@ async function inBrowser() {
   const rows = await page.evaluate(
     async (opts) => {
       const { utm } = await import('/dist/index.js');
+      const { lineString } = await import('/dist/geojson.js');
       const { runCases } = await import('/cases.mjs');
-      return runCases(window.proj4, utm, opts);
+      return runCases(window.proj4, utm, lineString, opts);
     },
     { n, runs },
   );
