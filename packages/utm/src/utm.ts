@@ -6,7 +6,7 @@
  * - forward: conformal latitude, then xi', eta' from Eq. (10), Krüger series Eq. (11), scaling Eq. (13);
  * - inverse: Eqs. (15)-(16), then geodetic latitude from the conformal latitude;
  * - A, alpha and beta from Eqs. (29), (35) and (36) truncated to order n^6, as the paper recommends for double
- *   precision; the trigonometric series are evaluated with Clenshaw summation, as in the paper.
+ *   precision; the fixed trigonometric series are evaluated as polynomials equivalent to Clenshaw summation.
  *
  * Unlike the paper, conformal latitude is converted with its Fourier series in n (no Newton iteration), and
  * double-angle identities plus short Taylor expansions of the small series corrections (< 4e-3 rad for f < 0.01)
@@ -84,6 +84,27 @@ export function utm({ zone, south = false, ellipsoid = WGS84 }: UtmOptions): Utm
   const [c1, c2, c3, c4, c5, c6] = s.toConformal;
   const [d1, d2, d3, d4, d5, d6] = s.fromConformal;
 
+  // Rewrite the fixed Clenshaw recurrences as degree-five polynomials once per converter.
+  // sin(2k t) = sin(2t) U_{k-1}(cos(2t)); these coefficients use p = 2 cos(2t).
+  const cp0 = c1 - c3 + c5,
+    cp1 = c2 - 2 * c4 + 3 * c6,
+    cp2 = c3 - 3 * c5,
+    cp3 = c4 - 4 * c6;
+  const dp0 = d1 - d3 + d5,
+    dp1 = d2 - 2 * d4 + 3 * d6,
+    dp2 = d3 - 3 * d5,
+    dp3 = d4 - 4 * d6;
+
+  const ap0 = a1 - a3 + a5,
+    ap1 = a2 - 2 * a4 + 3 * a6,
+    ap2 = a3 - 3 * a5,
+    ap3 = a4 - 4 * a6;
+
+  const bp0 = b1 - b3 + b5,
+    bp1 = b2 - 2 * b4 + 3 * b6,
+    bp2 = b3 - 3 * b5,
+    bp3 = b4 - 4 * b6;
+
   let rx = 0;
   let ry = 0;
 
@@ -93,16 +114,12 @@ export function utm({ zone, south = false, ellipsoid = WGS84 }: UtmOptions): Utm
 
     const sp = Math.sin(phi);
     const cp = Math.cos(phi);
-    const p = 2 * (cp * cp - sp * sp);
-    const q5 = c5 + p * c6;
-    const q4 = c4 + p * q5 - c6;
-    const q3 = c3 + p * q4 - q5;
-    const q2 = c2 + p * q3 - q4;
-    const q1 = c1 + p * q2 - q3;
+    const p = 2 - 4 * sp * sp;
+    const q1 = cp0 + p * (cp1 + p * (cp2 + p * (cp3 + p * (c5 + p * c6))));
     const dchi = 2 * sp * cp * q1;
     const dd = dchi * dchi;
-    const sd = dchi * (1 - (dd / 6) * (1 - dd / 20));
-    const cd = 1 - (dd / 2) * (1 - dd / 12);
+    const sd = dchi * (1 + dd * (-1 / 6 + dd / 120));
+    const cd = 1 + dd * (-1 / 2 + dd / 24);
     const sc = sp * cd + cp * sd;
     const cc = cp * cd - sp * sd;
 
@@ -113,30 +130,35 @@ export function utm({ zone, south = false, ellipsoid = WGS84 }: UtmOptions): Utm
       ry = NaN;
       return;
     }
+
     const ccl = cc * cl;
-    const ir = 1 / Math.sqrt(sc * sc + ccl * ccl);
-    const xip = Math.atan2(sc, ccl);
+    const sc2 = sc * sc;
+    const ccl2 = ccl * ccl;
+    const ir = 1 / Math.sqrt(sc2 + ccl2);
+    // atan is sufficient in the positive-denominator quadrant; retain atan2 otherwise.
+    const xip = ccl > 0 ? Math.atan(sc / ccl) : Math.atan2(sc, ccl);
     const she = cc * sl * ir;
     const etap = Math.asinh(she);
 
-    const sx = sc * ir;
-    const cx = ccl * ir;
-    const s2 = 2 * sx * cx;
-    const c2x = cx * cx - sx * sx;
-    const ch = ir * ir + she * she;
+    const ir2 = ir * ir;
+    const s2 = 2 * sc * ccl * ir2;
+    const c2x = (ccl2 - sc2) * ir2;
+    const ch = ir2 + she * she;
     const sh = 2 * she * ir;
     const ar = 2 * c2x * ch;
     const ai = -2 * s2 * sh;
-    const br5 = ar * a6 + a5;
-    const bi5 = ai * a6;
-    const br4 = ar * br5 - ai * bi5 - a6 + a4;
-    const bi4 = ar * bi5 + ai * br5;
-    const br3 = ar * br4 - ai * bi4 - br5 + a3;
-    const bi3 = ar * bi4 + ai * br4 - bi5;
-    const br2 = ar * br3 - ai * bi3 - br4 + a2;
-    const bi2 = ar * bi3 + ai * br3 - bi4;
-    const tr = ar * br2 - ai * bi2 - br3 + a1;
-    const ti = ar * bi2 + ai * br2 - bi3;
+
+    // For z = ar + i ai, z² = 2 ar z - |z|². Evaluate the real-coefficient
+    // polynomial with a real recurrence, then recover its real/imaginary parts.
+    const rho = ar * ar + ai * ai;
+    const twiceAr = 2 * ar;
+    const u4 = a5 + twiceAr * a6;
+    const u3 = ap3 + twiceAr * u4 - rho * a6;
+    const u2 = ap2 + twiceAr * u3 - rho * u4;
+    const u1 = ap1 + twiceAr * u2 - rho * u3;
+    const tr = ap0 + ar * u1 - rho * u2;
+    const ti = ai * u1;
+
     const sr = s2 * ch;
     const si = c2x * sh;
 
@@ -160,43 +182,44 @@ export function utm({ zone, south = false, ellipsoid = WGS84 }: UtmOptions): Utm
     const sh = 2 * sh1 * ch1;
     const ar = 2 * c2x * ch;
     const ai = -2 * s2 * sh;
-    const br5 = ar * b6 + b5;
-    const bi5 = ai * b6;
-    const br4 = ar * br5 - ai * bi5 - b6 + b4;
-    const bi4 = ar * bi5 + ai * br5;
-    const br3 = ar * br4 - ai * bi4 - br5 + b3;
-    const bi3 = ar * bi4 + ai * br4 - bi5;
-    const br2 = ar * br3 - ai * bi3 - br4 + b2;
-    const bi2 = ar * bi3 + ai * br3 - bi4;
-    const tr = ar * br2 - ai * bi2 - br3 + b1;
-    const ti = ar * bi2 + ai * br2 - bi3;
+
+    // For z = ar + i ai, z² = 2 ar z - |z|². Evaluate the real-coefficient
+    // polynomial with a real recurrence, then recover its real/imaginary parts.
+    const rho = ar * ar + ai * ai;
+    const twiceAr = 2 * ar;
+    const u4 = b5 + twiceAr * b6;
+    const u3 = bp3 + twiceAr * u4 - rho * b6;
+    const u2 = bp2 + twiceAr * u3 - rho * u4;
+    const u1 = bp1 + twiceAr * u2 - rho * u3;
+    const tr = bp0 + ar * u1 - rho * u2;
+    // Clenshaw yields +0 for a zero imaginary argument; retain its equator sign.
+    const ti = ai * u1 + 0;
+
     const sr = s2 * ch;
     const si = c2x * sh;
     const dxi = tr * sr - ti * si;
     const deta = tr * si + ti * sr;
 
     const dx2 = dxi * dxi;
-    const sdx = dxi * (1 - (dx2 / 6) * (1 - dx2 / 20));
-    const cdx = 1 - (dx2 / 2) * (1 - dx2 / 12);
+    const sdx = dxi * (1 + dx2 * (-1 / 6 + dx2 / 120));
+    const cdx = 1 + dx2 * (-1 / 2 + dx2 / 24);
     const de2 = deta * deta;
-    const shd = deta * (1 + (de2 / 6) * (1 + de2 / 20));
-    const chd = 1 + (de2 / 2) * (1 + de2 / 12);
+    const shd = deta * (1 + de2 * (1 / 6 + de2 / 120));
+    const chd = 1 + de2 * (1 / 2 + de2 / 24);
     const sx = s1 * cdx - c1x * sdx;
     const cx = c1x * cdx + s1 * sdx;
     const she = sh1 * chd - ch1 * shd;
 
     const h2 = she * she + cx * cx;
     const h = Math.sqrt(h2);
-    const lam = Math.atan2(she, cx);
-    const chi = Math.atan2(sx, h);
+    // Keep atan2 for other quadrants and for zero or NaN denominators.
+    const lam = cx > 0 ? Math.atan(she / cx) : Math.atan2(she, cx);
+    const chi = h > 0 ? Math.atan(sx / h) : Math.atan2(sx, h);
 
-    const r2 = sx * sx + h2;
-    const p = (2 * (h2 - sx * sx)) / r2;
-    const q5 = d5 + p * d6;
-    const q4 = d4 + p * q5 - d6;
-    const q3 = d3 + p * q4 - q5;
-    const q2 = d2 + p * q3 - q4;
-    const q1 = d1 + p * q2 - q3;
+    const sx2 = sx * sx;
+    const r2 = sx2 + h2;
+    const p = (2 * (h2 - sx2)) / r2;
+    const q1 = dp0 + p * (dp1 + p * (dp2 + p * (dp3 + p * (d5 + p * d6))));
     const phi = chi + ((2 * sx * h) / r2) * q1;
 
     let lon = (lon0 + lam) * R2D;
