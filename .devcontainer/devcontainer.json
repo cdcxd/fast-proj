@@ -1,5 +1,5 @@
 {
-  "name": "fast-utm",
+  "name": "fast-proj",
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
   "features": {
     "ghcr.io/devcontainers/features/node:1": { "version": "24" },

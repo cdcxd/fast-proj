@@ -1,37 +1,15 @@
 {
-  "name": "fast-utm",
-  "version": "0.0.0",
-  "description": "Fast UTM <-> WGS84 conversion with batch typed-array APIs",
-  "keywords": [
-    "geodesy",
-    "projection",
-    "transverse mercator",
-    "utm",
-    "wgs84"
-  ],
-  "homepage": "https://github.com/cdcxd/fast-utm#readme",
-  "bugs": "https://github.com/cdcxd/fast-utm/issues",
+  "name": "fast-proj",
+  "private": true,
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/cdcxd/fast-utm.git"
-  },
-  "files": [
-    "dist"
+  "workspaces": [
+    "packages/*"
   ],
   "type": "module",
-  "sideEffects": false,
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
-  },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "bun run --filter '*' build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "bench": "bun run build && node bench/run.mjs && bun bench/run.mjs && node bench/run.mjs --browser",
     "lint": "oxlint --deny-warnings",
     "format": "oxfmt",
     "format:check": "oxfmt --check",

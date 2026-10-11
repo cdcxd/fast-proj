@@ -22,7 +22,7 @@ async function inBrowser() {
   const page = await browser.newPage();
   const files = {
     '/': ['text/html', '<!doctype html><title>bench</title>'],
-    '/proj4.js': ['text/javascript', join(root, 'node_modules/proj4/dist/proj4.js')],
+    '/proj4.js': ['text/javascript', join(root, '../../node_modules/proj4/dist/proj4.js')],
     '/cases.mjs': ['text/javascript', join(root, 'bench/cases.mjs')],
   };
   await page.route('http://bench.local/**', async (route) => {
