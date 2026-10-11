@@ -1,32 +1,56 @@
-import { type Ellipsoid, WGS84, tmSeries } from './ellipsoid.js';
-import { centralMeridian } from './zone.js';
+/**
+ * UTM <-> geographic conversion with the Krüger series, following
+ * C. F. F. Karney, Transverse Mercator with an accuracy of a few nanometers, J. Geodesy 85 (2011) 475-485,
+ * https://doi.org/10.1007/s00190-011-0445-3, arXiv:1002.1417.
+ *
+ * - forward: conformal latitude, then xi', eta' from Eq. (10), Krüger series Eq. (11), scaling Eq. (13);
+ * - inverse: Eqs. (15)-(16), then geodetic latitude from the conformal latitude;
+ * - A, alpha and beta from Eqs. (29), (35) and (36) truncated to order n^6, as the paper recommends for double
+ *   precision; the trigonometric series are evaluated with Clenshaw summation, as in the paper.
+ *
+ * Unlike the paper, conformal latitude is converted with its Fourier series in n (no Newton iteration), and
+ * double-angle identities plus short Taylor expansions of the small series corrections (< 4e-3 rad for f < 0.01)
+ * replace most transcendental calls.
+ */
+import { type Ellipsoid, WGS84, checkEllipsoid, tmSeries } from './ellipsoid.js';
+import { checkZone } from './zone.js';
 
 export interface UtmOptions {
   /** Zone number, 1-60. */
   zone: number;
-  /** Southern hemisphere (false northing 10 000 km). */
+  /** Southern hemisphere: false northing of 10 000 km. Default `false`. */
   south?: boolean;
+  /** Default {@link WGS84}. Flattening must be below 0.01. */
   ellipsoid?: Ellipsoid;
 }
 
+/**
+ * A converter for one UTM zone.
+ *
+ * Batch methods accept any array-like input and write into the optional output buffers, which must be at least as
+ * long as the input. An output buffer may be the corresponding input itself (in-place), but must not otherwise
+ * overlap an input.
+ */
 export interface Utm {
-  /** Easting/northing arrays -> longitude/latitude arrays in degrees. Writes into `lon`/`lat` when given. */
+  readonly zone: number;
+  readonly south: boolean;
+  /** Easting/northing arrays in metres -> longitude/latitude arrays in degrees. */
   toLonLat(
     x: ArrayLike<number>,
     y: ArrayLike<number>,
     lon?: Float64Array,
     lat?: Float64Array,
   ): { lon: Float64Array; lat: Float64Array };
-  /** Longitude/latitude arrays in degrees -> easting/northing arrays. Writes into `x`/`y` when given. */
+  /** Longitude/latitude arrays in degrees -> easting/northing arrays in metres. */
   fromLonLat(
     lon: ArrayLike<number>,
     lat: ArrayLike<number>,
     x?: Float64Array,
     y?: Float64Array,
   ): { x: Float64Array; y: Float64Array };
-  /** Interleaved [x0, y0, x1, y1, ...] -> interleaved [lon0, lat0, ...]. `out` may be `xy` itself. */
+  /** Interleaved [x0, y0, x1, y1, ...] -> interleaved [lon0, lat0, ...]. */
   toLonLatInterleaved(xy: ArrayLike<number>, out?: Float64Array): Float64Array;
-  /** Interleaved [lon0, lat0, ...] -> interleaved [x0, y0, ...]. `out` may be `lonlat` itself. */
+  /** Interleaved [lon0, lat0, ...] -> interleaved [x0, y0, ...]. */
   fromLonLatInterleaved(lonlat: ArrayLike<number>, out?: Float64Array): Float64Array;
   toLonLatPoint(x: number, y: number): [lon: number, lat: number];
   fromLonLatPoint(lon: number, lat: number): [x: number, y: number];
@@ -38,14 +62,22 @@ const K0 = 0.9996;
 const FALSE_EASTING = 500000;
 const FALSE_NORTHING_SOUTH = 10000000;
 
+function checkOut(out: ArrayLike<number>, n: number, name: string): void {
+  if (out.length < n) throw new RangeError(`${name} has length ${out.length}, needs at least ${n}`);
+}
+
+function checkEven(n: number): void {
+  if (n % 2 !== 0) throw new RangeError(`interleaved input must have an even length, got ${n}`);
+}
+
 export function utm({ zone, south = false, ellipsoid = WGS84 }: UtmOptions): Utm {
-  if (!Number.isInteger(zone) || zone < 1 || zone > 60) {
-    throw new RangeError(`UTM zone must be an integer in 1-60, got ${zone}`);
-  }
+  checkZone(zone);
+  if (typeof south !== 'boolean') throw new TypeError(`south must be a boolean, got ${typeof south}`);
+  checkEllipsoid(ellipsoid);
   const s = tmSeries(ellipsoid);
   const kA = K0 * s.A;
   const invKA = 1 / kA;
-  const lon0 = centralMeridian(zone) * D2R;
+  const lon0 = (zone * 6 - 183) * D2R;
   const fn = south ? FALSE_NORTHING_SOUTH : 0;
   const [a1, a2, a3, a4, a5, a6] = s.alpha;
   const [b1, b2, b3, b4, b5, b6] = s.beta;
@@ -57,9 +89,7 @@ export function utm({ zone, south = false, ellipsoid = WGS84 }: UtmOptions): Utm
 
   function forward(lonDeg: number, latDeg: number): void {
     const phi = latDeg * D2R;
-    let lam = lonDeg * D2R - lon0;
-    if (lam > Math.PI) lam -= 2 * Math.PI;
-    else if (lam < -Math.PI) lam += 2 * Math.PI;
+    const lam = lonDeg * D2R - lon0;
 
     const sp = Math.sin(phi);
     const cp = Math.cos(phi);
@@ -78,6 +108,11 @@ export function utm({ zone, south = false, ellipsoid = WGS84 }: UtmOptions): Utm
 
     const sl = Math.sin(lam);
     const cl = Math.cos(lam);
+    if (!(cl > 1e-15)) {
+      rx = NaN;
+      ry = NaN;
+      return;
+    }
     const ccl = cc * cl;
     const ir = 1 / Math.sqrt(sc * sc + ccl * ccl);
     const xip = Math.atan2(sc, ccl);
@@ -172,33 +207,43 @@ export function utm({ zone, south = false, ellipsoid = WGS84 }: UtmOptions): Utm
   }
 
   return {
+    zone,
+    south,
     toLonLat(x, y, lon, lat) {
       const n = x.length;
       if (y.length !== n) throw new RangeError('x and y must have the same length');
-      lon ??= new Float64Array(n);
-      lat ??= new Float64Array(n);
+      if (lon) checkOut(lon, n, 'lon');
+      else lon = new Float64Array(n);
+      if (lat) checkOut(lat, n, 'lat');
+      else lat = new Float64Array(n);
+      const res = { lon, lat };
       for (let i = 0; i < n; i++) {
         inverse(x[i]!, y[i]!);
         lon[i] = rx;
         lat[i] = ry;
       }
-      return { lon, lat };
+      return res;
     },
     fromLonLat(lon, lat, x, y) {
       const n = lon.length;
       if (lat.length !== n) throw new RangeError('lon and lat must have the same length');
-      x ??= new Float64Array(n);
-      y ??= new Float64Array(n);
+      if (x) checkOut(x, n, 'x');
+      else x = new Float64Array(n);
+      if (y) checkOut(y, n, 'y');
+      else y = new Float64Array(n);
+      const res = { x, y };
       for (let i = 0; i < n; i++) {
         forward(lon[i]!, lat[i]!);
         x[i] = rx;
         y[i] = ry;
       }
-      return { x, y };
+      return res;
     },
     toLonLatInterleaved(xy, out) {
       const n = xy.length;
-      out ??= new Float64Array(n);
+      checkEven(n);
+      if (out) checkOut(out, n, 'out');
+      else out = new Float64Array(n);
       for (let i = 0; i < n; i += 2) {
         inverse(xy[i]!, xy[i + 1]!);
         out[i] = rx;
@@ -208,7 +253,9 @@ export function utm({ zone, south = false, ellipsoid = WGS84 }: UtmOptions): Utm
     },
     fromLonLatInterleaved(lonlat, out) {
       const n = lonlat.length;
-      out ??= new Float64Array(n);
+      checkEven(n);
+      if (out) checkOut(out, n, 'out');
+      else out = new Float64Array(n);
       for (let i = 0; i < n; i += 2) {
         forward(lonlat[i]!, lonlat[i + 1]!);
         out[i] = rx;

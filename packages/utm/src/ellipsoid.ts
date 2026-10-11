@@ -1,29 +1,49 @@
 export interface Ellipsoid {
   /** Semi-major axis in metres. */
-  a: number;
-  /** Flattening. */
-  f: number;
+  readonly a: number;
+  /** Flattening, `0 <= f < 0.01`. */
+  readonly f: number;
 }
 
-export const WGS84: Ellipsoid = { a: 6378137, f: 1 / 298.257223563 };
-export const GRS80: Ellipsoid = { a: 6378137, f: 1 / 298.257222101 };
+export const WGS84: Ellipsoid = Object.freeze({ a: 6378137, f: 1 / 298.257223563 });
+export const GRS80: Ellipsoid = Object.freeze({ a: 6378137, f: 1 / 298.257222101 });
+
+/**
+ * Largest supported flattening. The small-angle expansions in `utm.ts` are exact to double precision only for
+ * terrestrial flattenings (Earth: 0.0034).
+ */
+export const MAX_FLATTENING = 0.01;
+
+export function checkEllipsoid({ a, f }: Ellipsoid): void {
+  if (!(a > 0 && a < Infinity)) throw new RangeError(`ellipsoid.a must be a positive finite number, got ${a}`);
+  if (!(f >= 0 && f < MAX_FLATTENING)) {
+    throw new RangeError(`ellipsoid.f must satisfy 0 <= f < ${MAX_FLATTENING}, got ${f}`);
+  }
+}
 
 export type Series6 = readonly [number, number, number, number, number, number];
 
-/** Series coefficients for the transverse Mercator projection, Karney (2011), 6th order in n. */
 export interface TmSeries {
-  /** Rectifying radius. */
+  /** Rectifying radius, Karney (2011) Eq. (29). */
   A: number;
-  /** Conformal sphere -> projected, eq. (35). */
+  /** Conformal sphere -> projected, Karney (2011) Eq. (35). */
   alpha: Series6;
-  /** Projected -> conformal sphere, eq. (36). */
+  /** Projected -> conformal sphere, Karney (2011) Eq. (36). */
   beta: Series6;
-  /** Geodetic -> conformal latitude. */
+  /** Geodetic -> conformal latitude, chi = phi + sum c_k sin(2k phi). */
   toConformal: Series6;
-  /** Conformal -> geodetic latitude. */
+  /** Conformal -> geodetic latitude, phi = chi + sum d_k sin(2k chi). */
   fromConformal: Series6;
 }
 
+/**
+ * Series coefficients for the transverse Mercator projection, 6th order in the third flattening n.
+ *
+ * - C. F. F. Karney, Transverse Mercator with an accuracy of a few nanometers, J. Geodesy 85 (2011) 475-485,
+ *   https://doi.org/10.1007/s00190-011-0445-3 (A, alpha, beta).
+ * - C. F. F. Karney, On auxiliary latitudes, Survey Review 56 (2024) 165-180,
+ *   https://doi.org/10.1080/00396265.2023.2217604 (conformal latitude series).
+ */
 export function tmSeries({ a, f }: Ellipsoid): TmSeries {
   const n = f / (2 - f);
   const n2 = n * n,

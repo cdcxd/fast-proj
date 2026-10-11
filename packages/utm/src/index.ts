@@ -1,3 +1,3 @@
-export { type Ellipsoid, type Series6, type TmSeries, GRS80, WGS84, tmSeries } from './ellipsoid.js';
+export { type Ellipsoid, GRS80, MAX_FLATTENING, WGS84 } from './ellipsoid.js';
 export { type Utm, type UtmOptions, utm } from './utm.js';
-export { centralMeridian, zoneFor } from './zone.js';
+export { centralMeridian, utmFor, zoneFor } from './zone.js';
