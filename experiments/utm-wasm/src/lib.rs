@@ -185,10 +185,16 @@ pub extern "C" fn inverse_batch(
 #[cfg(not(test))]
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
-    // Trap in every build variant: exhaustion and assertion panics must
-    // surface as a catchable RuntimeError, not hang the host (the scalar
-    // build used to spin here).
-    unsafe { core::arch::wasm32::unreachable() }
+    // Trap in every wasm variant (both simd and scalar): exhaustion and
+    // assertion panics must surface as a catchable RuntimeError, not hang the
+    // host (the scalar build used to spin here). Native non-test builds keep
+    // a loop so the handler compiles off-target (cargo check --release).
+    #[cfg(target_arch = "wasm32")]
+    unsafe {
+        core::arch::wasm32::unreachable()
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    loop {}
 }
 
 // ---------------------------------------------------------------------------

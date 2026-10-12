@@ -52,8 +52,12 @@ revision, 3 alternating rounds, median of 15, checksum-guarded):
 
 | runtime    | forward                  | inverse                  |
 | ---------- | ------------------------ | ------------------------ |
-| Node 24.21 | 1.748x (120.2 → 68.8 ms) | 1.727x (116.1 → 67.2 ms) |
-| Bun 1.4.2  | 1.255x (86.5 → 69.0 ms)  | 1.509x (98.6 → 65.3 ms)  |
+| Node 24.21 | 1.738x (120.5 → 69.3 ms) | 1.719x (115.3 → 67.3 ms) |
+| Bun 1.4.2  | 1.248x (86.7 → 69.2 ms)  | 1.534x (99.9 → 65.3 ms)  |
+
+Bun forward straddles the 1.25x line run-to-run (1.241–1.271x over three
+fresh invocations, ratio of means 1.253x) — it is the decision boundary
+and is reported with that spread rather than a single number.
 
 Chromium is report-only (no 1e6 leg; its TS baseline is 2.5–3x slower than
 Node's, so wasm gains are largest there).
@@ -63,11 +67,12 @@ Node's, so wasm gains are largest there).
 Bar (PROPOSAL.md): ship opt-in `@fast-proj/utm/wasm` iff **≥ 1.4x on Node AND
 Bun at n=1e6, forward+inverse**; 1.25–1.4x is a judgment call; < 1.25x close.
 
-- Node: 1.73–1.75x — clears.
-- Bun: inverse 1.51x clears; **forward 1.26x sits at the bottom of the
-  judgment band** (Bun's JIT-inlined `Math.*` at 1e6 is the strongest TS
-  baseline of the three runtimes; the wasm kernel itself runs ~65–69 ms
-  regardless of host, so this cell tracks Bun's baseline, not our kernel).
+- Node: 1.72–1.75x — clears.
+- Bun: inverse 1.51–1.54x clears; **forward 1.25x sits exactly at the
+  judgment-band floor** (median 1.248x, mean 1.253x, runs 1.241–1.271x;
+  Bun's JIT-inlined `Math.*` at 1e6 is the strongest TS baseline of the
+  three runtimes; the wasm kernel itself runs ~65–69 ms regardless of
+  host, so this cell tracks Bun's baseline, not our kernel).
 
 Judgment: ship as an **opt-in subpath** (`@fast-proj/utm/wasm`), default
 export unchanged. The only sub-bar cell is Bun-forward at 1e6, every other
