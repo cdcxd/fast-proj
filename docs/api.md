@@ -199,9 +199,9 @@ wasm.dispose(); // or: using wasm = await loadWasm();
 - **Loading.** By default the module is `fast-proj.wasm` next to `wasm.js`, resolved with `new URL('./fast-proj.wasm',
   import.meta.url)`. Vite and webpack 5 copy the asset; on Node and Bun it is read from disk. With a bundler that
   doesn't handle the pattern (esbuild), pass `source`: a URL you serve, the bytes, or a compiled `WebAssembly.Module`.
-- **Backend.** `wasm-simd` normally. `js` when WebAssembly or wasm SIMD (Safari before 16.4) is unavailable and no
-  `source` is given; the context's converters then run the JavaScript backend, which is about as fast as a scalar wasm
-  build. `wasm` only for a custom non-SIMD build passed as `source`.
+- **Backend.** `wasm-simd` normally. `js` when WebAssembly or wasm SIMD (Safari before 16.4) is unavailable, including
+  when a `source` is given that can't compile without SIMD; the context's converters then run the JavaScript backend,
+  which measured as fast as the former scalar wasm build. `wasm` only for a custom non-SIMD build passed as `source`.
 - **Instances.** The compiled module is cached per source. Each `loadWasm` call returns a new context with its own
   instance and a fixed 64 Ki-point workspace (about 2 MiB); larger inputs are processed in chunks. A failed load can
   be retried.

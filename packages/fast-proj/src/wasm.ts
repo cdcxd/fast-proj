@@ -33,8 +33,8 @@ export interface WasmDisposable extends Disposable {
 
 export interface WasmContext extends WasmDisposable {
   /**
-   * `js` when WebAssembly or wasm SIMD is unavailable and no `source` was given; converters then run the JavaScript
-   * backend. `wasm` only for a custom non-SIMD build passed as `source`.
+   * `js` when WebAssembly or wasm SIMD is unavailable (a `source` that doesn't compile without SIMD also falls back);
+   * converters then run the JavaScript backend. `wasm` only for a custom non-SIMD build passed as `source`.
    */
   readonly backend: WasmBackend;
   tmerc(options: TransverseMercatorOptions): TransverseMercator & WasmDisposable;
@@ -171,7 +171,8 @@ function jsContext(): WasmContext {
 export async function loadWasm(options: LoadWasmOptions = {}): Promise<WasmContext> {
   if (typeof WebAssembly === 'undefined') return jsContext();
   // A scalar wasm build measured no faster than the JavaScript kernel, so engines without SIMD use that.
-  if (options.source === undefined && !WebAssembly.validate(SIMD_PROBE)) return jsContext();
+  const simd = WebAssembly.validate(SIMD_PROBE);
+  if (options.source === undefined && !simd) return jsContext();
   // A literal URL expression, so bundlers such as Vite and webpack copy the asset.
   const source = options.source ?? new URL('./fast-proj.wasm', import.meta.url);
   let module = source as WebAssembly.Module;
@@ -179,10 +180,14 @@ export async function loadWasm(options: LoadWasmOptions = {}): Promise<WasmConte
   if (!isModule(source)) {
     const [promise, ev] = getModule(source);
     evict = ev;
-    module = await promise.catch((err: unknown) => {
+    try {
+      module = await promise;
+    } catch (err) {
       ev();
+      // A SIMD module given as `source` can't compile here either.
+      if (!simd && err instanceof WebAssembly.CompileError) return jsContext();
       throw err;
-    });
+    }
   }
   try {
     const instance = await WebAssembly.instantiate(module, {});

@@ -37,6 +37,17 @@ describe('loadWasm', () => {
     expect(ctx.utm({ zone: 33 }).toLonLat([500000], [0]).lon[0]).toBeCloseTo(15, 12);
   });
 
+  it('without SIMD, still loads a given source, and falls back if it does not compile', async () => {
+    const validate = vi.spyOn(WebAssembly, 'validate').mockReturnValue(false);
+    try {
+      expect((await loadWasm({ source: url })).backend).toBe('wasm-simd');
+      const bad = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 9]);
+      expect((await loadWasm({ source: bad })).backend).toBe('js');
+    } finally {
+      validate.mockRestore();
+    }
+  });
+
   it('gives each context its own instance', async () => {
     const a = await loadWasm({ source: url });
     const b = await loadWasm({ source: url });
