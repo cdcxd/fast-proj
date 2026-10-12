@@ -1,7 +1,7 @@
 {
   "runtime": "Node v24.21.0",
-  "baseline": "/tmp/fast-proj-arithmetic/base/packages/utm/dist/utm.js",
-  "candidate": "/tmp/fast-proj-arithmetic/change/packages/utm/dist/utm.js",
+  "baseline": "/tmp/fp-base/packages/utm/dist/utm.js",
+  "candidate": "/home/cdong/Code/fast-proj/packages/utm/dist/utm.js",
   "grid": {
     "longitudeStepDegrees": 1,
     "latitudes": [
@@ -215,7 +215,7 @@
     "candidate": {
       "points": 91,
       "max": {
-        "xMetres": 1.3969838619232178e-9,
+        "xMetres": 9.313225746154785e-10,
         "yMetres": 3.725290298461914e-9,
         "latitudeDegrees": 2.842170943040401e-14,
         "longitudeWeightedDegrees": 1.4210313609398942e-14
@@ -231,9 +231,9 @@
       "forward": {
         "points": 91744,
         "identical": {
-          "x": 91744,
+          "x": 75280,
           "y": 91744,
-          "pairs": 91744
+          "pairs": 75280
         },
         "classificationDiscrepancies": {
           "x": 0,
@@ -246,7 +246,7 @@
         },
         "commonFinitePairs": 91744,
         "maxAbsoluteDelta": {
-          "x": 0,
+          "x": 1.3969838619232178e-9,
           "y": 0
         }
       },
@@ -281,9 +281,9 @@
       "forward": {
         "points": 91744,
         "identical": {
-          "x": 91160,
+          "x": 75124,
           "y": 91240,
-          "pairs": 90896
+          "pairs": 74880
         },
         "classificationDiscrepancies": {
           "x": 0,
@@ -296,7 +296,7 @@
         },
         "commonFinitePairs": 91744,
         "maxAbsoluteDelta": {
-          "x": 9.313225746154785e-10,
+          "x": 1.3969838619232178e-9,
           "y": 1.862645149230957e-9
         }
       },
@@ -331,9 +331,9 @@
       "forward": {
         "points": 91744,
         "identical": {
-          "x": 91308,
+          "x": 75520,
           "y": 91458,
-          "pairs": 91132
+          "pairs": 75350
         },
         "classificationDiscrepancies": {
           "x": 0,
@@ -346,7 +346,7 @@
         },
         "commonFinitePairs": 91744,
         "maxAbsoluteDelta": {
-          "x": 9.313225746154785e-10,
+          "x": 1.3969838619232178e-9,
           "y": 1.862645149230957e-9
         }
       },
@@ -381,9 +381,9 @@
       "forward": {
         "points": 91744,
         "identical": {
-          "x": 91684,
+          "x": 75468,
           "y": 91686,
-          "pairs": 91626
+          "pairs": 75421
         },
         "classificationDiscrepancies": {
           "x": 0,
@@ -396,7 +396,7 @@
         },
         "commonFinitePairs": 91744,
         "maxAbsoluteDelta": {
-          "x": 9.313225746154785e-10,
+          "x": 2.3283064365386963e-9,
           "y": 1.862645149230957e-9
         }
       },
@@ -431,9 +431,9 @@
       "forward": {
         "points": 91744,
         "identical": {
-          "x": 91228,
+          "x": 72192,
           "y": 90949,
-          "pairs": 90656
+          "pairs": 71784
         },
         "classificationDiscrepancies": {
           "x": 0,
@@ -446,7 +446,7 @@
         },
         "commonFinitePairs": 91744,
         "maxAbsoluteDelta": {
-          "x": 9.313225746154785e-10,
+          "x": 1.862645149230957e-9,
           "y": 1.862645149230957e-9
         }
       },
@@ -481,9 +481,9 @@
       "forward": {
         "points": 136864,
         "identical": {
-          "x": 136864,
+          "x": 110956,
           "y": 136864,
-          "pairs": 136864
+          "pairs": 110956
         },
         "classificationDiscrepancies": {
           "x": 0,
@@ -496,7 +496,7 @@
         },
         "commonFinitePairs": 136864,
         "maxAbsoluteDelta": {
-          "x": 0,
+          "x": 2.7939677238464355e-9,
           "y": 0
         }
       },
@@ -531,9 +531,9 @@
       "forward": {
         "points": 136864,
         "identical": {
-          "x": 135944,
+          "x": 110492,
           "y": 136205,
-          "pairs": 135653
+          "pairs": 110207
         },
         "classificationDiscrepancies": {
           "x": 0,
@@ -546,7 +546,7 @@
         },
         "commonFinitePairs": 136864,
         "maxAbsoluteDelta": {
-          "x": 1.3969838619232178e-9,
+          "x": 2.7939677238464355e-9,
           "y": 3.725290298461914e-9
         }
       },
@@ -581,9 +581,9 @@
       "forward": {
         "points": 136864,
         "identical": {
-          "x": 136160,
+          "x": 110352,
           "y": 136357,
-          "pairs": 135825
+          "pairs": 110058
         },
         "classificationDiscrepancies": {
           "x": 0,
@@ -596,7 +596,7 @@
         },
         "commonFinitePairs": 136864,
         "maxAbsoluteDelta": {
-          "x": 1.3969838619232178e-9,
+          "x": 2.7939677238464355e-9,
           "y": 1.862645149230957e-9
         }
       },
@@ -631,9 +631,9 @@
       "forward": {
         "points": 136864,
         "identical": {
-          "x": 136740,
+          "x": 110324,
           "y": 136784,
-          "pairs": 136660
+          "pairs": 110266
         },
         "classificationDiscrepancies": {
           "x": 0,
@@ -646,7 +646,7 @@
         },
         "commonFinitePairs": 136864,
         "maxAbsoluteDelta": {
-          "x": 1.862645149230957e-9,
+          "x": 2.7939677238464355e-9,
           "y": 1.862645149230957e-9
         }
       },
@@ -681,9 +681,9 @@
       "forward": {
         "points": 136864,
         "identical": {
-          "x": 136012,
+          "x": 101232,
           "y": 135816,
-          "pairs": 135260
+          "pairs": 100672
         },
         "classificationDiscrepancies": {
           "x": 0,
@@ -696,7 +696,7 @@
         },
         "commonFinitePairs": 136864,
         "maxAbsoluteDelta": {
-          "x": 1.862645149230957e-9,
+          "x": 2.7939677238464355e-9,
           "y": 3.725290298461914e-9
         }
       },

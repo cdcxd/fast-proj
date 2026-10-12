@@ -138,7 +138,9 @@ export function utm({ zone, south = false, ellipsoid = WGS84 }: UtmOptions): Utm
     // atan is sufficient in the positive-denominator quadrant; retain atan2 otherwise.
     const xip = ccl > 0 ? Math.atan(sc / ccl) : Math.atan2(sc, ccl);
     const she = cc * sl * ir;
-    const etap = Math.asinh(she);
+    // asinh(she) = log(she + sqrt(1 + she^2)); cosh(eta') = sqrt(1 + she^2) equals the already-computed ir
+    // up to rounding, so only log1p remains.
+    const etap = Math.log1p(she + (she * she) / (ir + 1));
 
     const ir2 = ir * ir;
     const s2 = 2 * sc * ccl * ir2;
