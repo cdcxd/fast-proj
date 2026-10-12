@@ -1,6 +1,7 @@
 name: Release
 
-# Push a tag like `v0.1.0` to publish packages/fast-proj via npm trusted publishing (OIDC; no token).
+# Push a tag like `v0.1.0` to stage packages/fast-proj via npm trusted publishing (OIDC; no token),
+# then approve it on npmjs.com or with `npm stage approve`.
 on:
   push:
     tags: ['v*']
@@ -40,5 +41,5 @@ jobs:
         with:
           node-version: 24.21.0
           registry-url: https://registry.npmjs.org
-      - run: npm publish --provenance --access public
+      - run: npm stage publish --provenance --access public
         working-directory: packages/fast-proj
