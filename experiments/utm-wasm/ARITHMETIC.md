@@ -74,12 +74,20 @@ Artifact SHA-256 (not committed binaries):
   accuracy suite pass. Extended sweeps report at most 2 ulp; they are diagnostic,
   not an enforced gate.
 
-The new `wasm-correctness` CI job pins Node 24.21.0, Rust 1.99.0 and Bun 1.4.2
-(Bun installs/builds; Node runs Wasm correctness). It builds both artifacts from
-locked dependencies, runs host tests, artifact/allocator/math checks, wrapper
-checks that assert the SIMD path, and numerical grids plus independent fixtures.
-It has no performance thresholds or runtime benchmark matrix. Existing
-TypeScript compatibility jobs remain.
+One `check` CI job pins Node 24.21.0, Rust 1.99.0 and Bun 1.4.2
+(Bun installs/builds; Node runs the checks). It runs the full package checks once,
+then host Rust tests, artifact/allocator/math checks, wrapper checks that assert
+the SIMD path, and numerical grids plus independent fixtures. Rust dependencies
+and their build outputs are cached for the `experiments/utm-wasm` workspace;
+SIMD/scalar artifacts are rebuilt from the checked-out source with locked dependencies.
+There are no performance thresholds or runtime benchmark matrices.
+
+The duplicate Node 22 job and PR-level Node 20 job are removed. The release
+workflow runs the built-package smoke test on Node 20 before publishing, then
+restores Node 24 for npm and development tools. This retains a release gate for
+the package's advertised Node >=20 support. A prebuilt, digest-pinned toolchain
+image is deferred: the measured setup cost is small (Rust setup about 7 seconds;
+Bun dependency install 0–1 seconds), and an image adds download/rebuild overhead.
 
 ## Additional candidates explored
 
