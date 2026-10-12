@@ -1,5 +1,14 @@
-//! f64x2 UTM kernel — vector twin of `skernel` in `lib.rs`, ported
-//! formula-for-formula from `packages/utm/src/utm.ts` @ bb3620d.
+//! f64x2 UTM kernel — the vector twin of `skernel` (see `kernel.rs` for the
+//! math, the Karney reference, and the notation glossary; the phase banners
+//! there match this file statement-for-statement).
+//!
+//! Deviations from the scalar twin, all accuracy-gated in bench/:
+//! - transcendental calls go to the hand-written f64x2 primitives in
+//!   `simd.rs` (≤ 2 ulp on the kernel ranges, `bench/sweeps.mjs`);
+//! - the guarded atan/log1p sites branch per pair: in-domain lanes take the
+//!   fast path, any out-of-domain lane falls back to the atan2/asinh blend;
+//! - `vexp` clamps its exponent term at ±1000 (RESULTS.md documents the
+//!   boundary where classification diverges from libm).
 #![allow(unsafe_op_in_unsafe_fn)]
 
 use crate::kernel::{K, D2R, FALSE_EASTING, R2D};

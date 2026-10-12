@@ -1,6 +1,28 @@
 //! UTM series construction and the scalar (libm-backed) kernel — a
 //! formula-for-formula port of `packages/utm/src/utm.ts` @ bb3620d and the
 //! bit-exact reference for the f64x2 twin in `vkernel.rs`.
+//!
+//! Math: C. F. Karney, "Transverse Mercator with an accuracy of a few
+//! nanometers", J. Geodesy 85 (2011) 475-485, doi:10.1007/s00190-011-0445-3.
+//! - forward: conformal latitude, then xi'/eta' (Eq. 10), Krüger series
+//!   (Eq. 11), scaling (Eq. 13) — easting ~ eta', northing ~ xi';
+//! - inverse: Eqs. (15)-(16), then geodetic latitude from the conformal one;
+//! - `make_k` builds A, alpha, beta from Eqs. (29)/(35)/(36) to order n^6;
+//!   the fixed trig series are precomputed there as polynomials equivalent
+//!   to Clenshaw summation (see `poly6` and the K fields).
+//! As in the TS kernel: conformal latitude via its Fourier series in n (no
+//! Newton iteration), double-angle identities and short Taylor expansions of
+//! the small corrections (< 4e-3 rad for f < 0.01) replace most transcendental
+//! calls. Deviations of the vector twin: PROPOSAL.md and RESULTS.md.
+//!
+//! Notation (local names follow utm.ts):
+//! - `phi`/`lam`: geodetic latitude; longitude offset from the central meridian
+//! - `sp cp`/`sc cc`/`sl cl`: sin/cos of phi, of the conformal latitude chi, of lam
+//! - `xip`/`etap`: conformal-sphere coordinates xi'/eta'; `she` is Karney's
+//!   tau' = sinh(eta'), so `etap = asinh(she)` in its log1p form
+//! - `ar ai`: the complex argument of the Krüger series (2*Re/Im of the
+//!   double-angle terms); `u1..u4 tr ti` its Clenshaw recurrence and result;
+//!   `sr si` rotate the correction back onto xi'/eta'
 
 pub(crate) const D2R: f64 = core::f64::consts::PI / 180.0;
 pub(crate) const R2D: f64 = 180.0 / core::f64::consts::PI;
@@ -85,6 +107,9 @@ pub(crate) mod skernel {
     use super::*;
 
     pub fn forward(lon_deg: f64, lat_deg: f64, k: &K) -> (f64, f64) {
+        // -- geodetic -> conformal latitude chi: the Fourier series (in n)
+        //    yields only the small difference dchi; sd/cd come from a short
+        //    Taylor run, then sc/cc = sin/cos chi by angle addition
         let phi = lat_deg * D2R;
         let lam = lon_deg * D2R - k.lon0;
         let sp = libm::sin(phi);
@@ -97,6 +122,8 @@ pub(crate) mod skernel {
         let cd = 1.0 + dd * (-0.5 + dd / 24.0);
         let sc = sp * cd + cp * sd;
         let cc = cp * cd - sp * sd;
+        // -- (chi, lam) -> conformal-sphere xi'/eta', Eq. (10); NaN beyond
+        //    |lam| >= 90° where cos(lam) collapses (TS kernel guard)
         let sl = libm::sin(lam);
         let cl = libm::cos(lam);
         if !(cl > 1e-15) {
@@ -113,6 +140,9 @@ pub(crate) mod skernel {
         } else {
             libm::asinh(she)
         };
+        // -- Krüger series, Eq. (11): complex Clenshaw recurrence over
+        //    (ar, ai) with the alpha coefficients, then rotate the correction
+        //    back onto (etap, xip) and scale, Eq. (13)
         let ir2 = ir * ir;
         let s2 = 2.0 * sc * ccl * ir2;
         let c2x = (ccl2 - sc2) * ir2;
@@ -137,8 +167,10 @@ pub(crate) mod skernel {
     }
 
     pub fn inverse(x: f64, y: f64, k: &K) -> (f64, f64) {
+        // -- strip the false origin and the k0*A scale: (xi, eta)
         let xi = (y - k.fnorth) * k.inv_k_a;
         let eta = (x - FALSE_EASTING) * k.inv_k_a;
+        // -- complex sinh/cosh of (xi + i eta): s1/c1x from xi, ch1/sh1 from eta
         let s1 = libm::sin(xi);
         let c1x = libm::cos(xi);
         let e = libm::exp(eta);
@@ -149,6 +181,8 @@ pub(crate) mod skernel {
         let c2x = c1x * c1x - s1 * s1;
         let ch = ch1 * ch1 + sh1 * sh1;
         let sh = 2.0 * sh1 * ch1;
+        // -- Krüger series, Eqs. (15)-(16): complex Clenshaw with the beta
+        //    coefficients gives the corrections (dxi, deta)
         let ar = 2.0 * c2x * ch;
         let ai = -2.0 * s2 * sh;
         let rho = ar * ar + ai * ai;
@@ -163,6 +197,9 @@ pub(crate) mod skernel {
         let si = c2x * sh;
         let dxi = tr * sr - ti * si;
         let deta = tr * si + ti * sr;
+        // -- undo the (xi + dxi, eta + deta) split: angle/hyperbolic addition
+        //    (short Taylor again) returns to (lam, chi) with the TS guards on
+        //    the atan sites
         let dx2 = dxi * dxi;
         let sdx = dxi * (1.0 + dx2 * (-1.0 / 6.0 + dx2 / 120.0));
         let cdx = 1.0 + dx2 * (-0.5 + dx2 / 24.0);
@@ -184,6 +221,8 @@ pub(crate) mod skernel {
         } else {
             libm::atan2(sx, h)
         };
+        // -- conformal -> geodetic latitude: the inverse Fourier series in n
+        //    (fromConformal), same polynomial form as the forward direction
         let sx2 = sx * sx;
         let r2 = sx2 + h2;
         let p = (2.0 * (h2 - sx2)) / r2;
