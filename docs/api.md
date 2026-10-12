@@ -218,8 +218,8 @@ wasm.dispose(); // or: using wasm = await loadWasm();
 ## Domain and accuracy
 
 - **Accuracy** for terrestrial ellipsoids, within 30° of the central meridian, all latitudes including the poles: at
-  most 4e-9 m forward and 1e-13° inverse against a 30-digit reference (`packages/fast-proj/test/fixtures`), and about
-  6e-9 m / 1.3e-13° against proj4. Both backends.
+  most 4e-9 m forward and 1e-13° inverse against a 30-digit reference (`packages/fast-proj/test/fixtures`) in all 60 UTM
+  zones, both hemispheres, and about 6e-9 m / 1.3e-13° against proj4. Both backends.
 - **Recommended domain:** within ~45° of the central meridian. Accuracy degrades further out, as for any Krüger series
   implementation.
 - Points **90° or more** from the central meridian return `NaN` from the forward methods.

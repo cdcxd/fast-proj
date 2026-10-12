@@ -295,11 +295,11 @@ mod tests {
         let (a, f) = wgs84();
         let k = make_k(a, f, 33, false);
         assert!((6364900.0..=6364910.0).contains(&k.k_a), "kA {}", k.k_a);
-        assert_eq!(k.lon0.to_bits(), (15.0 * D2R).to_bits());
+        assert_eq!(k.lon0, 15.0);
         assert_eq!(k.fnorth, 0.0);
         let ks = make_k(a, f, 31, true);
         assert_eq!(ks.fnorth, FALSE_NORTHING_SOUTH);
-        assert_eq!(ks.lon0.to_bits(), (3.0 * D2R).to_bits());
+        assert_eq!(ks.lon0, 3.0);
         // sphere: every series term is zero
         let ks0 = make_k(1.0, 0.0, 33, false);
         assert_eq!(ks0.ap.iter().sum::<f64>(), 0.0);

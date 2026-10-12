@@ -34,7 +34,7 @@ pub(crate) const FALSE_NORTHING_SOUTH: f64 = 10000000.0;
 pub(crate) struct K {
     pub k_a: f64,
     pub inv_k_a: f64,
-    pub lon0: f64,
+    pub lon0: f64, // degrees
     pub feast: f64,
     pub fnorth: f64,
     pub ap: [f64; 4],
@@ -99,7 +99,7 @@ pub(crate) fn make_k_tm(a: f64, f: f64, lon0_deg: f64, k0: f64, feast: f64, fnor
     K {
         k_a,
         inv_k_a: 1.0 / k_a,
-        lon0: lon0_deg * D2R,
+        lon0: lon0_deg,
         feast,
         fnorth,
         ap: [a1 - a3 + a5, a2 - 2.0 * a4 + 3.0 * a6, a3 - 3.0 * a5, a4 - 4.0 * a6],
@@ -119,7 +119,13 @@ pub(crate) mod skernel {
         //    yields only the small difference dchi; sd/cd come from a short
         //    Taylor run, then sc/cc = sin/cos chi by angle addition
         let phi = lat_deg * D2R;
-        let lam = lon_deg * D2R - k.lon0;
+        let mut dlon = lon_deg - k.lon0;
+        if dlon > 180.0 {
+            dlon -= 360.0;
+        } else if dlon < -180.0 {
+            dlon += 360.0;
+        }
+        let lam = dlon * D2R;
         let sp = libm::sin(phi);
         let cp = libm::cos(phi);
         let p = 2.0 - 4.0 * sp * sp;
@@ -236,7 +242,7 @@ pub(crate) mod skernel {
         let p = (2.0 * (h2 - sx2)) / r2;
         let q1 = poly6(p, &k.dp);
         let phi = chi + ((2.0 * sx * h) / r2) * q1;
-        let mut lon = (k.lon0 + lam) * R2D;
+        let mut lon = k.lon0 + lam * R2D;
         if lon > 180.0 {
             lon -= 360.0;
         } else if lon < -180.0 {

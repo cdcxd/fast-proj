@@ -26,23 +26,52 @@ function maxDiff(a: ArrayLike<number>, b: ArrayLike<number>, f: (d: number) => n
 }
 
 describe.each(backends)('$name backend', ({ utm }) => {
-  describe('independent high-precision reference (WGS84, zone 31)', () => {
-    const conv = utm({ zone: 31 });
-    const points = reference.points.map((p) => ({ dlon: p.dlon, lat: p.lat, x: Number(p.x), y: Number(p.y) }));
+  // The fixture is relative to the central meridian, for the northern hemisphere; mirrored for southern latitudes and
+  // checked in every zone and both hemispheres. Batch methods, so the wasm kernels are covered (point methods run JS).
+  describe('independent high-precision reference (WGS84), every zone and hemisphere', () => {
+    const points = reference.points.flatMap((p) =>
+      (p.lat === 0 ? [1] : [1, -1]).map((s) => ({ dlon: p.dlon, lat: s * p.lat, x: Number(p.x), y: s * Number(p.y) })),
+    );
+    const cases = Array.from({ length: 120 }, (_, i) => ({ zone: (i >> 1) + 1, south: (i & 1) === 1 }));
 
-    it('forward within 5e-9 m', () => {
-      for (const p of points) {
-        const [x, y] = conv.fromLonLatPoint(3 + p.dlon, p.lat);
-        expect(Math.abs(x - p.x)).toBeLessThan(5e-9);
-        expect(Math.abs(y - p.y)).toBeLessThan(5e-9);
+    it('forward within 4e-9 m (southern false northing adds up to 1 ulp of 1e7 m)', () => {
+      for (const { zone, south } of cases) {
+        const lon = points.map((p) => ((zone * 6 - 183 + p.dlon + 540) % 360) - 180);
+        const { x, y } = utm({ zone, south }).fromLonLat(
+          lon,
+          points.map((p) => p.lat),
+        );
+        const fn = south ? 10000000 : 0;
+        expect(
+          maxDiff(
+            x,
+            points.map((p) => p.x),
+          ),
+        ).toBeLessThan(4e-9);
+        expect(
+          maxDiff(
+            y,
+            points.map((p) => p.y + fn),
+          ),
+        ).toBeLessThan(south ? 4e-9 + 2 ** -29 : 4e-9);
       }
     });
 
     it('inverse within 1e-13 deg (longitude scaled by cos lat)', () => {
-      for (const p of points) {
-        const [lon, lat] = conv.toLonLatPoint(p.x, p.y);
-        expect(Math.abs(lat - p.lat)).toBeLessThan(1e-13);
-        expect(wrap(lon - 3 - p.dlon) * Math.cos(p.lat * D2R)).toBeLessThan(1e-13);
+      for (const { zone, south } of cases) {
+        const fn = south ? 10000000 : 0;
+        const { lon, lat } = utm({ zone, south }).toLonLat(
+          points.map((p) => p.x),
+          points.map((p) => p.y + fn),
+        );
+        expect(
+          maxDiff(
+            lat,
+            points.map((p) => p.lat),
+          ),
+        ).toBeLessThan(1e-13);
+        const dlon = points.map((p, i) => wrap(lon[i]! - (zone * 6 - 183) - p.dlon) * Math.cos(p.lat * D2R));
+        expect(Math.max(...dlon)).toBeLessThan(1e-13);
       }
     });
   });
@@ -95,10 +124,10 @@ describe.each(backends)('$name backend', ({ utm }) => {
       ).toBeLessThan(2e-13);
     });
 
-    it('round-trips within 2e-13 deg', () => {
+    it('round-trips within 1e-13 deg (longitude scaled by cos lat)', () => {
       const { x, y } = conv.fromLonLat(lon, lat);
       const back = conv.toLonLat(x, y);
-      expect(maxDiff(back.lon, lon, wrap)).toBeLessThan(2e-13);
+      expect(Math.max(...lon.map((l, i) => wrap(back.lon[i]! - l) * Math.cos(lat[i]! * D2R)))).toBeLessThan(1e-13);
       expect(maxDiff(back.lat, lat)).toBeLessThan(1e-13);
     });
   });
