@@ -5,7 +5,6 @@
 //! (f64x2 vector math, +simd128 only), `kernel` (UTM series + scalar
 //! kernel), `vkernel` (f64x2 kernel, +simd128 only), `alloc` (bump arena).
 #![cfg_attr(not(test), no_std)]
-#![allow(unsafe_op_in_unsafe_fn)]
 #![allow(static_mut_refs)]
 
 mod alloc;
