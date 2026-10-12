@@ -114,11 +114,15 @@ pub(crate) fn make_k_tm(a: f64, f: f64, lon0_deg: f64, k0: f64, feast: f64, fnor
 pub(crate) mod skernel {
     use super::*;
 
-    pub fn forward(lon_deg: f64, lat_deg: f64, k: &K) -> (f64, f64) {
+    pub fn forward(mut lon_deg: f64, lat_deg: f64, k: &K) -> (f64, f64) {
         // -- geodetic -> conformal latitude chi: the Fourier series (in n)
         //    yields only the small difference dchi; sd/cd come from a short
         //    Taylor run, then sc/cc = sin/cos chi by angle addition
         let phi = lat_deg * D2R;
+        // Whole turns first (exact): in radians their rounding error exceeds the NaN cutoff below.
+        if lon_deg > 180.0 || lon_deg < -180.0 {
+            lon_deg -= 360.0 * libm::round(lon_deg / 360.0);
+        }
         let lam = lon_deg * D2R - k.lon0;
         let sp = libm::sin(phi);
         let cp = libm::cos(phi);

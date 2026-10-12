@@ -92,6 +92,8 @@ export function transverseMercator(
 
   function forward(lonDeg: number, latDeg: number): void {
     const phi = latDeg * D2R;
+    // Whole turns first (exact): in radians their rounding error exceeds the NaN cutoff below.
+    if (lonDeg > 180 || lonDeg < -180) lonDeg -= 360 * Math.round(lonDeg / 360);
     const lam = lonDeg * D2R - lon0;
 
     const sp = Math.sin(phi);

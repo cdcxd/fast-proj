@@ -63,15 +63,21 @@ describe.each(backends)('$name backend', ({ tmerc, utm }) => {
   });
 
   it('accepts input longitudes any number of turns away (batch methods)', () => {
-    const t = tmerc({ lon0: 0 });
-    const lon = [1350, -100 - 1080, 90 + 720, 30 + 1080, -30 - 720];
-    const { x, y } = t.fromLonLat(lon, [0, 10, 0, 45, -45]);
-    for (let i = 0; i < 3; i++) expect([x[i], y[i]].every(Number.isNaN), `lon ${lon[i]}`).toBe(true);
-    const [x30, y45] = t.fromLonLatPoint(30, 45);
-    expect(Math.abs(x[3]! - x30)).toBeLessThan(1e-6);
-    expect(Math.abs(y[3]! - y45)).toBeLessThan(1e-6);
-    expect(Math.abs(x[4]! + x30)).toBeLessThan(1e-6);
-    expect(Math.abs(y[4]! + y45)).toBeLessThan(1e-6);
+    const turns = [-3, -2, -1, 1, 2, 3];
+    for (const lon0 of [0, 15, -177, 177, 180, -180]) {
+      const t = tmerc({ lon0 });
+      const edge = [90, -90].flatMap((d) => turns.map((k) => lon0 + d + 360 * k));
+      const { x, y } = t.fromLonLat(edge, new Float64Array(edge.length));
+      expect([...x, ...y].every(Number.isNaN), `lon0 ${lon0}: ${edge}`).toBe(true);
+      const inside = turns.map((k) => lon0 + 30 + 360 * k);
+      const lat = inside.map(() => 45);
+      const got = t.fromLonLat(inside, lat);
+      const [x0, y0] = t.fromLonLatPoint(lon0 + 30 > 180 ? lon0 - 330 : lon0 + 30, 45);
+      for (let i = 0; i < inside.length; i++) {
+        expect(Math.abs(got.x[i]! - x0)).toBeLessThan(1e-6);
+        expect(Math.abs(got.y[i]! - y0)).toBeLessThan(1e-6);
+      }
+    }
   });
 
   it('validates options', () => {
