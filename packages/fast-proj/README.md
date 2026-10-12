@@ -3,8 +3,8 @@
 Fast batch coordinate conversions for JavaScript and TypeScript: UTM and transverse Mercator ↔ WGS84, with typed-array
 APIs and an optional WebAssembly backend.
 
-- Krüger series to 6th order (Karney 2011). Accuracy: ≤4e-9 m / 1e-13° vs an exact reference; ≈6e-9 m / 1.3e-13° vs
-  proj4.
+- Krüger series to 6th order (Karney 2011). Accuracy: ≤4e-9 m (6e-9 m near ±180°) / 1e-13° vs an exact reference;
+  ≈6e-9 m / 1.3e-13° vs proj4.
 - No per-point allocations in the batch APIs; optional output buffers, in-place conversion.
 - No dependencies, ESM-only, tree-shakeable. Node ≥ 20 and modern browsers.
 

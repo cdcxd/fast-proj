@@ -62,6 +62,18 @@ describe.each(backends)('$name backend', ({ tmerc, utm }) => {
     expect(t.toLonLatPoint(x, y)[0]).toBeCloseTo(-179, 12);
   });
 
+  it('accepts input longitudes any number of turns away (batch methods)', () => {
+    const t = tmerc({ lon0: 0 });
+    const lon = [1350, -100 - 1080, 90 + 720, 30 + 1080, -30 - 720];
+    const { x, y } = t.fromLonLat(lon, [0, 10, 0, 45, -45]);
+    for (let i = 0; i < 3; i++) expect([x[i], y[i]].every(Number.isNaN), `lon ${lon[i]}`).toBe(true);
+    const [x30, y45] = t.fromLonLatPoint(30, 45);
+    expect(Math.abs(x[3]! - x30)).toBeLessThan(1e-6);
+    expect(Math.abs(y[3]! - y45)).toBeLessThan(1e-6);
+    expect(Math.abs(x[4]! + x30)).toBeLessThan(1e-6);
+    expect(Math.abs(y[4]! + y45)).toBeLessThan(1e-6);
+  });
+
   it('validates options', () => {
     for (const lon0 of [NaN, Infinity, 180.5, -181, 720]) expect(() => tmerc({ lon0 })).toThrow(RangeError);
     expect(() => tmerc({ lon0: '15' as unknown as number })).toThrow(TypeError);

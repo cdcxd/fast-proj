@@ -212,14 +212,16 @@ wasm.dispose(); // or: using wasm = await loadWasm();
 - **Single points.** `toLonLatPoint`/`fromLonLatPoint` run the JavaScript kernel: passing one point into wasm costs
   more than computing it.
 - **Re-entrancy.** Calling the same context from inside an array-like getter during a batch call throws.
-- **Accuracy contract.** Batch results match the JavaScript backend within 4e-9 m and 6e-14° (longitude
-  differences scaled by cos(latitude)), not bit for bit.
+- **Accuracy contract.** Batch results match the JavaScript backend within 4e-9 m and 6e-14° (longitude differences
+  scaled by cos(latitude)), not bit for bit. Coordinates above 2^25 m (about 33,554 km, such as Gauss–Krüger eastings
+  with a zone prefix) can differ by one ulp of the output, 7.5e-9 m.
 
 ## Domain and accuracy
 
 - **Accuracy** for terrestrial ellipsoids, within 30° of the central meridian, all latitudes including the poles: at
-  most 4e-9 m forward and 1e-13° inverse against a 30-digit reference (`packages/fast-proj/test/fixtures`) in all 60 UTM
-  zones, both hemispheres, and about 6e-9 m / 1.3e-13° against proj4. Both backends.
+  most 4e-9 m forward (6e-9 m for longitudes near ±180°, where one ulp of the input longitude is already 3e-9 m) and
+  1e-13° inverse against a 30-digit reference (`packages/fast-proj/test/fixtures`) in all 60 UTM zones, both
+  hemispheres, and about 6e-9 m / 1.3e-13° against proj4. Both backends.
 - **Recommended domain:** within ~45° of the central meridian. Accuracy degrades further out, as for any Krüger series
   implementation.
 - Points **90° or more** from the central meridian return `NaN` from the forward methods.

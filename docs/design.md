@@ -199,8 +199,8 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
 - Calls after `dispose()` throw. Output arrays are caller-owned and stay valid.
 - Converters take and return caller-owned arrays, so each call copies into the wasm workspace and back. That copy costs
   about 0.17 ns/point. Zero-copy access to wasm memory is a possible later addition; it is not promised.
-- Accuracy contract: wasm results match the JS backend within 4e-9 m and 6e-14° (longitude
-  differences scaled by cos(latitude)), not bit for bit.
+- Accuracy contract: wasm results match the JS backend within 4e-9 m and 6e-14° (longitude differences scaled by
+  cos(latitude)), not bit for bit; one ulp of the output (7.5e-9 m) above 2^25 m.
 
 ## Release
 

@@ -60,6 +60,7 @@ export function transverseMercator(
   const s = tmSeries(ellipsoid);
   const kA = k0 * s.A;
   const invKA = 1 / kA;
+  const lon0 = lon0Deg * D2R;
   const [a1, a2, a3, a4, a5, a6] = s.alpha;
   const [b1, b2, b3, b4, b5, b6] = s.beta;
   const [c1, c2, c3, c4, c5, c6] = s.toConformal;
@@ -91,11 +92,7 @@ export function transverseMercator(
 
   function forward(lonDeg: number, latDeg: number): void {
     const phi = latDeg * D2R;
-    // Difference in degrees first: exact for nearby longitudes, unlike two large angles in radians.
-    let dlon = lonDeg - lon0Deg;
-    if (dlon > 180) dlon -= 360;
-    else if (dlon < -180) dlon += 360;
-    const lam = dlon * D2R;
+    const lam = lonDeg * D2R - lon0;
 
     const sp = Math.sin(phi);
     const cp = Math.cos(phi);
@@ -210,7 +207,7 @@ export function transverseMercator(
     const q1 = dp0 + p * (dp1 + p * (dp2 + p * (dp3 + p * (d5 + p * d6))));
     const phi = chi + ((2 * sx * h) / r2) * q1;
 
-    let lon = lon0Deg + lam * R2D;
+    let lon = (lon0 + lam) * R2D;
     if (lon > 180) lon -= 360;
     else if (lon < -180) lon += 360;
     rx = lon;

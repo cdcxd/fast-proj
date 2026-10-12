@@ -83,10 +83,7 @@ unsafe fn is_finite(x: v128) -> v128 {
 #[target_feature(enable = "simd128")]
 pub unsafe fn forward2(lon: v128, lat: v128, q: &KS) -> (v128, v128) {
     let phi = f64x2_mul(lat, q.d2r);
-    let mut dlon = f64x2_sub(lon, q.lon0);
-    dlon = v128_bitselect(f64x2_sub(dlon, spl(360.0)), dlon, f64x2_gt(dlon, spl(180.0)));
-    dlon = v128_bitselect(f64x2_add(dlon, spl(360.0)), dlon, f64x2_lt(dlon, spl(-180.0)));
-    let lam = f64x2_mul(dlon, q.d2r);
+    let lam = f64x2_sub(f64x2_mul(lon, q.d2r), q.lon0);
 
     let (sp, cp) = vsincos(phi);
     let p = f64x2_sub(spl(2.0), f64x2_mul(spl(4.0), f64x2_mul(sp, sp)));
@@ -279,7 +276,7 @@ pub unsafe fn inverse2(x: v128, y: v128, q: &KS) -> (v128, v128) {
         ),
     );
 
-    let mut lon = f64x2_add(q.lon0, f64x2_mul(lam, spl(R2D)));
+    let mut lon = f64x2_mul(f64x2_add(q.lon0, lam), spl(R2D));
     lon = v128_bitselect(f64x2_sub(lon, spl(360.0)), lon, f64x2_gt(lon, spl(180.0)));
     lon = v128_bitselect(f64x2_add(lon, spl(360.0)), lon, f64x2_lt(lon, spl(-180.0)));
     (lon, f64x2_mul(phi, spl(R2D)))

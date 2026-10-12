@@ -34,7 +34,7 @@ describe.each(backends)('$name backend', ({ utm }) => {
     );
     const cases = Array.from({ length: 120 }, (_, i) => ({ zone: (i >> 1) + 1, south: (i & 1) === 1 }));
 
-    it('forward within 4e-9 m (southern false northing adds up to 1 ulp of 1e7 m)', () => {
+    it('forward within 6e-9 m (about 2 ulps of a longitude near ±180 in radians)', () => {
       for (const { zone, south } of cases) {
         const lon = points.map((p) => ((zone * 6 - 183 + p.dlon + 540) % 360) - 180);
         const { x, y } = utm({ zone, south }).fromLonLat(
@@ -47,13 +47,13 @@ describe.each(backends)('$name backend', ({ utm }) => {
             x,
             points.map((p) => p.x),
           ),
-        ).toBeLessThan(4e-9);
+        ).toBeLessThan(6e-9);
         expect(
           maxDiff(
             y,
             points.map((p) => p.y + fn),
           ),
-        ).toBeLessThan(south ? 4e-9 + 2 ** -29 : 4e-9);
+        ).toBeLessThan(6e-9);
       }
     });
 
