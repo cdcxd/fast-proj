@@ -1,3 +1,4 @@
+# Superseded by PROPOSAL.md (measured data, revised decision bar).
 # Handoff: Rust + WASM SIMD UTM kernel experiment
 
 Status: PLAN ONLY (nothing built). Started 2026-10-11. Owner resumes after context compact.

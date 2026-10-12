@@ -65,7 +65,7 @@ function check(label, inputs, jsFn, wasm, outName) {
         mu1 = Math.max(mu1, ulpDiff(vo[i], Math.sin(inputs[i])));
         mu2 = Math.max(mu2, ulpDiff(vo2[i], Math.cos(inputs[i])));
       }
-      maxUlp = Math.max(mu1, mu2);
+      maxUlp = Math.max(maxUlp, mu1, mu2);
     } else {
       mod[`${outName}_batch`](inp, out, n);
       for (let i = 0; i < n; i++) maxUlp = Math.max(maxUlp, ulpDiff(vo[i], jsFn(inputs[i])));

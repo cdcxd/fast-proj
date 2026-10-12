@@ -118,7 +118,6 @@ mod simd {
     pub unsafe fn atan2v(x: v128) -> v128 {
         let a = f64x2_abs(x);
         let gt1 = f64x2_gt(a, spl(1.0));
-        let gt1 = f64x2_gt(a, spl(1.0));
         let t = v128_bitselect(f64x2_div(spl(1.0), a), a, gt1);
         let big = f64x2_gt(t, spl(TAN_PI_8));
         // reduced argument in (0, tan(pi/8)) for t in (tan(pi/8), 1]
@@ -189,7 +188,9 @@ mod simd {
 // ---------------------------------------------------------------------------
 
 const HEAP_SIZE: usize = 1 << 28; // 256 MiB in bss; engines commit lazily
-static mut HEAP: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
+#[repr(align(8))]
+struct AlignedHeap([u8; HEAP_SIZE]);
+static mut HEAP: AlignedHeap = AlignedHeap([0; HEAP_SIZE]);
 static mut OFFSET: usize = 0;
 
 #[unsafe(no_mangle)]
@@ -198,7 +199,7 @@ pub extern "C" fn alloc(n_f64: usize) -> *mut f64 {
         let o = OFFSET;
         OFFSET = o + n_f64 * 8;
         debug_assert!(OFFSET <= HEAP_SIZE);
-        HEAP.as_mut_ptr().add(o) as *mut f64
+        HEAP.0.as_mut_ptr().add(o) as *mut f64
     }
 }
 
