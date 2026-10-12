@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1 (unreleased)
+
+- `fast-proj/wasm` ships only the SIMD module. Engines without wasm SIMD (Safari before 16.4) now get the JavaScript
+  backend (`backend: 'js'`); the removed scalar wasm build was no faster than it.
+- Releases are published with npm trusted publishing.
+
 ## 0.1.0 (2026-10-12)
 
 First release.

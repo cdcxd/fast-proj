@@ -30,9 +30,11 @@ describe('loadWasm', () => {
     }
   });
 
-  it('reports the scalar build', async () => {
-    const ctx = await loadWasm({ source: new URL('../dist/fast-proj-scalar.wasm', import.meta.url) });
-    expect(ctx.backend).toBe('wasm');
+  it('falls back to the JavaScript backend without wasm SIMD', async () => {
+    const validate = vi.spyOn(WebAssembly, 'validate').mockReturnValue(false);
+    const ctx = await loadWasm().finally(() => validate.mockRestore());
+    expect(ctx.backend).toBe('js');
+    expect(ctx.utm({ zone: 33 }).toLonLat([500000], [0]).lon[0]).toBeCloseTo(15, 12);
   });
 
   it('gives each context its own instance', async () => {
