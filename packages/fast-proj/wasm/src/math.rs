@@ -29,6 +29,7 @@ pub(crate) const LN2_LO: f64 = f64::from_bits(0x3DEA39EF35793C76);
 
 /// Proven scalar implementations (musl port) for the scalar wasm build and
 /// as a cross-check for the hand-written vector math.
+#[cfg(not(target_feature = "simd128"))]
 pub mod scalar {
     pub fn sincos(x: f64) -> (f64, f64) {
         (libm::sin(x), libm::cos(x))
