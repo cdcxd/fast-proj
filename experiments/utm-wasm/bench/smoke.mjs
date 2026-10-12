@@ -46,8 +46,6 @@ const mk = (lo, hi) => Float64Array.from({ length: N }, () => lo + (hi - lo) * r
 
 function check(label, inputs, jsFn, wasm, outName) {
   const n = inputs.length;
-  const buf = new Float64Array(n);
-  const expected = new Float64Array(n);
   let maxUlp = 0;
   for (const mod of [scalar, simd]) {
     const inp = mod.alloc(n);

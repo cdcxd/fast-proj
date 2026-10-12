@@ -14,6 +14,8 @@ const candidate = resolve(here, '../utm.js');
 const n = 1e6;
 const config = { n, runs: 15, warmups: 5 };
 
+const med = (v) => v.toSorted((a, b) => a - b)[Math.floor(v.length / 2)];
+
 if (args.includes('--worker')) {
   const { utm } = await import(option('revision'));
   const converter = utm({ zone: 33 });
@@ -73,7 +75,6 @@ if (args.includes('--worker')) {
       throw new Error(`checksum mismatch for ${dir}: base ${b} vs candidate ${c}`);
     }
   }
-  const med = (v) => v.sort((a, b) => a - b)[Math.floor(v.length / 2)];
   const label = runtime === 'bun' ? 'Bun (worker)' : `Node ${process.version}`;
   console.log(`${label.trim()} n=1e6, fresh processes, ${rounds} alternating rounds:`);
   for (const dir of ['forward', 'inverse']) {

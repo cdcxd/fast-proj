@@ -2,6 +2,7 @@
 // (build artifact or user cache), feature-detects simd128, and falls back to
 // the TypeScript kernel when unavailable. The API surface itself lives in
 // wasm-utm-core.mjs, which has no node dependencies.
+/* eslint-disable no-await-in-loop -- artifact locations are a serial fallback chain. */
 import { utm as tsUtm } from '../../packages/utm/dist/utm.js';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';

@@ -224,7 +224,6 @@ console.log(`forward identical pairs: ${identTotal}/${pairsTotal} (${((100 * ide
 // fixture: wasm + TS against the independent decimal-string reference
 const reference = JSON.parse(readFileSync(new URL('../../../packages/utm/test/fixtures/reference.json', here), 'utf8'));
 {
-  const ts = tsUtm({ zone: 31 });
   const n = reference.points.length;
   const lon = new Float64Array(n),
     lat = new Float64Array(n);

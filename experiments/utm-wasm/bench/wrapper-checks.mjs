@@ -128,15 +128,17 @@ for (const n of [1, 2, 7, 1000, CAP - 1, CAP, CAP + 1, CAP + 513, 2 * CAP + 7]) 
 }
 
 // option validation matches the TypeScript API on the wasm path
+// (awaits are serial on purpose: each must throw before the next runs)
+/* eslint-disable no-await-in-loop */
 {
-  for (const zone of [0, 61, 33.5, NaN]) {
+  for (const z of [0, 61, 33.5, NaN]) {
     let threw = false;
     try {
-      await utmWasm({ zone });
+      await utmWasm({ zone: z });
     } catch (err) {
       threw = err instanceof RangeError && /1-60/.test(err.message);
     }
-    gate(`zone ${zone} throws`, threw);
+    gate(`zone ${z} throws`, threw);
   }
   let threw = false;
   try {

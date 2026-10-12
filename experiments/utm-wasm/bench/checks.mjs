@@ -161,7 +161,7 @@ function alloc(n) {
     const inp = alloc(n),
       out = alloc(n + 1);
     F64(inp, n).fill(0.5);
-    F64(out, n + 1).fill(undefined ?? 0, 0);
+    F64(out, n + 1).fill(0, 0);
     new Float64Array(e.memory.buffer, out, n + 1)[n] = guard;
     e.atan_batch(inp, out, n);
     check(`tail n=${n} guard intact`, new Float64Array(e.memory.buffer, out, n + 1)[n] === guard);
@@ -171,7 +171,7 @@ function alloc(n) {
 // --- allocator contract ------------------------------------------------------
 {
   const used0 = e.heap_used();
-  const p = e.alloc(10);
+  e.alloc(10);
   check('alloc advances', e.heap_used() === used0 + 80);
   e.heap_reset();
   check('heap_reset', e.heap_used() === 0);

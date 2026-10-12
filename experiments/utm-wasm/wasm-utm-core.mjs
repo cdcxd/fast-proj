@@ -11,12 +11,21 @@ export function simdSupported() {
     0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 124, 3, 2, 1, 0, 10, 25, 1, 23, 0, 253, 12, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 253, 33, 0, 11,
   ]);
-  try {
-    new WebAssembly.Module(probe);
-    return true;
-  } catch {
-    return false;
-  }
+  return WebAssembly.validate(probe);
+}
+
+// memcpy-grade copies when both sides are typed arrays; element loops otherwise.
+function copyIn(dst, src, i0, n) {
+  if (src.subarray) dst.set(src.subarray(i0, i0 + n));
+  else for (let j = 0; j < n; j++) dst[j] = src[i0 + j];
+}
+function copyOut(dst, src, i0, n) {
+  if (dst.set && src.subarray) dst.set(src.subarray(0, n), i0);
+  else for (let j = 0; j < n; j++) dst[i0 + j] = src[j];
+}
+
+function checkOut(out, n, name) {
+  if (out.length < n) throw new RangeError(`${name} has length ${out.length}, needs at least ${n}`);
 }
 
 export function createConverter(e, { zone, south = false, ellipsoid = { a: 6378137, f: 1 / 298.257223563 } }) {
@@ -52,20 +61,6 @@ export function createConverter(e, { zone, south = false, ellipsoid = { a: 63781
   const pLatV = view(pLat, 1);
   const pXV = view(pX, 1);
   const pYV = view(pY, 1);
-
-  // memcpy-grade copies when both sides are typed arrays; element loops otherwise.
-  function copyIn(dst, src, i0, n) {
-    if (src.subarray) dst.set(src.subarray(i0, i0 + n));
-    else for (let j = 0; j < n; j++) dst[j] = src[i0 + j];
-  }
-  function copyOut(dst, src, i0, n) {
-    if (dst.set && src.subarray) dst.set(src.subarray(0, n), i0);
-    else for (let j = 0; j < n; j++) dst[i0 + j] = src[j];
-  }
-
-  function checkOut(out, n, name) {
-    if (out.length < n) throw new RangeError(`${name} has length ${out.length}, needs at least ${n}`);
-  }
 
   function forwardChunk(srcLon, srcLat, x, y, i0, n) {
     copyIn(wLon, srcLon, i0, n);
