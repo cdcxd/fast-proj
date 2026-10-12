@@ -20,7 +20,8 @@
     "directory": "packages/fast-proj"
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "type": "module",
   "sideEffects": false,

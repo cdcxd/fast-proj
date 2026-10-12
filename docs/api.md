@@ -144,7 +144,10 @@ const MAX_FLATTENING = 0.01;
 ```
 
 Any ellipsoid with `a > 0` and `0 <= f < MAX_FLATTENING` is supported, which covers every terrestrial ellipsoid
-(Earth's is 0.0034). The implementation's small-angle expansions are exact to double precision only in that range.
+(Earth's is 0.0034). The implementation's small-angle expansions are exact to double precision only in that range. The
+accuracy figures under [Domain and accuracy](#domain-and-accuracy) hold for terrestrial flattenings. The series are
+truncated at order n^6, so error grows with f: up to f = 0.005 it stays within those figures; near the limit (f =
+0.0099999) it is about 1e-8 m within 6° of the central meridian, 2e-7 m at 30°, and 1e-12° inverse.
 
 ## GeoJSON and Leaflet helpers
 
@@ -214,9 +217,9 @@ wasm.dispose(); // or: using wasm = await loadWasm();
 
 ## Domain and accuracy
 
-- **Accuracy** within 30° of the central meridian, all latitudes including the poles: at most 4e-9 m forward and
-  1e-13° inverse against a 30-digit reference (`packages/fast-proj/test/fixtures`), and about 6e-9 m / 1.3e-13°
-  against proj4. Both backends.
+- **Accuracy** for terrestrial ellipsoids, within 30° of the central meridian, all latitudes including the poles: at
+  most 4e-9 m forward and 1e-13° inverse against a 30-digit reference (`packages/fast-proj/test/fixtures`), and about
+  6e-9 m / 1.3e-13° against proj4. Both backends.
 - **Recommended domain:** within ~45° of the central meridian. Accuracy degrades further out, as for any Krüger series
   implementation.
 - Points **90° or more** from the central meridian return `NaN` from the forward methods.

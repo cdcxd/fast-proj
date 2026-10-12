@@ -19,7 +19,7 @@ export interface LoadWasmOptions {
   /**
    * Where to load the module from. Default: `fast-proj.wasm` next to this file (`fast-proj-scalar.wasm` without
    * SIMD support), resolved with `new URL(..., import.meta.url)`. Pass bytes or a URL when a bundler doesn't copy the
-   * asset.
+   * asset. Relative URL strings resolve against the page URL in browsers.
    */
   source?: WasmSource;
 }
@@ -55,8 +55,15 @@ const SIMD_PROBE = new Uint8Array([
   0, 0, 0, 0, 0, 0, 0, 253, 33, 0, 11,
 ]);
 
-// Bundlers rewrite `new URL(variable, import.meta.url)` into an asset context; resolve caller URLs against this instead.
-const base = import.meta.url;
+const moduleUrl = import.meta.url;
+const runtime = globalThis as { document?: { baseURI?: string }; location?: { href?: string } };
+
+// Caller URLs resolve like fetch: against the page (or worker) URL in browsers, else against this module. Not
+// `new URL(variable, import.meta.url)`: bundlers rewrite that into an asset context, and may replace import.meta.url
+// with a build-time file: URL.
+function base(): string {
+  return runtime.document?.baseURI ?? runtime.location?.href ?? moduleUrl;
+}
 const byUrl = new Map<string, Promise<WebAssembly.Module>>();
 // Weak, so the cache doesn't keep the caller's bytes (and their whole backing buffer) alive.
 const byBytes = new WeakMap<object, Promise<WebAssembly.Module>>();
@@ -71,14 +78,23 @@ async function readFileUrl(url: URL): Promise<Uint8Array> {
   return readFile(url);
 }
 
+// Tags rather than instanceof, so values from another realm (iframe, Node vm) are recognized.
+function isUrl(source: unknown): source is string | URL {
+  return typeof source === 'string' || Object.prototype.toString.call(source) === '[object URL]';
+}
+
+function isModule(source: WasmSource): source is WebAssembly.Module {
+  return Object.prototype.toString.call(source) === '[object WebAssembly.Module]';
+}
+
 async function compile(source: Loadable): Promise<WebAssembly.Module> {
-  if (typeof source !== 'string' && !(source instanceof URL)) {
+  if (!isUrl(source)) {
     const bytes = ArrayBuffer.isView(source)
       ? new Uint8Array(source.buffer, source.byteOffset, source.byteLength)
       : new Uint8Array(source);
     return WebAssembly.compile(bytes as Uint8Array<ArrayBuffer>);
   }
-  const url = new URL(source, base);
+  const url = new URL(source, base());
   if (url.protocol === 'file:') return WebAssembly.compile((await readFileUrl(url)) as Uint8Array<ArrayBuffer>);
   const response = fetch(url);
   if (typeof WebAssembly.compileStreaming === 'function') {
@@ -96,23 +112,18 @@ async function compile(source: Loadable): Promise<WebAssembly.Module> {
 
 /** Returns the cached compile promise and a function evicting it, for compile or initialization failures. */
 function getModule(source: Loadable): [Promise<WebAssembly.Module>, () => void] {
-  const cache: Map<unknown, Promise<WebAssembly.Module>> | WeakMap<object, Promise<WebAssembly.Module>> =
-    typeof source === 'string' || source instanceof URL ? byUrl : byBytes;
-  const key = cache === byUrl ? new URL(source as string | URL, base).href : (source as object);
-  let promise = cache.get(key as object);
+  const url = isUrl(source);
+  const cache = (url ? byUrl : byBytes) as Map<unknown, Promise<WebAssembly.Module>>;
+  const key = url ? new URL(source, base()).href : source;
+  let promise = cache.get(key);
   if (!promise) {
     promise = compile(source);
-    cache.set(key as object, promise);
+    cache.set(key, promise);
   }
   const evict = () => {
-    if (cache.get(key as object) === promise) cache.delete(key as object);
+    if (cache.get(key) === promise) cache.delete(key);
   };
   return [promise, evict];
-}
-
-// Also accepts modules compiled in another realm (iframe, Node vm), which fail instanceof.
-function isModule(source: WasmSource): source is WebAssembly.Module {
-  return Object.prototype.toString.call(source) === '[object WebAssembly.Module]';
 }
 
 function jsContext(): WasmContext {
