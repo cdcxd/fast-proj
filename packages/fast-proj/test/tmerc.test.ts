@@ -63,7 +63,7 @@ describe.each(backends)('$name backend', ({ tmerc, utm }) => {
   });
 
   it('validates options', () => {
-    for (const lon0 of [NaN, Infinity]) expect(() => tmerc({ lon0 })).toThrow(RangeError);
+    for (const lon0 of [NaN, Infinity, 180.5, -181, 720]) expect(() => tmerc({ lon0 })).toThrow(RangeError);
     expect(() => tmerc({ lon0: '15' as unknown as number })).toThrow(TypeError);
     expect(() => tmerc({} as unknown as { lon0: number })).toThrow(TypeError);
     for (const k0 of [0, -1, NaN]) expect(() => tmerc({ lon0: 0, k0 })).toThrow(RangeError);

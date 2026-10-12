@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { utm } from '../src/index.js';
 import { loadWasm } from '../src/wasm.js';
 
@@ -93,6 +93,18 @@ describe('dispose', () => {
     ctx[Symbol.dispose]();
     ctx.dispose();
     expect(() => a.fromLonLatPoint(15, 0)).toThrow(/dispose/);
+    expect(() => ctx.utm({ zone: 33 })).toThrow(/dispose/);
+    expect(() => ctx.tmerc({ lon0: 0 })).toThrow(/dispose/);
+  });
+
+  it('JavaScript fallback follows the same disposal rules', async () => {
+    vi.stubGlobal('WebAssembly', undefined);
+    const ctx = await loadWasm().finally(() => vi.unstubAllGlobals());
+    expect(ctx.backend).toBe('js');
+    const a = ctx.utm({ zone: 33 });
+    expect(a.toLonLatPoint(500000, 0)[0]).toBeCloseTo(15, 12);
+    ctx.dispose();
+    expect(() => a.toLonLatPoint(500000, 0)).toThrow(/dispose/);
     expect(() => ctx.utm({ zone: 33 })).toThrow(/dispose/);
     expect(() => ctx.tmerc({ lon0: 0 })).toThrow(/dispose/);
   });

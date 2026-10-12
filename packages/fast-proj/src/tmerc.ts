@@ -17,7 +17,7 @@ import { checkEven, checkNumber, checkOut } from './checks.js';
 import type { TransverseMercator } from './types.js';
 
 export interface TransverseMercatorOptions {
-  /** Central meridian in degrees. */
+  /** Central meridian in degrees, in [-180, 180]. */
   lon0: number;
   /** Scale factor on the central meridian. Default 1. */
   k0?: number;
@@ -40,6 +40,7 @@ export function tmerc({
   ellipsoid = WGS84,
 }: TransverseMercatorOptions): TransverseMercator {
   checkNumber(lon0Deg, 'lon0');
+  if (!(Math.abs(lon0Deg) <= 180)) throw new RangeError(`lon0 must be in [-180, 180], got ${lon0Deg}`);
   checkNumber(k0, 'k0');
   if (!(k0 > 0)) throw new RangeError(`k0 must be positive, got ${k0}`);
   checkNumber(falseEasting, 'falseEasting');

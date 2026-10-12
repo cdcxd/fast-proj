@@ -69,7 +69,7 @@ of origin is the equator.
 function tmerc(options: TransverseMercatorOptions): TransverseMercator;
 
 interface TransverseMercatorOptions {
-  lon0: number; // central meridian, degrees
+  lon0: number; // central meridian, degrees, in [-180, 180]
   k0?: number; // scale on the central meridian, default 1
   falseEasting?: number; // metres, default 0
   falseNorthing?: number; // metres, default 0
@@ -209,7 +209,8 @@ wasm.dispose(); // or: using wasm = await loadWasm();
 - **Single points.** `toLonLatPoint`/`fromLonLatPoint` run the JavaScript kernel: passing one point into wasm costs
   more than computing it.
 - **Re-entrancy.** Calling the same context from inside an array-like getter during a batch call throws.
-- **Accuracy contract.** Batch results match the JavaScript backend within 4e-9 m and 6e-14°, not bit for bit.
+- **Accuracy contract.** Batch results match the JavaScript backend within 4e-9 m and 6e-14° (longitude
+  differences scaled by cos(latitude)), not bit for bit.
 
 ## Domain and accuracy
 

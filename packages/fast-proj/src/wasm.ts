@@ -1,8 +1,10 @@
 /**
  * Opt-in WebAssembly backend: one combined Rust module (f64x2 SIMD where supported) behind the same converter
- * interfaces as the JavaScript build. Batch results match the JavaScript backend within 4e-9 m and 6e-14 degrees;
- * single-point methods run the JavaScript kernel.
+ * interfaces as the JavaScript build. Batch results match the JavaScript backend within 4e-9 m and 6e-14 degrees
+ * (longitude differences scaled by cos(latitude), so raw longitudes near the poles differ more); single-point methods
+ * run the JavaScript kernel.
  */
+/// <reference lib="esnext.disposable" preserve="true" />
 import { checkEven, checkOut } from './checks.js';
 import { type TransverseMercatorOptions, tmerc as jsTmerc } from './tmerc.js';
 import type { TransverseMercator, Utm } from './types.js';
@@ -112,10 +114,13 @@ function jsContext(): WasmContext {
     out[DISPOSE] = out.dispose;
     return out;
   };
+  const open = () => {
+    if (disposed) throw new Error('fast-proj: context used after dispose()');
+  };
   const ctx: WasmContext = {
     backend: 'js',
-    tmerc: (o) => live(jsTmerc(o)),
-    utm: (o) => live(jsUtm(o)),
+    tmerc: (o) => (open(), live(jsTmerc(o))),
+    utm: (o) => (open(), live(jsUtm(o))),
     dispose() {
       disposed = true;
     },
@@ -133,7 +138,10 @@ function jsContext(): WasmContext {
 export async function loadWasm(options: LoadWasmOptions = {}): Promise<WasmContext> {
   if (typeof WebAssembly === 'undefined') return jsContext();
   const simd = WebAssembly.validate(SIMD_PROBE);
-  const source = options.source ?? new URL(simd ? './fast-proj.wasm' : './fast-proj-scalar.wasm', import.meta.url);
+  // Two literal URL expressions, so bundlers such as Vite copy both assets.
+  const source =
+    options.source ??
+    (simd ? new URL('./fast-proj.wasm', import.meta.url) : new URL('./fast-proj-scalar.wasm', import.meta.url));
   const module = source instanceof WebAssembly.Module ? source : await getModule(source as Loadable);
   const instance = await WebAssembly.instantiate(module, {});
   const exports = instance.exports as unknown as Exports;
@@ -144,7 +152,8 @@ function wasmContext(exports: Exports, backend: WasmBackend): WasmContext {
   let e: Exports | null = exports;
   let busy = false;
   // The heap is a fixed static arena that never grows, so these views stay valid for the instance lifetime.
-  const view = (n: number) => new Float64Array(exports.memory.buffer, exports.alloc(n), n);
+  // Reads `e`, not `exports`, so a disposed context doesn't retain the instance.
+  const view = (n: number) => new Float64Array(e!.memory.buffer, e!.alloc(n), n);
   let wa: Float64Array | null = view(CAP);
   let wb: Float64Array | null = view(CAP);
   let wc: Float64Array | null = view(CAP);
