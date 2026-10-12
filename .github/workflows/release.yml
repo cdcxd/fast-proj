@@ -1,7 +1,6 @@
 name: Release
 
-# Push a tag like `v0.1.0` to publish packages/fast-proj. Requires npm trusted publishing for this repository and
-# workflow (or an NPM_TOKEN secret for the first publish).
+# Push a tag like `v0.1.0` to publish packages/fast-proj via npm trusted publishing (OIDC; no token).
 on:
   push:
     tags: ['v*']
@@ -43,5 +42,3 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: npm publish --provenance --access public
         working-directory: packages/fast-proj
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
