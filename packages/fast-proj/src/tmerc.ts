@@ -92,8 +92,13 @@ export function transverseMercator(
 
   function forward(lonDeg: number, latDeg: number): void {
     const phi = latDeg * D2R;
-    // Whole turns first (exact): in radians their rounding error exceeds the NaN cutoff below.
-    if (lonDeg > 180 || lonDeg < -180) lonDeg -= 360 * Math.round(lonDeg / 360);
+    // Whole turns first, exactly (% is exact): in radians their rounding error exceeds the NaN cutoff below.
+    // The Rust kernels reduce the same way, so all backends agree, including on ±180.
+    if (lonDeg > 180 || lonDeg < -180) {
+      lonDeg %= 360;
+      if (lonDeg > 180) lonDeg -= 360;
+      else if (lonDeg < -180) lonDeg += 360;
+    }
     const lam = lonDeg * D2R - lon0;
 
     const sp = Math.sin(phi);

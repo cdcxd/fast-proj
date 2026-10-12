@@ -1,6 +1,6 @@
 import proj4 from 'proj4';
 import { describe, expect, it } from 'vitest';
-import { GRS80, WGS84 } from '../src/index.js';
+import { GRS80, WGS84, tmerc as jsTmerc } from '../src/index.js';
 import { backends } from './backends.js';
 
 describe.each(backends)('$name backend', ({ tmerc, utm }) => {
@@ -78,6 +78,27 @@ describe.each(backends)('$name backend', ({ tmerc, utm }) => {
         expect(Math.abs(got.y[i]! - y0)).toBeLessThan(1e-6);
       }
     }
+  });
+
+  it('reduces like the JavaScript backend, including ties at ±180 and huge longitudes', () => {
+    expect(tmerc({ lon0: 90.00000000000006 }).fromLonLatPoint(-540, 0).every(Number.isNaN)).toBe(true);
+    const cases: [number, number[]][] = [
+      [90.00000000000006, [-540]],
+      [154, [-540, 540, 900]],
+      [-80, [1e18, -1e18, 1e300]],
+    ];
+    for (const [lon0, lon] of cases) {
+      const lat = lon.map(() => 0);
+      const got = tmerc({ lon0 }).fromLonLat(lon, lat);
+      const ref = jsTmerc({ lon0 }).fromLonLat(lon, lat);
+      // Same classification (both NaN or both finite) and within the contract.
+      const diff = lon.map((_, i) =>
+        Number.isNaN(ref.x[i]!) ? +!Number.isNaN(got.x[i]!) : Math.abs(got.x[i]! - ref.x[i]!),
+      );
+      expect(Math.max(...diff)).toBeLessThan(4e-9);
+    }
+    // 1e18 = 280 (mod 360), i.e. -80: on the central meridian.
+    expect(Math.abs(tmerc({ lon0: -80 }).fromLonLat([1e18], [0]).x[0]!)).toBeLessThan(1e-9);
   });
 
   it('validates options', () => {

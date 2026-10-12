@@ -45,6 +45,19 @@ pub(crate) struct K {
     pub b56: [f64; 2],
 }
 
+/// Removes whole turns from a longitude outside [-180, 180], exactly (fmod is exact), as the TS kernel does.
+/// In radians their rounding error would exceed the forward NaN cutoff.
+pub(crate) fn reduce_lon(lon: f64) -> f64 {
+    let r = libm::fmod(lon, 360.0);
+    if r > 180.0 {
+        r - 360.0
+    } else if r < -180.0 {
+        r + 360.0
+    } else {
+        r
+    }
+}
+
 pub(crate) fn make_k(a: f64, f: f64, zone: u32, south: bool) -> K {
     let fnorth = if south { FALSE_NORTHING_SOUTH } else { 0.0 };
     make_k_tm(a, f, (zone as i32 * 6 - 183) as f64, K0, FALSE_EASTING, fnorth)
@@ -119,9 +132,8 @@ pub(crate) mod skernel {
         //    yields only the small difference dchi; sd/cd come from a short
         //    Taylor run, then sc/cc = sin/cos chi by angle addition
         let phi = lat_deg * D2R;
-        // Whole turns first (exact): in radians their rounding error exceeds the NaN cutoff below.
         if lon_deg > 180.0 || lon_deg < -180.0 {
-            lon_deg -= 360.0 * libm::round(lon_deg / 360.0);
+            lon_deg = reduce_lon(lon_deg);
         }
         let lam = lon_deg * D2R - k.lon0;
         let sp = libm::sin(phi);

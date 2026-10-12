@@ -11,9 +11,9 @@
 //!   boundary where classification diverges from libm).
 #![allow(unsafe_op_in_unsafe_fn)]
 
-use crate::kernel::{K, D2R, R2D};
+use crate::kernel::{reduce_lon, K, D2R, R2D};
 use core::arch::wasm32::{
-    f64x2, f64x2_abs, f64x2_add, f64x2_div, f64x2_extract_lane, f64x2_gt, f64x2_lt, f64x2_mul, f64x2_nearest,
+    f64x2, f64x2_abs, f64x2_add, f64x2_div, f64x2_extract_lane, f64x2_gt, f64x2_lt, f64x2_mul,
     f64x2_neg, f64x2_splat, f64x2_sqrt, f64x2_sub, i64x2_splat, v128, v128_and, v128_any_true, v128_bitselect,
     v128_or, v128_xor,
 };
@@ -83,11 +83,12 @@ unsafe fn is_finite(x: v128) -> v128 {
 #[target_feature(enable = "simd128")]
 pub unsafe fn forward2(mut lon: v128, lat: v128, q: &KS) -> (v128, v128) {
     let phi = f64x2_mul(lat, q.d2r);
-    // Whole turns first (exact): in radians their rounding error exceeds the NaN cutoff below.
+    // Rare: whole turns are removed per lane by the scalar reduction, so both kernels agree.
     let out = v128_or(f64x2_gt(lon, spl(180.0)), f64x2_lt(lon, spl(-180.0)));
     if v128_any_true(out) {
-        let turns = f64x2_mul(spl(360.0), f64x2_nearest(f64x2_div(lon, spl(360.0))));
-        lon = v128_bitselect(f64x2_sub(lon, turns), lon, out);
+        let (l0, l1) = (f64x2_extract_lane::<0>(lon), f64x2_extract_lane::<1>(lon));
+        let r = |l: f64| if l > 180.0 || l < -180.0 { reduce_lon(l) } else { l };
+        lon = f64x2(r(l0), r(l1));
     }
     let lam = f64x2_sub(f64x2_mul(lon, q.d2r), q.lon0);
 
