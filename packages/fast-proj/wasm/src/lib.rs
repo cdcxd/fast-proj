@@ -22,13 +22,14 @@ mod vkernel;
 // ---------------------------------------------------------------------------
 
 /// # Safety
-/// `p` must address `n` valid, aligned f64s that nothing writes for `'a`.
+/// `p` must be non-null and aligned, even when `n` is 0, and address `n` valid f64s that nothing writes for `'a`.
 unsafe fn r<'a>(p: *const f64, n: usize) -> &'a [f64] {
     unsafe { core::slice::from_raw_parts(p, n) }
 }
 
 /// # Safety
-/// `p` must address `n` valid, aligned f64s that nothing else accesses for `'a`.
+/// `p` must be non-null and aligned, even when `n` is 0, and address `n` valid f64s that nothing else accesses
+/// for `'a`.
 unsafe fn w<'a>(p: *mut f64, n: usize) -> &'a mut [f64] {
     unsafe { core::slice::from_raw_parts_mut(p, n) }
 }
@@ -43,14 +44,15 @@ pub extern "C" fn simd_enabled() -> u32 {
 }
 
 /// # Safety
-/// `dst` and `src` must each address `n` valid, aligned f64s and must not overlap.
+/// `dst` and `src` must be non-null and aligned, even when `n` is 0, address `n` valid f64s each, and not overlap.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn copy_f64(dst: *mut f64, src: *const f64, n: usize) {
     unsafe { core::ptr::copy_nonoverlapping(src, dst, n) }
 }
 
 /// # Safety
-/// Each pointer must address `n` valid, aligned f64s; outputs must not overlap any other buffer.
+/// Each pointer must be non-null and aligned, even when `n` is 0, and address `n` valid f64s; outputs must not
+/// overlap any other buffer.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sincos_batch(inp: *const f64, s_out: *mut f64, c_out: *mut f64, n: usize) {
     let (inp, s_out, c_out) = unsafe { (r(inp, n), w(s_out, n), w(c_out, n)) };
@@ -80,7 +82,8 @@ fn map(inp: &[f64], out: &mut [f64], f: impl Fn(core::arch::wasm32::v128) -> cor
 }
 
 /// # Safety
-/// Each pointer must address `n` valid, aligned f64s; outputs must not overlap any other buffer.
+/// Each pointer must be non-null and aligned, even when `n` is 0, and address `n` valid f64s; outputs must not
+/// overlap any other buffer.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn atan_batch(inp: *const f64, out: *mut f64, n: usize) {
     let (inp, out) = unsafe { (r(inp, n), w(out, n)) };
@@ -93,7 +96,8 @@ pub unsafe extern "C" fn atan_batch(inp: *const f64, out: *mut f64, n: usize) {
 }
 
 /// # Safety
-/// Each pointer must address `n` valid, aligned f64s; outputs must not overlap any other buffer.
+/// Each pointer must be non-null and aligned, even when `n` is 0, and address `n` valid f64s; outputs must not
+/// overlap any other buffer.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn exp_batch(inp: *const f64, out: *mut f64, n: usize) {
     let (inp, out) = unsafe { (r(inp, n), w(out, n)) };
@@ -106,7 +110,8 @@ pub unsafe extern "C" fn exp_batch(inp: *const f64, out: *mut f64, n: usize) {
 }
 
 /// # Safety
-/// Each pointer must address `n` valid, aligned f64s; outputs must not overlap any other buffer.
+/// Each pointer must be non-null and aligned, even when `n` is 0, and address `n` valid f64s; outputs must not
+/// overlap any other buffer.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn atan2_batch(yp: *const f64, xp: *const f64, out: *mut f64, n: usize) {
     let (y, x, out) = unsafe { (r(yp, n), r(xp, n), w(out, n)) };
@@ -125,7 +130,8 @@ pub unsafe extern "C" fn atan2_batch(yp: *const f64, xp: *const f64, out: *mut f
 }
 
 /// # Safety
-/// Each pointer must address `n` valid, aligned f64s; outputs must not overlap any other buffer.
+/// Each pointer must be non-null and aligned, even when `n` is 0, and address `n` valid f64s; outputs must not
+/// overlap any other buffer.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn log_batch(inp: *const f64, out: *mut f64, n: usize) {
     let (inp, out) = unsafe { (r(inp, n), w(out, n)) };
@@ -140,7 +146,8 @@ pub unsafe extern "C" fn log_batch(inp: *const f64, out: *mut f64, n: usize) {
 /// Math-smoke export for the guarded log1p paths and odd tails.
 ///
 /// # Safety
-/// Each pointer must address `n` valid, aligned f64s; outputs must not overlap any other buffer.
+/// Each pointer must be non-null and aligned, even when `n` is 0, and address `n` valid f64s; outputs must not
+/// overlap any other buffer.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn log1p_batch(inp: *const f64, out: *mut f64, n: usize) {
     let (inp, out) = unsafe { (r(inp, n), w(out, n)) };
@@ -175,7 +182,8 @@ fn run_inverse(x: &[f64], y: &[f64], lon: &mut [f64], lat: &mut [f64], k: &kerne
 }
 
 /// # Safety
-/// Each pointer must address `n` valid, aligned f64s; outputs must not overlap any other buffer.
+/// Each pointer must be non-null and aligned, even when `n` is 0, and address `n` valid f64s; outputs must not
+/// overlap any other buffer.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn forward_batch(
     lonp: *const f64,
@@ -193,7 +201,8 @@ pub unsafe extern "C" fn forward_batch(
 }
 
 /// # Safety
-/// Each pointer must address `n` valid, aligned f64s; outputs must not overlap any other buffer.
+/// Each pointer must be non-null and aligned, even when `n` is 0, and address `n` valid f64s; outputs must not
+/// overlap any other buffer.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn inverse_batch(
     xp: *const f64,
@@ -215,7 +224,8 @@ pub unsafe extern "C" fn inverse_batch(
 // ---------------------------------------------------------------------------
 
 /// # Safety
-/// Each pointer must address `n` valid, aligned f64s; outputs must not overlap any other buffer.
+/// Each pointer must be non-null and aligned, even when `n` is 0, and address `n` valid f64s; outputs must not
+/// overlap any other buffer.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tm_forward_batch(
     lonp: *const f64,
@@ -235,7 +245,8 @@ pub unsafe extern "C" fn tm_forward_batch(
 }
 
 /// # Safety
-/// Each pointer must address `n` valid, aligned f64s; outputs must not overlap any other buffer.
+/// Each pointer must be non-null and aligned, even when `n` is 0, and address `n` valid f64s; outputs must not
+/// overlap any other buffer.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tm_inverse_batch(
     xp: *const f64,
