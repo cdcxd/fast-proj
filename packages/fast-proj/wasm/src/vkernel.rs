@@ -79,7 +79,6 @@ fn is_finite(x: v128) -> v128 {
     f64x2_lt(f64x2_abs(x), spl(f64::INFINITY))
 }
 
-#[target_feature(enable = "simd128")]
 pub fn forward2(mut lon: v128, lat: v128, q: &KS) -> (v128, v128) {
     let phi = f64x2_mul(lat, q.d2r);
     // Rare: whole turns are removed per lane by the scalar reduction, so both kernels agree.
@@ -182,7 +181,6 @@ pub fn forward2(mut lon: v128, lat: v128, q: &KS) -> (v128, v128) {
     )
 }
 
-#[target_feature(enable = "simd128")]
 pub fn inverse2(x: v128, y: v128, q: &KS) -> (v128, v128) {
     let xi = f64x2_mul(f64x2_sub(y, q.fnorth), q.inv_k_a);
     let eta = f64x2_mul(f64x2_sub(x, q.feast), q.inv_k_a);
@@ -288,44 +286,24 @@ pub fn inverse2(x: v128, y: v128, q: &KS) -> (v128, v128) {
     (lon, f64x2_mul(phi, spl(R2D)))
 }
 
-pub unsafe fn forward_batch(
-    lonp: *const f64,
-    latp: *const f64,
-    xp: *mut f64,
-    yp: *mut f64,
-    n: usize,
-    k: &K,
-) {
+pub fn forward_batch(lon: &[f64], lat: &[f64], x: &mut [f64], y: &mut [f64], k: &K) {
     let q = splat_k(k);
     let mut i = 0;
-    while i < n {
-        let (lon, lat) = unsafe { (load_pair(lonp, i, n), load_pair(latp, i, n)) };
-        let (x, y) = forward2(lon, lat, &q);
-        unsafe {
-            store_pair(x, xp, i, n);
-            store_pair(y, yp, i, n);
-        }
+    while i < lon.len() {
+        let (a, b) = forward2(load_pair(lon, i), load_pair(lat, i), &q);
+        store_pair(a, x, i);
+        store_pair(b, y, i);
         i += 2;
     }
 }
 
-pub unsafe fn inverse_batch(
-    xp: *const f64,
-    yp: *const f64,
-    lonp: *mut f64,
-    latp: *mut f64,
-    n: usize,
-    k: &K,
-) {
+pub fn inverse_batch(x: &[f64], y: &[f64], lon: &mut [f64], lat: &mut [f64], k: &K) {
     let q = splat_k(k);
     let mut i = 0;
-    while i < n {
-        let (x, y) = unsafe { (load_pair(xp, i, n), load_pair(yp, i, n)) };
-        let (lon, lat) = inverse2(x, y, &q);
-        unsafe {
-            store_pair(lon, lonp, i, n);
-            store_pair(lat, latp, i, n);
-        }
+    while i < x.len() {
+        let (a, b) = inverse2(load_pair(x, i), load_pair(y, i), &q);
+        store_pair(a, lon, i);
+        store_pair(b, lat, i);
         i += 2;
     }
 }

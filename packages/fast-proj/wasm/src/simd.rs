@@ -16,7 +16,6 @@ fn spl(x: f64) -> v128 {
 }
 
 #[inline]
-#[target_feature(enable = "simd128")]
 pub fn poly(t: v128, c: &[f64]) -> v128 {
     let mut r = spl(0.0);
     for k in c.iter().rev() {
@@ -27,30 +26,25 @@ pub fn poly(t: v128, c: &[f64]) -> v128 {
 
 /// Load a pair; odd tails splat the last point into both lanes.
 #[inline]
-pub unsafe fn load_pair(inp: *const f64, i: usize, n: usize) -> v128 {
-    unsafe {
-        if i + 1 < n {
-            f64x2(*inp.add(i), *inp.add(i + 1))
-        } else {
-            f64x2_splat(*inp.add(i))
-        }
+pub fn load_pair(inp: &[f64], i: usize) -> v128 {
+    if i + 1 < inp.len() {
+        f64x2(inp[i], inp[i + 1])
+    } else {
+        f64x2_splat(inp[i])
     }
 }
 
 /// Store both lanes; an odd tail writes lane 0 only.
 #[inline]
-pub unsafe fn store_pair(v: v128, out: *mut f64, i: usize, n: usize) {
+pub fn store_pair(v: v128, out: &mut [f64], i: usize) {
     use core::arch::wasm32::f64x2_extract_lane;
-    unsafe {
-        *out.add(i) = f64x2_extract_lane::<0>(v);
-        if i + 1 < n {
-            *out.add(i + 1) = f64x2_extract_lane::<1>(v);
-        }
+    out[i] = f64x2_extract_lane::<0>(v);
+    if i + 1 < out.len() {
+        out[i + 1] = f64x2_extract_lane::<1>(v);
     }
 }
 
 /// atan(x) — the single-argument vector atan (|x| any; NaN/±0/±Inf handled).
-#[target_feature(enable = "simd128")]
 pub fn vatan(x: v128) -> v128 {
     let a = f64x2_abs(x);
     let gt1 = f64x2_gt(a, spl(1.0));
@@ -72,7 +66,6 @@ pub fn vatan(x: v128) -> v128 {
 }
 
 /// atan2(y, x) — magnitude path plus exact-zero and quadrant handling.
-#[target_feature(enable = "simd128")]
 pub fn vatan2(y: v128, x: v128) -> v128 {
     let ay = f64x2_abs(y);
     let ax = f64x2_abs(x);
@@ -110,7 +103,6 @@ pub fn vatan2(y: v128, x: v128) -> v128 {
     v128_bitselect(spl(f64::NAN), m, nan_in)
 }
 
-#[target_feature(enable = "simd128")]
 pub fn vsincos(x: v128) -> (v128, v128) {
     let k = f64x2_nearest(f64x2_mul(x, spl(TWO_OVER_PI)));
     let r = f64x2_sub(
@@ -144,7 +136,6 @@ pub fn vsincos(x: v128) -> (v128, v128) {
 /// exp with the exponent k clamped to +-1000 (|x| <= ~693 covers the UTM
 /// kernel and the diagnostics suite; beyond that, classification differs
 /// from libm — documented in RESULTS.md).
-#[target_feature(enable = "simd128")]
 pub fn vexp(x: v128) -> v128 {
     let k = f64x2_nearest(f64x2_mul(x, spl(LOG2E)));
     let r = f64x2_sub(f64x2_sub(x, f64x2_mul(k, spl(LN2_HI))), f64x2_mul(k, spl(LN2_LO)));
@@ -158,7 +149,6 @@ pub fn vexp(x: v128) -> v128 {
 
 /// log for positive normals; mantissa normalized into [sqrt(0.5), sqrt(2)),
 /// the L fit domain.
-#[target_feature(enable = "simd128")]
 pub fn vlog(x: v128) -> v128 {
     let e_i = i64x2_sub(
         v128_and(u64x2_shr(x, 52), i64x2_splat(0x7ff)),
@@ -209,7 +199,6 @@ fn i64x2_extract_lane1(v: v128) -> i64 {
 }
 
 /// log1p(t) for t in [-0.75, 2048]; ~1 ulp.
-#[target_feature(enable = "simd128")]
 pub fn vlog1p(t: v128) -> v128 {
     let at = f64x2_abs(t);
     let small = f64x2_lt(at, spl(f64::from_bits(0x3CA0000000000000))); // 2^-53

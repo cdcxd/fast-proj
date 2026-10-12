@@ -21,6 +21,15 @@ mod vkernel;
 // Math smoke exports
 // ---------------------------------------------------------------------------
 
+// Every pointer export requires `n` valid, aligned f64s behind each pointer, outputs not overlapping any other buffer.
+unsafe fn r<'a>(p: *const f64, n: usize) -> &'a [f64] {
+    unsafe { core::slice::from_raw_parts(p, n) }
+}
+
+unsafe fn w<'a>(p: *mut f64, n: usize) -> &'a mut [f64] {
+    unsafe { core::slice::from_raw_parts_mut(p, n) }
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn noop() {}
 
@@ -31,117 +40,97 @@ pub extern "C" fn simd_enabled() -> u32 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn copy_f64(dst: *mut f64, src: *const f64, n: usize) {
+pub unsafe extern "C" fn copy_f64(dst: *mut f64, src: *const f64, n: usize) {
     unsafe { core::ptr::copy_nonoverlapping(src, dst, n) }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn sincos_batch(inp: *const f64, s_out: *mut f64, c_out: *mut f64, n: usize) {
+pub unsafe extern "C" fn sincos_batch(inp: *const f64, s_out: *mut f64, c_out: *mut f64, n: usize) {
+    let (inp, s_out, c_out) = unsafe { (r(inp, n), w(s_out, n), w(c_out, n)) };
     #[cfg(target_feature = "simd128")]
-    unsafe {
+    {
         let mut i = 0;
         while i < n {
-            let x = simd::load_pair(inp, i, n);
-            let (s, c) = simd::vsincos(x);
-            simd::store_pair(s, s_out, i, n);
-            simd::store_pair(c, c_out, i, n);
+            let (s, c) = simd::vsincos(simd::load_pair(inp, i));
+            simd::store_pair(s, s_out, i);
+            simd::store_pair(c, c_out, i);
             i += 2;
         }
     }
     #[cfg(not(target_feature = "simd128"))]
     for i in 0..n {
-        let (s, c) = math::scalar::sincos(unsafe { *inp.add(i) });
-        unsafe {
-            *s_out.add(i) = s;
-            *c_out.add(i) = c;
-        }
+        (s_out[i], c_out[i]) = math::scalar::sincos(inp[i]);
     }
-    let _ = (inp, s_out, c_out, n);
+}
+
+#[cfg(target_feature = "simd128")]
+fn map(inp: &[f64], out: &mut [f64], f: impl Fn(core::arch::wasm32::v128) -> core::arch::wasm32::v128) {
+    let mut i = 0;
+    while i < inp.len() {
+        simd::store_pair(f(simd::load_pair(inp, i)), out, i);
+        i += 2;
+    }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn atan_batch(inp: *const f64, out: *mut f64, n: usize) {
+pub unsafe extern "C" fn atan_batch(inp: *const f64, out: *mut f64, n: usize) {
+    let (inp, out) = unsafe { (r(inp, n), w(out, n)) };
     #[cfg(target_feature = "simd128")]
-    unsafe {
-        let mut i = 0;
-        while i < n {
-            simd::store_pair(simd::vatan(simd::load_pair(inp, i, n)), out, i, n);
-            i += 2;
-        }
-    }
+    map(inp, out, simd::vatan);
     #[cfg(not(target_feature = "simd128"))]
     for i in 0..n {
-        unsafe { *out.add(i) = math::scalar::atan(*inp.add(i)) }
+        out[i] = math::scalar::atan(inp[i]);
     }
-    let _ = (inp, out, n);
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn exp_batch(inp: *const f64, out: *mut f64, n: usize) {
+pub unsafe extern "C" fn exp_batch(inp: *const f64, out: *mut f64, n: usize) {
+    let (inp, out) = unsafe { (r(inp, n), w(out, n)) };
     #[cfg(target_feature = "simd128")]
-    unsafe {
-        let mut i = 0;
-        while i < n {
-            simd::store_pair(simd::vexp(simd::load_pair(inp, i, n)), out, i, n);
-            i += 2;
-        }
-    }
+    map(inp, out, simd::vexp);
     #[cfg(not(target_feature = "simd128"))]
     for i in 0..n {
-        unsafe { *out.add(i) = math::scalar::exp(*inp.add(i)) }
+        out[i] = math::scalar::exp(inp[i]);
     }
-    let _ = (inp, out, n);
 }
 
-
 #[unsafe(no_mangle)]
-pub extern "C" fn atan2_batch(yp: *const f64, xp: *const f64, out: *mut f64, n: usize) {
+pub unsafe extern "C" fn atan2_batch(yp: *const f64, xp: *const f64, out: *mut f64, n: usize) {
+    let (y, x, out) = unsafe { (r(yp, n), r(xp, n), w(out, n)) };
     #[cfg(target_feature = "simd128")]
-    unsafe {
+    {
         let mut i = 0;
         while i < n {
-            let y = simd::load_pair(yp, i, n);
-            let x = simd::load_pair(xp, i, n);
-            simd::store_pair(simd::vatan2(y, x), out, i, n);
+            simd::store_pair(simd::vatan2(simd::load_pair(y, i), simd::load_pair(x, i)), out, i);
             i += 2;
         }
     }
     #[cfg(not(target_feature = "simd128"))]
     for i in 0..n {
-        unsafe { *out.add(i) = libm::atan2(*yp.add(i), *xp.add(i)) }
+        out[i] = libm::atan2(y[i], x[i]);
     }
 }
+
 #[unsafe(no_mangle)]
-pub extern "C" fn log_batch(inp: *const f64, out: *mut f64, n: usize) {
+pub unsafe extern "C" fn log_batch(inp: *const f64, out: *mut f64, n: usize) {
+    let (inp, out) = unsafe { (r(inp, n), w(out, n)) };
     #[cfg(target_feature = "simd128")]
-    unsafe {
-        let mut i = 0;
-        while i < n {
-            simd::store_pair(simd::vlog(simd::load_pair(inp, i, n)), out, i, n);
-            i += 2;
-        }
-    }
+    map(inp, out, simd::vlog);
     #[cfg(not(target_feature = "simd128"))]
     for i in 0..n {
-        unsafe { *out.add(i) = math::scalar::log(*inp.add(i)) }
+        out[i] = math::scalar::log(inp[i]);
     }
-    let _ = (inp, out, n);
 }
 
 /// Math-smoke export for the guarded log1p paths and odd tails.
 #[unsafe(no_mangle)]
-pub extern "C" fn log1p_batch(inp: *const f64, out: *mut f64, n: usize) {
+pub unsafe extern "C" fn log1p_batch(inp: *const f64, out: *mut f64, n: usize) {
+    let (inp, out) = unsafe { (r(inp, n), w(out, n)) };
     #[cfg(target_feature = "simd128")]
-    unsafe {
-        let mut i = 0;
-        while i < n {
-            simd::store_pair(simd::vlog1p(simd::load_pair(inp, i, n)), out, i, n);
-            i += 2;
-        }
-    }
+    map(inp, out, simd::vlog1p);
     #[cfg(not(target_feature = "simd128"))]
     for i in 0..n {
-        unsafe { *out.add(i) = libm::log1p(*inp.add(i)) }
+        out[i] = libm::log1p(inp[i]);
     }
 }
 
@@ -149,38 +138,26 @@ pub extern "C" fn log1p_batch(inp: *const f64, out: *mut f64, n: usize) {
 // UTM batch exports
 // ---------------------------------------------------------------------------
 
-fn run_forward(lonp: *const f64, latp: *const f64, xp: *mut f64, yp: *mut f64, n: usize, k: &kernel::K) {
+fn run_forward(lon: &[f64], lat: &[f64], x: &mut [f64], y: &mut [f64], k: &kernel::K) {
     #[cfg(target_feature = "simd128")]
-    unsafe {
-        vkernel::forward_batch(lonp, latp, xp, yp, n, k);
-    }
+    vkernel::forward_batch(lon, lat, x, y, k);
     #[cfg(not(target_feature = "simd128"))]
-    for i in 0..n {
-        let (x, y) = kernel::skernel::forward(unsafe { *lonp.add(i) }, unsafe { *latp.add(i) }, k);
-        unsafe {
-            *xp.add(i) = x;
-            *yp.add(i) = y;
-        }
+    for i in 0..lon.len() {
+        (x[i], y[i]) = kernel::skernel::forward(lon[i], lat[i], k);
     }
 }
 
-fn run_inverse(xp: *const f64, yp: *const f64, lonp: *mut f64, latp: *mut f64, n: usize, k: &kernel::K) {
+fn run_inverse(x: &[f64], y: &[f64], lon: &mut [f64], lat: &mut [f64], k: &kernel::K) {
     #[cfg(target_feature = "simd128")]
-    unsafe {
-        vkernel::inverse_batch(xp, yp, lonp, latp, n, k);
-    }
+    vkernel::inverse_batch(x, y, lon, lat, k);
     #[cfg(not(target_feature = "simd128"))]
-    for i in 0..n {
-        let (lon, lat) = kernel::skernel::inverse(unsafe { *xp.add(i) }, unsafe { *yp.add(i) }, k);
-        unsafe {
-            *lonp.add(i) = lon;
-            *latp.add(i) = lat;
-        }
+    for i in 0..x.len() {
+        (lon[i], lat[i]) = kernel::skernel::inverse(x[i], y[i], k);
     }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn forward_batch(
+pub unsafe extern "C" fn forward_batch(
     lonp: *const f64,
     latp: *const f64,
     xp: *mut f64,
@@ -191,11 +168,12 @@ pub extern "C" fn forward_batch(
     a: f64,
     f: f64,
 ) {
-    run_forward(lonp, latp, xp, yp, n, &kernel::make_k(a, f, zone, south != 0));
+    let k = kernel::make_k(a, f, zone, south != 0);
+    unsafe { run_forward(r(lonp, n), r(latp, n), w(xp, n), w(yp, n), &k) }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn inverse_batch(
+pub unsafe extern "C" fn inverse_batch(
     xp: *const f64,
     yp: *const f64,
     lonp: *mut f64,
@@ -206,7 +184,8 @@ pub extern "C" fn inverse_batch(
     a: f64,
     f: f64,
 ) {
-    run_inverse(xp, yp, lonp, latp, n, &kernel::make_k(a, f, zone, south != 0));
+    let k = kernel::make_k(a, f, zone, south != 0);
+    unsafe { run_inverse(r(xp, n), r(yp, n), w(lonp, n), w(latp, n), &k) }
 }
 
 // ---------------------------------------------------------------------------
@@ -214,7 +193,7 @@ pub extern "C" fn inverse_batch(
 // ---------------------------------------------------------------------------
 
 #[unsafe(no_mangle)]
-pub extern "C" fn tm_forward_batch(
+pub unsafe extern "C" fn tm_forward_batch(
     lonp: *const f64,
     latp: *const f64,
     xp: *mut f64,
@@ -227,11 +206,12 @@ pub extern "C" fn tm_forward_batch(
     a: f64,
     f: f64,
 ) {
-    run_forward(lonp, latp, xp, yp, n, &kernel::make_k_tm(a, f, lon0, k0, feast, fnorth));
+    let k = kernel::make_k_tm(a, f, lon0, k0, feast, fnorth);
+    unsafe { run_forward(r(lonp, n), r(latp, n), w(xp, n), w(yp, n), &k) }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn tm_inverse_batch(
+pub unsafe extern "C" fn tm_inverse_batch(
     xp: *const f64,
     yp: *const f64,
     lonp: *mut f64,
@@ -244,7 +224,8 @@ pub extern "C" fn tm_inverse_batch(
     a: f64,
     f: f64,
 ) {
-    run_inverse(xp, yp, lonp, latp, n, &kernel::make_k_tm(a, f, lon0, k0, feast, fnorth));
+    let k = kernel::make_k_tm(a, f, lon0, k0, feast, fnorth);
+    unsafe { run_inverse(r(xp, n), r(yp, n), w(lonp, n), w(latp, n), &k) }
 }
 
 #[cfg(not(test))]
