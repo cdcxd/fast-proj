@@ -1,10 +1,10 @@
 name: Release
 
-# Push a tag like `utm-v0.1.0` to publish packages/utm. Requires npm trusted publishing for this repository and
+# Push a tag like `v0.1.0` to publish packages/fast-proj. Requires npm trusted publishing for this repository and
 # workflow (or an NPM_TOKEN secret for the first publish).
 on:
   push:
-    tags: ['utm-v*']
+    tags: ['v*']
 
 permissions:
   contents: read
@@ -23,22 +23,25 @@ jobs:
         with:
           node-version: 24.21.0
           registry-url: https://registry.npmjs.org
+      - uses: dtolnay/rust-toolchain@1.99.0
+        with:
+          targets: wasm32-unknown-unknown
       - run: bun install --frozen-lockfile
       - run: bun run check
       - name: Check tag matches package version
-        run: test "utm-v$(node -p "require('./packages/utm/package.json').version")" = "$GITHUB_REF_NAME"
+        run: test "v$(node -p "require('./packages/fast-proj/package.json').version")" = "$GITHUB_REF_NAME"
       # Development tools require a newer Node; exercise the built package
       # on its advertised minimum before publishing, then restore the toolchain.
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - name: Check Node 20 package compatibility
-        run: node packages/utm/test/smoke.mjs
+        run: node packages/fast-proj/test/smoke.mjs
       - uses: actions/setup-node@v4
         with:
           node-version: 24.21.0
           registry-url: https://registry.npmjs.org
       - run: npm publish --provenance --access public
-        working-directory: packages/utm
+        working-directory: packages/fast-proj
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

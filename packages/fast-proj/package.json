@@ -1,0 +1,56 @@
+{
+  "name": "fast-proj",
+  "version": "0.1.0",
+  "description": "Fast batch coordinate conversions (UTM, transverse Mercator) with typed-array APIs and an optional WebAssembly backend",
+  "keywords": [
+    "coordinates",
+    "geodesy",
+    "projection",
+    "transverse mercator",
+    "utm",
+    "wasm",
+    "wgs84"
+  ],
+  "homepage": "https://github.com/cdcxd/fast-proj#readme",
+  "bugs": "https://github.com/cdcxd/fast-proj/issues",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cdcxd/fast-proj.git",
+    "directory": "packages/fast-proj"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./geojson": {
+      "types": "./dist/geojson.d.ts",
+      "default": "./dist/geojson.js"
+    },
+    "./wasm": {
+      "types": "./dist/wasm.d.ts",
+      "default": "./dist/wasm.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && bash wasm/build.sh",
+    "prepack": "bun run build",
+    "test": "vitest run",
+    "bench": "bun run build && node bench/run.mjs && bun bench/run.mjs && node bench/run.mjs --browser"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
