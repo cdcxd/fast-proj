@@ -145,6 +145,57 @@ function alloc(n) {
   check('log(1) is +0', Object.is(got[0], 0));
 }
 
+// --- log1p pair guards: both paths, mixed lanes, seams and odd tails --------
+{
+  const values = [
+    0,
+    -0,
+    Number.MIN_VALUE,
+    -Number.MIN_VALUE,
+    2 ** -53,
+    -(2 ** -53),
+    2 ** -53 + 2 ** -105,
+    -0.25,
+    -0.25 - Number.EPSILON / 4,
+    -0.25 + Number.EPSILON / 8,
+    0.25,
+    0.25 - Number.EPSILON / 8,
+    0.25 + Number.EPSILON / 4,
+    -0.75,
+    -1,
+    -1.5,
+    0.5,
+    1,
+    2048,
+    Infinity,
+    -Infinity,
+    NaN,
+  ];
+  // Every ordered pair exercises same-path and mixed-path SIMD masks,
+  // including NaN in either lane. The last -0 is an odd tail.
+  const xs = values.flatMap((a) => values.flatMap((b) => [a, b]));
+  xs.push(-0);
+  const n = xs.length;
+  const inp = alloc(n),
+    out = alloc(n + 1);
+  F64(inp, n).set(xs);
+  F64(out, n + 1).fill(123);
+  e.log1p_batch(inp, out, n);
+  const got = F64(out, n + 1);
+  for (let i = 0; i < n; i++) {
+    const want = Math.log1p(xs[i]);
+    const ok = Number.isNaN(want)
+      ? Number.isNaN(got[i])
+      : want === 0 || !Number.isFinite(want)
+        ? Object.is(got[i], want)
+        : Number.isFinite(got[i]) && Math.abs(got[i] - want) <= 4 * Number.EPSILON * Math.abs(want);
+    check(`log1p pair lane ${i}`, ok, `input ${xs[i]} got ${got[i]} want ${want}`);
+  }
+  check('log1p odd tail leaves next output untouched', got[n] === 123);
+  e.log1p_batch(inp, out, 0);
+  check('log1p empty batch leaves output untouched', Object.is(got[n - 1], -0));
+}
+
 // --- exp: negative k and clamp scope (|x| <= 693 exact vs Math.exp) ----------
 {
   const xs = [-1, -20, -200, -0.5, 0.5, 1, 20, 200, 693, -693];

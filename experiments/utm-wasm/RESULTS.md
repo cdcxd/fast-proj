@@ -1,5 +1,9 @@
 # RESULTS: wasm simd UTM kernel experiment
 
+The tables below record the original merged prototype. Follow-up arithmetic
+measurements, output matrix, correctness CI and the resource-lifecycle direction
+are in [ARITHMETIC.md](ARITHMETIC.md).
+
 Branch `experiment/utm-wasm`. Kernel: Rust (stable 1.99, wasm32-unknown-unknown),
 f64x2 simd128, batch ABI over a bump-arena heap; full `Utm` API surface via
 `wasm-utm.mjs` (node) / `wasm-utm-core.mjs` (environment-agnostic).

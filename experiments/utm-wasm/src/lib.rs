@@ -124,6 +124,23 @@ pub extern "C" fn log_batch(inp: *const f64, out: *mut f64, n: usize) {
     let _ = (inp, out, n);
 }
 
+/// Math-smoke export for the guarded log1p paths and odd tails.
+#[unsafe(no_mangle)]
+pub extern "C" fn log1p_batch(inp: *const f64, out: *mut f64, n: usize) {
+    #[cfg(target_feature = "simd128")]
+    unsafe {
+        let mut i = 0;
+        while i < n {
+            simd::store_pair(simd::vlog1p(simd::load_pair(inp, i, n)), out, i, n);
+            i += 2;
+        }
+    }
+    #[cfg(not(target_feature = "simd128"))]
+    for i in 0..n {
+        unsafe { *out.add(i) = libm::log1p(*inp.add(i)) }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // UTM batch exports
 // ---------------------------------------------------------------------------

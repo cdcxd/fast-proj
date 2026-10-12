@@ -21,12 +21,23 @@ jobs:
           bun-version: 1.4.2
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 24.21.0
           registry-url: https://registry.npmjs.org
       - run: bun install --frozen-lockfile
       - run: bun run check
       - name: Check tag matches package version
         run: test "utm-v$(node -p "require('./packages/utm/package.json').version")" = "$GITHUB_REF_NAME"
+      # Development tools require a newer Node; exercise the built package
+      # on its advertised minimum before publishing, then restore the toolchain.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check Node 20 package compatibility
+        run: node packages/utm/test/smoke.mjs
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          registry-url: https://registry.npmjs.org
       - run: npm publish --provenance --access public
         working-directory: packages/utm
         env:

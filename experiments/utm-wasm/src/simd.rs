@@ -211,6 +211,13 @@ pub unsafe fn vlog1p(t: v128) -> v128 {
     let at = f64x2_abs(t);
     let small = f64x2_lt(at, spl(f64::from_bits(0x3CA0000000000000))); // 2^-53
     let mid = f64x2_le(at, spl(0.25));
+    // Skip unused formulas only when both lanes choose the same path.
+    // Mixed pairs and NaNs retain the original blend below.
+    let a0 = core::arch::wasm32::f64x2_extract_lane::<0>(at);
+    let a1 = core::arch::wasm32::f64x2_extract_lane::<1>(at);
+    if a0 > 0.25 && a1 > 0.25 {
+        return vlog(f64x2_add(spl(1.0), t));
+    }
     // s = t/(2+t) in [-1/7, 1/9], inside the L fit domain
     let s = f64x2_div(t, f64x2_add(spl(2.0), t));
     let s2 = f64x2_mul(s, s);
@@ -218,6 +225,9 @@ pub unsafe fn vlog1p(t: v128) -> v128 {
         f64x2_mul(spl(2.0), s),
         f64x2_mul(f64x2_mul(spl(2.0), s2), f64x2_mul(s, poly(s2, &L))),
     );
+    if a0 <= 0.25 && a1 <= 0.25 {
+        return v128_bitselect(t, lm, small);
+    }
     let lg = vlog(f64x2_add(spl(1.0), t));
     let base = v128_bitselect(lm, lg, mid);
     v128_bitselect(t, base, small)

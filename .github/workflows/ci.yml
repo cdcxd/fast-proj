@@ -10,10 +10,10 @@ permissions:
 
 jobs:
   check:
+    # One pinned runtime for package checks and the Wasm numerical contract.
+    # Benchmarks remain local; oldest-runtime compatibility gates releases.
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node: [22, 24]
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -21,21 +21,17 @@ jobs:
           bun-version: 1.4.2
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
+          node-version: 24.21.0
+      - uses: dtolnay/rust-toolchain@1.99.0
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: experiments/utm-wasm -> target
       - run: bun install --frozen-lockfile
       - run: bun run check
-
-  node20:
-    # The dev tools need Node 22.12+; check that the built package itself runs on Node 20.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.2
-      - run: bun install --frozen-lockfile
-      - run: bun run build
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: node packages/utm/test/smoke.mjs
+      - run: cargo test --release --locked --manifest-path experiments/utm-wasm/Cargo.toml
+      - run: bash experiments/utm-wasm/scripts/build.sh
+      - run: node experiments/utm-wasm/bench/checks.mjs
+      - run: node experiments/utm-wasm/bench/wrapper-checks.mjs
+      - run: node experiments/utm-wasm/bench/accuracy.mjs
