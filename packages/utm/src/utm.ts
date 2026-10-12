@@ -139,8 +139,9 @@ export function utm({ zone, south = false, ellipsoid = WGS84 }: UtmOptions): Utm
     const xip = ccl > 0 ? Math.atan(sc / ccl) : Math.atan2(sc, ccl);
     const she = cc * sl * ir;
     // asinh(she) = log(she + sqrt(1 + she^2)); cosh(eta') = sqrt(1 + she^2) equals the already-computed ir
-    // up to rounding, so only log1p remains.
-    const etap = Math.log1p(she + (she * she) / (ir + 1));
+    // up to rounding, so only log1p remains. Beyond |she| ~ 1e4 (lon within ~1e-7 degrees of +-90 degrees)
+    // the argument rounds to -1, so keep asinh there.
+    const etap = she > -1024 && she < 1024 ? Math.log1p(she + (she * she) / (ir + 1)) : Math.asinh(she);
 
     const ir2 = ir * ir;
     const s2 = 2 * sc * ccl * ir2;
@@ -214,9 +215,9 @@ export function utm({ zone, south = false, ellipsoid = WGS84 }: UtmOptions): Utm
 
     const h2 = she * she + cx * cx;
     const h = Math.sqrt(h2);
-    // Keep atan2 for other quadrants and for zero or NaN denominators.
-    const lam = cx > 0 ? Math.atan(she / cx) : Math.atan2(she, cx);
-    const chi = h > 0 ? Math.atan(sx / h) : Math.atan2(sx, h);
+    // Keep atan2 for other quadrants and for zero, NaN or infinite operands (atan(Inf/Inf) is NaN).
+    const lam = cx > 0 && Number.isFinite(she) ? Math.atan(she / cx) : Math.atan2(she, cx);
+    const chi = h > 0 && Number.isFinite(sx) ? Math.atan(sx / h) : Math.atan2(sx, h);
 
     const sx2 = sx * sx;
     const r2 = sx2 + h2;

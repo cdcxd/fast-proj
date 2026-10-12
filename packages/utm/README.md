@@ -36,12 +36,12 @@ converter:
 
 |                                             |        Node 24 |        Bun 1.4 |   Chromium 156 |
 | ------------------------------------------- | -------------: | -------------: | -------------: |
-| UTM → WGS84, proj4                          |        4.79 ms |        2.64 ms |        5.22 ms |
-| UTM → WGS84, `toLonLat`                     | 1.13 ms (4.2×) | 1.23 ms (2.2×) | 1.94 ms (2.7×) |
-| WGS84 → UTM, proj4                          |        5.18 ms |        2.54 ms |        5.78 ms |
-| WGS84 → UTM, `fromLonLat`                   | 1.24 ms (4.2×) | 1.04 ms (2.4×) | 1.92 ms (3.0×) |
-| flat UTM → GeoJSON LineString, proj4        |        5.13 ms |        3.04 ms |        6.02 ms |
-| flat UTM → GeoJSON LineString, `lineString` | 1.14 ms (4.5×) | 1.37 ms (2.2×) | 1.94 ms (3.1×) |
+| UTM → WGS84, proj4                          |        5.06 ms |        2.59 ms |        5.24 ms |
+| UTM → WGS84, `toLonLat`                     | 1.03 ms (4.9×) | 0.95 ms (2.7×) | 1.66 ms (3.2×) |
+| WGS84 → UTM, proj4                          |        5.37 ms |        2.59 ms |        5.72 ms |
+| WGS84 → UTM, `fromLonLat`                   | 1.05 ms (5.1×) | 0.76 ms (3.4×) | 1.56 ms (3.7×) |
+| flat UTM → GeoJSON LineString, proj4        |        5.28 ms |        3.11 ms |        5.96 ms |
+| flat UTM → GeoJSON LineString, `lineString` | 1.06 ms (5.0×) | 1.06 ms (2.9×) | 1.66 ms (3.6×) |
 
 The point and interleaved variants run at the same speed as the array form. Single runs: `node bench/run.mjs`,
 `bun bench/run.mjs`, `node bench/run.mjs --browser` (needs `bunx playwright install chromium`).
