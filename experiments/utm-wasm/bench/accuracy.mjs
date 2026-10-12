@@ -130,7 +130,12 @@ for (const halfWidth of [30, 45]) {
           const wy = tY[i];
           if (classify(wx) !== classify(tx) || classify(ty2) !== classify(wy)) m.wvts.cls++;
           if (Object.is(wx, tx) && Object.is(ty2, wy)) m.wvts.ident++;
-          else if (wx === 0 && tx === 0 && !Object.is(wx, tx)) m.wvts.sz++;
+          for (const [actual, expected] of [
+            [wx, tx],
+            [ty2, wy],
+          ]) {
+            if (actual === 0 && expected === 0 && !Object.is(actual, expected)) m.wvts.sz++;
+          }
           if (Number.isFinite(wx) && Number.isFinite(tx)) m.wvts.x = Math.max(m.wvts.x, Math.abs(wx - tx));
           if (Number.isFinite(ty2) && Number.isFinite(wy)) m.wvts.y = Math.max(m.wvts.y, Math.abs(ty2 - wy));
           if (p4) {
@@ -164,13 +169,20 @@ for (const halfWidth of [30, 45]) {
           for (let j = 0; j < n; j++) {
             const wl = gi.lon[j],
               tl = ti.lon[j];
-            if (classify(wl) !== classify(tl)) ivCls++;
-            else if (wl === 0 && tl === 0 && !Object.is(wl, tl)) ivSz++;
+            for (const [actual, expected] of [
+              [wl, tl],
+              [gi.lat[j], ti.lat[j]],
+            ]) {
+              if (classify(actual) !== classify(expected)) ivCls++;
+              else if (actual === 0 && expected === 0 && !Object.is(actual, expected)) ivSz++;
+            }
             if (Number.isFinite(wl) && Number.isFinite(tl)) {
               ivLon = Math.max(
                 ivLon,
                 wrapDelta(wl, tl) * Math.abs(Math.cos((LATITUDES[Math.floor((i0 + j) / lons.length)] * Math.PI) / 180)),
               );
+            }
+            if (Number.isFinite(gi.lat[j]) && Number.isFinite(ti.lat[j])) {
               ivLat = Math.max(ivLat, Math.abs(gi.lat[j] - ti.lat[j]));
             }
           }

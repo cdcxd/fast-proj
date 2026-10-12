@@ -1,0 +1,816 @@
+{
+  "runtime": "Node v24.21.0",
+  "baseline": "/tmp/fast-proj-pr2-final-review.VtHLAh/experiments/utm-wasm/utm.js",
+  "candidate": "/home/cdong/Code/fast-proj/experiments/utm-wasm/utm.js",
+  "grid": {
+    "longitudeStepDegrees": 1,
+    "latitudes": [
+      -90,
+      -89,
+      -88,
+      -87,
+      -86,
+      -85,
+      -84,
+      -83,
+      -82,
+      -81,
+      -80,
+      -79,
+      -78,
+      -77,
+      -76,
+      -75,
+      -74,
+      -73,
+      -72,
+      -71,
+      -70,
+      -69,
+      -68,
+      -67,
+      -66,
+      -65,
+      -64,
+      -63,
+      -62,
+      -61,
+      -60,
+      -59,
+      -58,
+      -57,
+      -56,
+      -55,
+      -54,
+      -53,
+      -52,
+      -51,
+      -50,
+      -49,
+      -48,
+      -47,
+      -46,
+      -45,
+      -44,
+      -43,
+      -42,
+      -41,
+      -40,
+      -39,
+      -38,
+      -37,
+      -36,
+      -35,
+      -34,
+      -33,
+      -32,
+      -31,
+      -30,
+      -29,
+      -28,
+      -27,
+      -26,
+      -25,
+      -24,
+      -23,
+      -22,
+      -21,
+      -20,
+      -19,
+      -18,
+      -17,
+      -16,
+      -15,
+      -14,
+      -13,
+      -12,
+      -11,
+      -10,
+      -9,
+      -8,
+      -7,
+      -6,
+      -5,
+      -4,
+      -3,
+      -2,
+      -1,
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53,
+      54,
+      55,
+      56,
+      57,
+      58,
+      59,
+      60,
+      61,
+      62,
+      63,
+      64,
+      65,
+      66,
+      67,
+      68,
+      69,
+      70,
+      71,
+      72,
+      73,
+      74,
+      75,
+      76,
+      77,
+      78,
+      79,
+      80,
+      81,
+      82,
+      83,
+      84,
+      85,
+      86,
+      87,
+      88,
+      89,
+      90,
+      -89.99999999999999,
+      -89.999999999,
+      -89.99999,
+      "-0",
+      89.99999,
+      89.999999999,
+      89.99999999999999
+    ],
+    "halfWidths": [30, 45],
+    "zones": [1, 31, 33, 60],
+    "hemispheres": ["N", "S"],
+    "semiMajorAxisMetres": 6378137
+  },
+  "interpretation": "Identity uses Object.is (including NaN and signed zero). Inverse inputs are baseline-projected points. Weighted longitude deltas use the shortest circular difference times abs(cos(original latitude)). ±30 and ±45 grids overlap and are reported separately. These checks do not prove universal identity or accuracy outside the sampled domain.",
+  "fixture": {
+    "baseline": {
+      "points": 91,
+      "max": {
+        "xMetres": 1.3969838619232178e-9,
+        "yMetres": 1.862645149230957e-9,
+        "latitudeDegrees": 2.842170943040401e-14,
+        "longitudeWeightedDegrees": 1.7762892011748677e-14
+      },
+      "nonFinite": 0,
+      "pass": true
+    },
+    "candidate": {
+      "points": 91,
+      "max": {
+        "xMetres": 1.3969838619232178e-9,
+        "yMetres": 1.862645149230957e-9,
+        "latitudeDegrees": 2.842170943040401e-14,
+        "longitudeWeightedDegrees": 1.7762892011748677e-14
+      },
+      "nonFinite": 0,
+      "pass": true
+    }
+  },
+  "groups": [
+    {
+      "halfWidth": 30,
+      "ellipsoid": "sphere",
+      "forward": {
+        "points": 91744,
+        "identical": {
+          "x": 91744,
+          "y": 91744,
+          "pairs": 91744
+        },
+        "classificationDiscrepancies": {
+          "x": 0,
+          "y": 0,
+          "pairs": 0
+        },
+        "signedZeroDiscrepancies": {
+          "x": 0,
+          "y": 0
+        },
+        "commonFinitePairs": 91744,
+        "maxAbsoluteDelta": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      "inverse": {
+        "points": 91744,
+        "identical": {
+          "lon": 91744,
+          "lat": 91744,
+          "pairs": 91744
+        },
+        "classificationDiscrepancies": {
+          "lon": 0,
+          "lat": 0,
+          "pairs": 0
+        },
+        "signedZeroDiscrepancies": {
+          "lon": 0,
+          "lat": 0
+        },
+        "commonFinitePairs": 91744,
+        "maxAbsoluteDelta": {
+          "lon": 0,
+          "lonWrapped": 0,
+          "lonWeighted": 0,
+          "lat": 0
+        }
+      }
+    },
+    {
+      "halfWidth": 30,
+      "ellipsoid": "WGS84",
+      "forward": {
+        "points": 91744,
+        "identical": {
+          "x": 91744,
+          "y": 91744,
+          "pairs": 91744
+        },
+        "classificationDiscrepancies": {
+          "x": 0,
+          "y": 0,
+          "pairs": 0
+        },
+        "signedZeroDiscrepancies": {
+          "x": 0,
+          "y": 0
+        },
+        "commonFinitePairs": 91744,
+        "maxAbsoluteDelta": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      "inverse": {
+        "points": 91744,
+        "identical": {
+          "lon": 91744,
+          "lat": 91744,
+          "pairs": 91744
+        },
+        "classificationDiscrepancies": {
+          "lon": 0,
+          "lat": 0,
+          "pairs": 0
+        },
+        "signedZeroDiscrepancies": {
+          "lon": 0,
+          "lat": 0
+        },
+        "commonFinitePairs": 91744,
+        "maxAbsoluteDelta": {
+          "lon": 0,
+          "lonWrapped": 0,
+          "lonWeighted": 0,
+          "lat": 0
+        }
+      }
+    },
+    {
+      "halfWidth": 30,
+      "ellipsoid": "GRS80",
+      "forward": {
+        "points": 91744,
+        "identical": {
+          "x": 91744,
+          "y": 91744,
+          "pairs": 91744
+        },
+        "classificationDiscrepancies": {
+          "x": 0,
+          "y": 0,
+          "pairs": 0
+        },
+        "signedZeroDiscrepancies": {
+          "x": 0,
+          "y": 0
+        },
+        "commonFinitePairs": 91744,
+        "maxAbsoluteDelta": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      "inverse": {
+        "points": 91744,
+        "identical": {
+          "lon": 91744,
+          "lat": 91744,
+          "pairs": 91744
+        },
+        "classificationDiscrepancies": {
+          "lon": 0,
+          "lat": 0,
+          "pairs": 0
+        },
+        "signedZeroDiscrepancies": {
+          "lon": 0,
+          "lat": 0
+        },
+        "commonFinitePairs": 91744,
+        "maxAbsoluteDelta": {
+          "lon": 0,
+          "lonWrapped": 0,
+          "lonWeighted": 0,
+          "lat": 0
+        }
+      }
+    },
+    {
+      "halfWidth": 30,
+      "ellipsoid": "f=0.005",
+      "forward": {
+        "points": 91744,
+        "identical": {
+          "x": 91744,
+          "y": 91744,
+          "pairs": 91744
+        },
+        "classificationDiscrepancies": {
+          "x": 0,
+          "y": 0,
+          "pairs": 0
+        },
+        "signedZeroDiscrepancies": {
+          "x": 0,
+          "y": 0
+        },
+        "commonFinitePairs": 91744,
+        "maxAbsoluteDelta": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      "inverse": {
+        "points": 91744,
+        "identical": {
+          "lon": 91744,
+          "lat": 91744,
+          "pairs": 91744
+        },
+        "classificationDiscrepancies": {
+          "lon": 0,
+          "lat": 0,
+          "pairs": 0
+        },
+        "signedZeroDiscrepancies": {
+          "lon": 0,
+          "lat": 0
+        },
+        "commonFinitePairs": 91744,
+        "maxAbsoluteDelta": {
+          "lon": 0,
+          "lonWrapped": 0,
+          "lonWeighted": 0,
+          "lat": 0
+        }
+      }
+    },
+    {
+      "halfWidth": 30,
+      "ellipsoid": "f=0.0099999",
+      "forward": {
+        "points": 91744,
+        "identical": {
+          "x": 91744,
+          "y": 91744,
+          "pairs": 91744
+        },
+        "classificationDiscrepancies": {
+          "x": 0,
+          "y": 0,
+          "pairs": 0
+        },
+        "signedZeroDiscrepancies": {
+          "x": 0,
+          "y": 0
+        },
+        "commonFinitePairs": 91744,
+        "maxAbsoluteDelta": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      "inverse": {
+        "points": 91744,
+        "identical": {
+          "lon": 91744,
+          "lat": 91744,
+          "pairs": 91744
+        },
+        "classificationDiscrepancies": {
+          "lon": 0,
+          "lat": 0,
+          "pairs": 0
+        },
+        "signedZeroDiscrepancies": {
+          "lon": 0,
+          "lat": 0
+        },
+        "commonFinitePairs": 91744,
+        "maxAbsoluteDelta": {
+          "lon": 0,
+          "lonWrapped": 0,
+          "lonWeighted": 0,
+          "lat": 0
+        }
+      }
+    },
+    {
+      "halfWidth": 45,
+      "ellipsoid": "sphere",
+      "forward": {
+        "points": 136864,
+        "identical": {
+          "x": 136864,
+          "y": 136864,
+          "pairs": 136864
+        },
+        "classificationDiscrepancies": {
+          "x": 0,
+          "y": 0,
+          "pairs": 0
+        },
+        "signedZeroDiscrepancies": {
+          "x": 0,
+          "y": 0
+        },
+        "commonFinitePairs": 136864,
+        "maxAbsoluteDelta": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      "inverse": {
+        "points": 136864,
+        "identical": {
+          "lon": 136864,
+          "lat": 136864,
+          "pairs": 136864
+        },
+        "classificationDiscrepancies": {
+          "lon": 0,
+          "lat": 0,
+          "pairs": 0
+        },
+        "signedZeroDiscrepancies": {
+          "lon": 0,
+          "lat": 0
+        },
+        "commonFinitePairs": 136864,
+        "maxAbsoluteDelta": {
+          "lon": 0,
+          "lonWrapped": 0,
+          "lonWeighted": 0,
+          "lat": 0
+        }
+      }
+    },
+    {
+      "halfWidth": 45,
+      "ellipsoid": "WGS84",
+      "forward": {
+        "points": 136864,
+        "identical": {
+          "x": 136864,
+          "y": 136864,
+          "pairs": 136864
+        },
+        "classificationDiscrepancies": {
+          "x": 0,
+          "y": 0,
+          "pairs": 0
+        },
+        "signedZeroDiscrepancies": {
+          "x": 0,
+          "y": 0
+        },
+        "commonFinitePairs": 136864,
+        "maxAbsoluteDelta": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      "inverse": {
+        "points": 136864,
+        "identical": {
+          "lon": 136864,
+          "lat": 136864,
+          "pairs": 136864
+        },
+        "classificationDiscrepancies": {
+          "lon": 0,
+          "lat": 0,
+          "pairs": 0
+        },
+        "signedZeroDiscrepancies": {
+          "lon": 0,
+          "lat": 0
+        },
+        "commonFinitePairs": 136864,
+        "maxAbsoluteDelta": {
+          "lon": 0,
+          "lonWrapped": 0,
+          "lonWeighted": 0,
+          "lat": 0
+        }
+      }
+    },
+    {
+      "halfWidth": 45,
+      "ellipsoid": "GRS80",
+      "forward": {
+        "points": 136864,
+        "identical": {
+          "x": 136864,
+          "y": 136864,
+          "pairs": 136864
+        },
+        "classificationDiscrepancies": {
+          "x": 0,
+          "y": 0,
+          "pairs": 0
+        },
+        "signedZeroDiscrepancies": {
+          "x": 0,
+          "y": 0
+        },
+        "commonFinitePairs": 136864,
+        "maxAbsoluteDelta": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      "inverse": {
+        "points": 136864,
+        "identical": {
+          "lon": 136864,
+          "lat": 136864,
+          "pairs": 136864
+        },
+        "classificationDiscrepancies": {
+          "lon": 0,
+          "lat": 0,
+          "pairs": 0
+        },
+        "signedZeroDiscrepancies": {
+          "lon": 0,
+          "lat": 0
+        },
+        "commonFinitePairs": 136864,
+        "maxAbsoluteDelta": {
+          "lon": 0,
+          "lonWrapped": 0,
+          "lonWeighted": 0,
+          "lat": 0
+        }
+      }
+    },
+    {
+      "halfWidth": 45,
+      "ellipsoid": "f=0.005",
+      "forward": {
+        "points": 136864,
+        "identical": {
+          "x": 136864,
+          "y": 136864,
+          "pairs": 136864
+        },
+        "classificationDiscrepancies": {
+          "x": 0,
+          "y": 0,
+          "pairs": 0
+        },
+        "signedZeroDiscrepancies": {
+          "x": 0,
+          "y": 0
+        },
+        "commonFinitePairs": 136864,
+        "maxAbsoluteDelta": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      "inverse": {
+        "points": 136864,
+        "identical": {
+          "lon": 136864,
+          "lat": 136864,
+          "pairs": 136864
+        },
+        "classificationDiscrepancies": {
+          "lon": 0,
+          "lat": 0,
+          "pairs": 0
+        },
+        "signedZeroDiscrepancies": {
+          "lon": 0,
+          "lat": 0
+        },
+        "commonFinitePairs": 136864,
+        "maxAbsoluteDelta": {
+          "lon": 0,
+          "lonWrapped": 0,
+          "lonWeighted": 0,
+          "lat": 0
+        }
+      }
+    },
+    {
+      "halfWidth": 45,
+      "ellipsoid": "f=0.0099999",
+      "forward": {
+        "points": 136864,
+        "identical": {
+          "x": 136864,
+          "y": 136864,
+          "pairs": 136864
+        },
+        "classificationDiscrepancies": {
+          "x": 0,
+          "y": 0,
+          "pairs": 0
+        },
+        "signedZeroDiscrepancies": {
+          "x": 0,
+          "y": 0
+        },
+        "commonFinitePairs": 136864,
+        "maxAbsoluteDelta": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      "inverse": {
+        "points": 136864,
+        "identical": {
+          "lon": 136864,
+          "lat": 136864,
+          "pairs": 136864
+        },
+        "classificationDiscrepancies": {
+          "lon": 0,
+          "lat": 0,
+          "pairs": 0
+        },
+        "signedZeroDiscrepancies": {
+          "lon": 0,
+          "lat": 0
+        },
+        "commonFinitePairs": 136864,
+        "maxAbsoluteDelta": {
+          "lon": 0,
+          "lonWrapped": 0,
+          "lonWeighted": 0,
+          "lat": 0
+        }
+      }
+    }
+  ],
+  "exceptional": {
+    "cases": 280,
+    "identicalPairs": 280,
+    "classificationDiscrepancies": 0,
+    "signedZeroDiscrepancies": 0,
+    "nonidentical": []
+  },
+  "rawEquator": {
+    "cases": 240,
+    "identicalPairs": 240,
+    "classificationDiscrepancies": 0,
+    "signedZeroDiscrepancies": 0,
+    "nonidentical": [],
+    "interpretation": "North equator uses both +0 and -0 northings. South equator uses 10000000 m, where a distinct negative-zero offset is not representable. West/central/east eastings are checked for every ellipsoid, zone, and hemisphere."
+  },
+  "diagnostics": [
+    {
+      "label": "high-flattening extreme easting",
+      "options": {
+        "zone": 33,
+        "ellipsoid": {
+          "a": 6378137,
+          "f": 0.0099999
+        }
+      },
+      "input": [100000000, 0],
+      "baseline": [-75, "NaN"],
+      "candidate": [-75, "NaN"],
+      "identical": true,
+      "classificationDiscrepancies": 0,
+      "absoluteDeltas": [0, null]
+    },
+    {
+      "label": "high-flattening extreme easting/nonzero northing",
+      "options": {
+        "zone": 33,
+        "ellipsoid": {
+          "a": 6378137,
+          "f": 0.0099999
+        }
+      },
+      "input": [100000000, 1000000],
+      "baseline": [59.99999999999999, "NaN"],
+      "candidate": [59.99999999999999, "NaN"],
+      "identical": true,
+      "classificationDiscrepancies": 0,
+      "absoluteDeltas": [0, null]
+    },
+    {
+      "label": "sphere extreme easting",
+      "options": {
+        "zone": 33,
+        "ellipsoid": {
+          "a": 6378137,
+          "f": 0
+        }
+      },
+      "input": [1200000000, 0],
+      "baseline": ["NaN", "NaN"],
+      "candidate": ["NaN", "NaN"],
+      "identical": true,
+      "classificationDiscrepancies": 0,
+      "absoluteDeltas": [null, null]
+    },
+    {
+      "label": "sphere negative extreme easting",
+      "options": {
+        "zone": 33,
+        "ellipsoid": {
+          "a": 6378137,
+          "f": 0
+        }
+      },
+      "input": [-1200000000, 0],
+      "baseline": ["NaN", "NaN"],
+      "candidate": ["NaN", "NaN"],
+      "identical": true,
+      "classificationDiscrepancies": 0,
+      "absoluteDeltas": [null, null]
+    }
+  ],
+  "api": {
+    "comparisons": 6400,
+    "mismatches": 0,
+    "outputIdentityFailures": 0,
+    "examples": []
+  }
+}

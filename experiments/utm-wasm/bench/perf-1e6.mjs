@@ -3,14 +3,15 @@
 // own worker process, order alternates per round, medians over samples.
 // Run: node bench/perf-1e6.mjs            (node workers)
 //      node bench/perf-1e6.mjs --runtime=bun
+//      node bench/perf-1e6.mjs --base=/path/baseline/utm.js --candidate=/path/candidate/utm.js
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => args.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
 const here = new URL('.', import.meta.url).pathname;
-const base = resolve(here, '../../../packages/utm/dist/utm.js');
-const candidate = resolve(here, '../utm.js');
+const base = resolve(option('base', resolve(here, '../../../packages/utm/dist/utm.js')));
+const candidate = resolve(option('candidate', resolve(here, '../utm.js')));
 const n = 1e6;
 const config = { n, runs: 15, warmups: 5 };
 
@@ -75,6 +76,7 @@ if (args.includes('--worker')) {
       throw new Error(`checksum mismatch for ${dir}: base ${b} vs candidate ${c}`);
     }
   }
+  console.log(JSON.stringify({ rounds: acc }));
   const label = runtime === 'bun' ? 'Bun (worker)' : `Node ${process.version}`;
   console.log(`${label.trim()} n=1e6, fresh processes, ${rounds} alternating rounds:`);
   for (const dir of ['forward', 'inverse']) {

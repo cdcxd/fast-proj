@@ -39,3 +39,26 @@ jobs:
         with:
           node-version: 20
       - run: node packages/utm/test/smoke.mjs
+
+  wasm-correctness:
+    # Pin one runtime for the numerical contract; benchmarks remain local.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+      - uses: dtolnay/rust-toolchain@1.99.0
+        with:
+          targets: wasm32-unknown-unknown
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: cargo test --release --locked --manifest-path experiments/utm-wasm/Cargo.toml
+      - run: bash experiments/utm-wasm/scripts/build.sh
+      - run: node experiments/utm-wasm/bench/checks.mjs
+      - run: node experiments/utm-wasm/bench/wrapper-checks.mjs
+      - run: node experiments/utm-wasm/bench/accuracy.mjs

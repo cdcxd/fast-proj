@@ -92,12 +92,12 @@ pub unsafe fn forward2(lon: v128, lat: v128, q: &KS) -> (v128, v128) {
         dchi,
         f64x2_add(
             spl(1.0),
-            f64x2_mul(dd, f64x2_add(spl(-1.0 / 6.0), f64x2_div(dd, spl(120.0)))),
+            f64x2_mul(dd, f64x2_add(spl(-1.0 / 6.0), f64x2_mul(dd, spl(1.0 / 120.0)))),
         ),
     );
     let cd = f64x2_add(
         spl(1.0),
-        f64x2_mul(dd, f64x2_add(spl(-0.5), f64x2_div(dd, spl(24.0)))),
+        f64x2_mul(dd, f64x2_add(spl(-0.5), f64x2_mul(dd, spl(1.0 / 24.0)))),
     );
     let sc = f64x2_add(f64x2_mul(sp, cd), f64x2_mul(cp, sd));
     let cc = f64x2_sub(f64x2_mul(cp, cd), f64x2_mul(sp, sd));
@@ -208,24 +208,24 @@ pub unsafe fn inverse2(x: v128, y: v128, q: &KS) -> (v128, v128) {
         dxi,
         f64x2_add(
             spl(1.0),
-            f64x2_mul(dx2, f64x2_add(spl(-1.0 / 6.0), f64x2_div(dx2, spl(120.0)))),
+            f64x2_mul(dx2, f64x2_add(spl(-1.0 / 6.0), f64x2_mul(dx2, spl(1.0 / 120.0)))),
         ),
     );
     let cdx = f64x2_add(
         spl(1.0),
-        f64x2_mul(dx2, f64x2_add(spl(-0.5), f64x2_div(dx2, spl(24.0)))),
+        f64x2_mul(dx2, f64x2_add(spl(-0.5), f64x2_mul(dx2, spl(1.0 / 24.0)))),
     );
     let de2 = f64x2_mul(deta, deta);
     let shd = f64x2_mul(
         deta,
         f64x2_add(
             spl(1.0),
-            f64x2_mul(de2, f64x2_add(spl(1.0 / 6.0), f64x2_div(de2, spl(120.0)))),
+            f64x2_mul(de2, f64x2_add(spl(1.0 / 6.0), f64x2_mul(de2, spl(1.0 / 120.0)))),
         ),
     );
     let chd = f64x2_add(
         spl(1.0),
-        f64x2_mul(de2, f64x2_add(spl(0.5), f64x2_div(de2, spl(24.0)))),
+        f64x2_mul(de2, f64x2_add(spl(0.5), f64x2_mul(de2, spl(1.0 / 24.0)))),
     );
     let sx = f64x2_sub(f64x2_mul(s1, cdx), f64x2_mul(c1x, sdx));
     let cx = f64x2_add(f64x2_mul(c1x, cdx), f64x2_mul(s1, sdx));
