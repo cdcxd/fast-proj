@@ -17,8 +17,8 @@ export type WasmSource = Loadable | WebAssembly.Module;
 
 export interface LoadWasmOptions {
   /**
-   * Where to load the module from. Default: `fast-proj.wasm` next to this file (`fast-proj-scalar.wasm` without
-   * SIMD support), resolved with `new URL(..., import.meta.url)`. Pass bytes or a URL when a bundler doesn't copy the
+   * Where to load the module from. Default: `fast-proj.wasm` next to this file, resolved with
+   * `new URL('./fast-proj.wasm', import.meta.url)`. Pass bytes or a URL when a bundler doesn't copy the
    * asset. Relative URL strings resolve against the page URL in browsers.
    */
   source?: WasmSource;
@@ -32,7 +32,10 @@ export interface WasmDisposable extends Disposable {
 }
 
 export interface WasmContext extends WasmDisposable {
-  /** `js` when WebAssembly is unavailable; converters then run the JavaScript backend. */
+  /**
+   * `js` when WebAssembly or wasm SIMD is unavailable (a `source` that doesn't compile without SIMD also falls back);
+   * converters then run the JavaScript backend. `wasm` only for a custom non-SIMD build passed as `source`.
+   */
   readonly backend: WasmBackend;
   tmerc(options: TransverseMercatorOptions): TransverseMercator & WasmDisposable;
   utm(options: UtmOptions): Utm & WasmDisposable;
@@ -167,20 +170,24 @@ function jsContext(): WasmContext {
  */
 export async function loadWasm(options: LoadWasmOptions = {}): Promise<WasmContext> {
   if (typeof WebAssembly === 'undefined') return jsContext();
+  // A scalar wasm build measured no faster than the JavaScript kernel, so engines without SIMD use that.
   const simd = WebAssembly.validate(SIMD_PROBE);
-  // Two literal URL expressions, so bundlers such as Vite copy both assets.
-  const source =
-    options.source ??
-    (simd ? new URL('./fast-proj.wasm', import.meta.url) : new URL('./fast-proj-scalar.wasm', import.meta.url));
+  if (options.source === undefined && !simd) return jsContext();
+  // A literal URL expression, so bundlers such as Vite and webpack copy the asset.
+  const source = options.source ?? new URL('./fast-proj.wasm', import.meta.url);
   let module = source as WebAssembly.Module;
   let evict: (() => void) | undefined;
   if (!isModule(source)) {
     const [promise, ev] = getModule(source);
     evict = ev;
-    module = await promise.catch((err: unknown) => {
+    try {
+      module = await promise;
+    } catch (err) {
       ev();
+      // A SIMD module given as `source` can't compile here either.
+      if (!simd && err instanceof WebAssembly.CompileError) return jsContext();
       throw err;
-    });
+    }
   }
   try {
     const instance = await WebAssembly.instantiate(module, {});

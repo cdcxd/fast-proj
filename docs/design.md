@@ -225,8 +225,8 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
 - The wasm kernel was generalized to transverse Mercator (`tm_forward_batch` / `tm_inverse_batch`), so
   `loadWasm().tmerc` is supported. The heap is a bounded 4 MiB static arena; each context allocates one 64 Ki-point
   workspace once.
-- Two wasm files ship: `fast-proj.wasm` (SIMD) and `fast-proj-scalar.wasm`, chosen by feature detection. The
-  reported backend comes from the loaded module.
+- One wasm file ships, `fast-proj.wasm` (SIMD). 0.1.0 also shipped a scalar build for engines without SIMD; it measured
+  no faster than the JavaScript kernel, so since 0.1.1 those engines get the JavaScript backend (`backend: 'js'`).
 - The wasm converters' single-point methods run the JavaScript kernel: one point costs more to pass into wasm than to
   compute.
 - Re-entrant calls into a context (from array-like getters) throw; `dispose()` during a call throws.
