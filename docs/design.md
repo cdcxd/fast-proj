@@ -1,6 +1,6 @@
 # fast-proj 0.1 design
 
-Status: proposal, for review before the 0.1.0 release. Nothing here is implemented yet unless marked "today".
+Status: accepted, implemented in 0.1 (except `webMercator` and `gcj02`, whose names and shapes are fixed here for later). See [Implementation notes](#implementation-notes) for where 0.1 refines this proposal.
 
 The goal is to fix every decision that would be a breaking change after 0.1. Everything else can come in 0.1.x.
 
@@ -111,7 +111,7 @@ interface Utm extends TransverseMercator {
 
 The output shapes `{ lon, lat }` and `{ x, y }` are frozen.
 
-Buffer rules, shared by every converter (today, for `utm`):
+Buffer rules, shared by every converter:
 
 - Output buffers are optional; when given they must be at least as long as the input, otherwise `RangeError`.
 - An output buffer may be the input itself (in place) or must not overlap it.
@@ -173,8 +173,7 @@ export function lineString(lonlat: ArrayLike<number>): { type: 'LineString'; coo
 export function latLngs(lonlat: ArrayLike<number>): [lat: number, lng: number][];
 ```
 
-Today these take a `Utm` and convert point by point, which can't follow a chain; this is the main breaking change before
-0.1.
+Before 0.1 these took a `Utm` and converted point by point, which couldn't follow a chain.
 
 ## Wasm
 
@@ -217,3 +216,16 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
 4. Every converter is a factory.
 5. `loadWasm` with `source`, context, `dispose`; no wasm in the root.
 6. Docs state the hub, buffer rules, domains and the wasm accuracy contract.
+
+## Implementation notes
+
+- The package lives in `packages/fast-proj`; the Rust crate in `packages/fast-proj/wasm`. The wasm experiment's
+  results stay in `experiments/utm-wasm`.
+- The wasm kernel was generalized to transverse Mercator (`tm_forward_batch` / `tm_inverse_batch`), so
+  `loadWasm().tmerc` is supported. The heap is a bounded 4 MiB static arena; each context allocates one 64 Ki-point
+  workspace once.
+- Two wasm files ship: `fast-proj.wasm` (SIMD) and `fast-proj-scalar.wasm`, chosen by feature detection. The
+  reported backend comes from the loaded module.
+- The wasm converters' single-point methods run the JavaScript kernel: one point costs more to pass into wasm than to
+  compute.
+- Re-entrant calls into a context (from array-like getters) throw; `dispose()` during a call throws.
