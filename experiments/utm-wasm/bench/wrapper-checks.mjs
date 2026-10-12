@@ -204,6 +204,45 @@ for (const n of [1, 2, 7, 1000, CAP - 1, CAP, CAP + 1, CAP + 513, 2 * CAP + 7]) 
   gate('south GRS80', maxAbs(r.x, t.x) <= 5e-9 && maxAbs(r.y, t.y) <= 5e-9);
 }
 
+// signed zero: an equator point with y = -0 must come back as latitude -0,
+// exactly like the TypeScript kernel (sin(±0) sign in the wasm kernel)
+{
+  const [, tsLat] = ts.toLonLatPoint(166000, -0);
+  const [, wLat] = w.toLonLatPoint(166000, -0);
+  gate(
+    'inv -0 northing keeps -0 (point)',
+    Object.is(wLat, tsLat) && Object.is(wLat, -0),
+    `wasm ${wLat} vs ts ${tsLat}`,
+  );
+  const wb = w.toLonLat([166000], [-0]);
+  gate('inv -0 northing keeps -0 (batch)', Object.is(wb.lat[0], -0), String(wb.lat[0]));
+}
+
+// array-likes with a bogus `subarray` property take the element loops
+{
+  const x = { 0: 166000, 1: 166000, length: 2, subarray: 'metadata' };
+  const y = { 0: 1e6, 1: 2e6, length: 2, set: 'nope' };
+  const t = ts.toLonLat({ ...x }, { ...y });
+  const r = w.toLonLat(x, y);
+  gate(
+    'array-like with bogus subarray/set',
+    Math.abs(r.lon[0] - t.lon[0]) <= 1e-13 && Math.abs(r.lat[1] - t.lat[1]) <= 1e-13,
+  );
+}
+
+// a host with no WebAssembly at all (node --jitless) must not throw from the
+// feature probe; it reports unsupported so the TS fallback can take over
+{
+  const { simdSupported } = await import('../wasm-utm-core.mjs');
+  const saved = globalThis.WebAssembly;
+  globalThis.WebAssembly = undefined;
+  try {
+    gate('simdSupported() without WebAssembly', simdSupported() === false);
+  } finally {
+    globalThis.WebAssembly = saved;
+  }
+}
+
 if (failures === 0) console.log('WRAPPER_CHECKS_PASS');
 else {
   console.error(`${failures} FAILURES`);

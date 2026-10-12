@@ -234,11 +234,16 @@ const reference = JSON.parse(readFileSync(new URL('../../../packages/utm/test/fi
   const g = wasmForwardBatch(lon, lat, 31, false, A, 1 / 298.257223563);
   let fdx = 0,
     fdy = 0;
+  let bad = 0;
   for (let i = 0; i < n; i++) {
-    if (!Number.isFinite(g.x[i])) continue;
+    if (!Number.isFinite(g.x[i]) || !Number.isFinite(g.y[i])) {
+      bad++;
+      continue;
+    }
     fdx = Math.max(fdx, Math.abs(g.x[i] - parseFloat(reference.points[i].x)));
     fdy = Math.max(fdy, Math.abs(g.y[i] - parseFloat(reference.points[i].y)));
   }
+  gate('fixture fwd outputs finite', bad === 0, `${bad} nonfinite of ${n}`);
   gate('fixture fwd dx < 5e-9', fdx < 5e-9, fdx.toExponential(3));
   gate('fixture fwd dy < 5e-9', fdy < 5e-9, fdy.toExponential(3));
   const xs = new Float64Array(n),
@@ -250,14 +255,19 @@ const reference = JSON.parse(readFileSync(new URL('../../../packages/utm/test/fi
   const gi = wasmInverseBatch(xs, ys, 31, false, A, 1 / 298.257223563);
   let idl = 0,
     idt = 0;
+  let ibad = 0;
   for (let i = 0; i < n; i++) {
-    if (!Number.isFinite(gi.lon[i])) continue;
+    if (!Number.isFinite(gi.lon[i]) || !Number.isFinite(gi.lat[i])) {
+      ibad++;
+      continue;
+    }
     idl = Math.max(
       idl,
       wrapDelta(gi.lon[i], 3 + reference.points[i].dlon) * Math.cos((reference.points[i].lat * Math.PI) / 180),
     );
     idt = Math.max(idt, Math.abs(gi.lat[i] - reference.points[i].lat));
   }
+  gate('fixture inv outputs finite', ibad === 0, `${ibad} nonfinite of ${n}`);
   gate('fixture inv dlon*cos < 1e-13', idl < 1e-13, idl.toExponential(3));
   gate('fixture inv dlat < 1e-13', idt < 1e-13, idt.toExponential(3));
   console.log(

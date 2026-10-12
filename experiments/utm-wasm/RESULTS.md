@@ -19,6 +19,9 @@ hemispheres × 188 latitudes incl. near-poles and signed zero):
   reference (a pure wasm-vs-TS diff could not have hidden a shared error)
 - classification (finite/NaN/±Inf) and signed-zero parity: 0 mismatches
 - independent fixture (zone 31, 91 pts): ≤ 1.9e-9 m, ≤ 2.8e-14°
+- beyond the grid, extended random sweeps (200k pts, lat ±84°, zone ±3.55°)
+  stay single-digit nanometers (3.7–5.6 nm across seeds, worst near
+  mid-latitudes) — the 3.7 nm figure above is the grid, not a global bound
 
 Gates also green: host `cargo test --release` (6 tests), `bench/checks.mjs`
 (quadrants, atan/log/exp seams incl. `atan2(±Inf,±Inf)`, tails, allocator,
@@ -104,15 +107,18 @@ baseline widens the gap further.
 ## Reproduce
 
 ```sh
+# repo root: install deps and build the TS baseline (packages/utm/dist/utm.js)
+bun install && bun run build
+
 cd experiments/utm-wasm
 cargo test --release                 # host gate
 bash scripts/build.sh                # build/simd.wasm + scalar.wasm
-bash scripts/embed-artifact.sh          # regenerate self-contained utm.js
+bash scripts/embed-artifact.sh       # regenerate self-contained utm.js
 node bench/checks.mjs && bun bench/checks.mjs
 node bench/wrapper-checks.mjs && bun bench/wrapper-checks.mjs
 node bench/accuracy.mjs              # 3-way gate (needs repo-root proj4)
 
-cd ../..   # repo root, from here on
+cd ../..   # repo root again
 node packages/utm/bench/compare-performance.mjs \
   --base=packages/utm/dist/utm.js --candidate=experiments/utm-wasm/utm.js
 bun packages/utm/bench/compare-performance.mjs \

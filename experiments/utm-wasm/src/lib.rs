@@ -185,12 +185,10 @@ pub extern "C" fn inverse_batch(
 #[cfg(not(test))]
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
-    #[cfg(target_feature = "simd128")]
-    unsafe {
-        core::arch::wasm32::unreachable()
-    }
-    #[cfg(not(target_feature = "simd128"))]
-    loop {}
+    // Trap in every build variant: exhaustion and assertion panics must
+    // surface as a catchable RuntimeError, not hang the host (the scalar
+    // build used to spin here).
+    unsafe { core::arch::wasm32::unreachable() }
 }
 
 // ---------------------------------------------------------------------------

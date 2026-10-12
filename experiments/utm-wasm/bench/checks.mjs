@@ -24,7 +24,7 @@ function alloc(n) {
 
 // --- sincos quadrants (all 4, both signs) ----------------------------------
 {
-  const xs = [];
+  const xs = [0, -0];
   for (const q of [
     0.1,
     Math.PI / 2 + 0.1,
@@ -50,6 +50,9 @@ function alloc(n) {
     check(`sincos ${xs[i]}`, Math.abs(sv[i] - Math.sin(xs[i])) <= 2e-16, `sin ${sv[i]} vs ${Math.sin(xs[i])}`);
     check(`sincos ${xs[i]} cos`, Math.abs(cv[i] - Math.cos(xs[i])) <= 2e-16, `cos ${cv[i]}`);
   }
+  // sin(±0) = ±0: the tolerance above cannot see a lost sign
+  check('sincos(+0) sin is +0', Object.is(sv[0], 0), `sin ${sv[0]}`);
+  check('sincos(-0) sin is -0', Object.is(sv[1], -0), `sin ${sv[1]}`);
 }
 
 // --- atan seams --------------------------------------------------------------
@@ -183,6 +186,24 @@ function alloc(n) {
   const r2 = e.alloc(1);
   check('alloc after reset', r1 === r2);
   e.heap_reset();
+  // exhaustion must trap (catchable RuntimeError) in BOTH variants — the
+  // scalar build's panic handler used to spin forever instead
+  const variants = [['simd', e]];
+  try {
+    const scalar = await WebAssembly.instantiate(readFileSync(new URL('../build/scalar.wasm', here)), {});
+    variants.push(['scalar', scalar.instance.exports]);
+  } catch (err) {
+    check('scalar.wasm instantiable', false, String(err));
+  }
+  for (const [name, exp] of variants) {
+    let trapped = false;
+    try {
+      exp.alloc(33_554_433); // 268,435,464 B > the 256 MiB arena
+    } catch {
+      trapped = true;
+    }
+    check(`alloc exhaustion traps (${name})`, trapped);
+  }
 }
 
 // --- kernel parity with the TypeScript kernel --------------------------------

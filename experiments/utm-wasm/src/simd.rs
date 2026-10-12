@@ -131,6 +131,15 @@ pub unsafe fn vsincos(x: v128) -> (v128, v128) {
     let sin_v = v128_bitselect(f64x2_neg(s1), s1, m_two);
     let c1 = v128_bitselect(f64x2_neg(sp), cp, m_odd);
     let cos_v = v128_bitselect(f64x2_neg(c1), c1, m_two);
+    // sin(±0) = ±0: the reduction loses the input's sign on exact-zero lanes
+    // (x − k·π/2 rounds −0 up to +0); splice the input's sign bit back into
+    // the final value. cos(±0) = +1 is unaffected.
+    let is_zero = f64x2_eq(x, spl(0.0));
+    let sin_signed = v128_or(
+        v128_and(sin_v, i64x2_splat(i64::MAX)),
+        v128_and(x, i64x2_splat(i64::MIN)),
+    );
+    let sin_v = v128_bitselect(sin_signed, sin_v, is_zero);
     (sin_v, cos_v)
 }
 

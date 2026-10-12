@@ -11,16 +11,20 @@ export function simdSupported() {
     0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 124, 3, 2, 1, 0, 10, 25, 1, 23, 0, 253, 12, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 253, 33, 0, 11,
   ]);
-  return WebAssembly.validate(probe);
+  // --jitless hosts have no WebAssembly at all; report unsupported so the
+  // caller falls back to the TypeScript kernel instead of throwing
+  return typeof WebAssembly !== 'undefined' && WebAssembly.validate(probe);
 }
 
-// memcpy-grade copies when both sides are typed arrays; element loops otherwise.
+// memcpy-grade copies when the fast-path members are real callables
+// (plain typed arrays); array-likes — even ones carrying a bogus `subarray`
+// property — take the element loops, matching the TypeScript API.
 function copyIn(dst, src, i0, n) {
-  if (src.subarray) dst.set(src.subarray(i0, i0 + n));
+  if (typeof src.subarray === 'function') dst.set(src.subarray(i0, i0 + n));
   else for (let j = 0; j < n; j++) dst[j] = src[i0 + j];
 }
 function copyOut(dst, src, i0, n) {
-  if (dst.set && src.subarray) dst.set(src.subarray(0, n), i0);
+  if (typeof dst.set === 'function' && typeof src.subarray === 'function') dst.set(src.subarray(0, n), i0);
   else for (let j = 0; j < n; j++) dst[i0 + j] = src[j];
 }
 
