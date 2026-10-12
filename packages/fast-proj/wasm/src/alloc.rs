@@ -22,7 +22,7 @@ pub extern "C" fn alloc(n_f64: usize) -> *mut f64 {
             panic!("wasm heap exhausted");
         }
         OFFSET = o + bytes;
-        (core::ptr::addr_of_mut!(HEAP) as *mut u8).add(o) as *mut f64
+        (core::ptr::addr_of_mut!(HEAP.0) as *mut u8).add(o) as *mut f64
     }
 }
 

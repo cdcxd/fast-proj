@@ -8,11 +8,10 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 #![allow(static_mut_refs)]
 
-#[cfg(target_feature = "simd128")]
-use core::arch::wasm32::*;
-
 mod alloc;
 mod kernel;
+// The constants serve the SIMD math (and the host tests that pin them); unused in the scalar build.
+#[cfg_attr(not(target_feature = "simd128"), allow(dead_code))]
 mod math;
 #[cfg(target_feature = "simd128")]
 mod simd;
@@ -257,9 +256,7 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
     // host (the scalar build used to spin here). Native non-test builds keep
     // a loop so the handler compiles off-target (cargo check --release).
     #[cfg(target_arch = "wasm32")]
-    unsafe {
-        core::arch::wasm32::unreachable()
-    }
+    core::arch::wasm32::unreachable();
     #[cfg(not(target_arch = "wasm32"))]
     loop {}
 }

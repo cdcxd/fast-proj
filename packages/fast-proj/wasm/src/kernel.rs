@@ -124,6 +124,8 @@ pub(crate) fn make_k_tm(a: f64, f: f64, lon0_deg: f64, k0: f64, feast: f64, fnor
     }
 }
 
+// The SIMD build uses vkernel; this scalar kernel serves the scalar build and the host tests.
+#[cfg(not(target_feature = "simd128"))]
 pub(crate) mod skernel {
     use super::*;
 

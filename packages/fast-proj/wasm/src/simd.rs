@@ -6,7 +6,7 @@ use crate::math::*;
 use core::arch::wasm32::{
     f32x4_demote_f64x2_zero, f64x2, f64x2_abs, f64x2_add, f64x2_div, f64x2_eq, f64x2_ge,
     f64x2_gt, f64x2_le, f64x2_lt, f64x2_mul, f64x2_neg, f64x2_ne, f64x2_nearest, f64x2_pmax,
-    f64x2_pmin, f64x2_splat, f64x2_sub, i32x4_trunc_sat_f32x4, i32x4_trunc_sat_f64x2_zero,
+    f64x2_pmin, f64x2_splat, f64x2_sub, i32x4_trunc_sat_f32x4,
     i64x2_add, i64x2_extend_low_i32x4, i64x2_lt, i64x2_shl, i64x2_splat, i64x2_sub,
     u64x2_shr, v128, v128_and, v128_bitselect, v128_or,
 };
