@@ -1,0 +1,73 @@
+import type { Ellipsoid } from './ellipsoid.js';
+
+/**
+ * Projected x/y in metres <-> WGS84 longitude/latitude in degrees (the hub). Output longitude is in [-180, 180].
+ *
+ * Batch methods accept any array-like input and write into the optional output buffers, which must be at least as
+ * long as the input. An output buffer may be the corresponding input itself (in place), but must not otherwise
+ * overlap an input. Interleaved input must have an even length. Points outside the valid domain give `NaN`.
+ */
+export interface Projection {
+  /** x/y arrays in metres -> longitude/latitude arrays in degrees. */
+  toLonLat(
+    x: ArrayLike<number>,
+    y: ArrayLike<number>,
+    lon?: Float64Array,
+    lat?: Float64Array,
+  ): { lon: Float64Array; lat: Float64Array };
+  /** Longitude/latitude arrays in degrees -> x/y arrays in metres. */
+  fromLonLat(
+    lon: ArrayLike<number>,
+    lat: ArrayLike<number>,
+    x?: Float64Array,
+    y?: Float64Array,
+  ): { x: Float64Array; y: Float64Array };
+  /** Interleaved [x0, y0, x1, y1, ...] -> interleaved [lon0, lat0, ...]. */
+  toLonLatInterleaved(xy: ArrayLike<number>, out?: Float64Array): Float64Array;
+  /** Interleaved [lon0, lat0, ...] -> interleaved [x0, y0, ...]. */
+  fromLonLatInterleaved(lonlat: ArrayLike<number>, out?: Float64Array): Float64Array;
+  toLonLatPoint(x: number, y: number): [lon: number, lat: number];
+  fromLonLatPoint(lon: number, lat: number): [x: number, y: number];
+}
+
+/**
+ * Another geographic system's longitude/latitude <-> WGS84 longitude/latitude, both in degrees. Same buffer rules as
+ * {@link Projection}.
+ */
+export interface GeographicTransform {
+  toWgs84(
+    lon: ArrayLike<number>,
+    lat: ArrayLike<number>,
+    outLon?: Float64Array,
+    outLat?: Float64Array,
+  ): { lon: Float64Array; lat: Float64Array };
+  fromWgs84(
+    lon: ArrayLike<number>,
+    lat: ArrayLike<number>,
+    outLon?: Float64Array,
+    outLat?: Float64Array,
+  ): { lon: Float64Array; lat: Float64Array };
+  toWgs84Interleaved(lonlat: ArrayLike<number>, out?: Float64Array): Float64Array;
+  fromWgs84Interleaved(lonlat: ArrayLike<number>, out?: Float64Array): Float64Array;
+  toWgs84Point(lon: number, lat: number): [lon: number, lat: number];
+  fromWgs84Point(lon: number, lat: number): [lon: number, lat: number];
+}
+
+/** A transverse Mercator projection. */
+export interface TransverseMercator extends Projection {
+  /** Central meridian in degrees. */
+  readonly lon0: number;
+  /** Scale factor on the central meridian. */
+  readonly k0: number;
+  /** Metres. */
+  readonly falseEasting: number;
+  /** Metres. */
+  readonly falseNorthing: number;
+  readonly ellipsoid: Ellipsoid;
+}
+
+/** A transverse Mercator projection for one UTM zone. */
+export interface Utm extends TransverseMercator {
+  readonly zone: number;
+  readonly south: boolean;
+}
