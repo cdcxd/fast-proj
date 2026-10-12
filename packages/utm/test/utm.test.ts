@@ -115,6 +115,13 @@ describe('edge cases', () => {
     expect(s.toLonLatPoint(xs, ys)[1]).toBe(-90);
   });
 
+  it('retains signed zero for inverse equator coordinates', () => {
+    const conv = utm({ zone: 33 });
+    expect(conv.toLonLatPoint(166000, -0)[1]).toBe(-0);
+    expect(conv.toLonLatPoint(834000, -0)[1]).toBe(0);
+    expect(conv.toLonLatPoint(166000, 0)[1]).toBe(0);
+  });
+
   it('wraps output longitude across ±180 in zones 1 and 60', () => {
     const z1 = utm({ zone: 1 });
     const [x1, y1] = z1.fromLonLatPoint(-180, 10);
