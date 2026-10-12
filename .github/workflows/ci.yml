@@ -27,11 +27,10 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: experiments/utm-wasm -> target
+          workspaces: packages/fast-proj/wasm -> target
       - run: bun install --frozen-lockfile
       - run: bun run check
-      - run: cargo test --release --locked --manifest-path experiments/utm-wasm/Cargo.toml
-      - run: bash experiments/utm-wasm/scripts/build.sh
-      - run: node experiments/utm-wasm/bench/checks.mjs
-      - run: node experiments/utm-wasm/bench/wrapper-checks.mjs
-      - run: node experiments/utm-wasm/bench/accuracy.mjs
+      - run: cargo test --release --locked --manifest-path packages/fast-proj/wasm/Cargo.toml
+      - run: bash packages/fast-proj/wasm/build.sh --bench
+      - run: node packages/fast-proj/wasm/bench/checks.mjs
+      - run: node packages/fast-proj/wasm/bench/accuracy.mjs
