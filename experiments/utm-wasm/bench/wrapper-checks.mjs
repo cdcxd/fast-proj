@@ -140,6 +140,13 @@ for (const n of [1, 2, 7, 1000, CAP - 1, CAP, CAP + 1, CAP + 513, 2 * CAP + 7]) 
     }
     gate(`zone ${z} throws`, threw);
   }
+  let tthrew = false;
+  try {
+    await utmWasm({ zone: 33, south: 1 });
+  } catch (err) {
+    tthrew = err instanceof TypeError && /south must/.test(err.message);
+  }
+  gate('south type throws', tthrew);
   let threw = false;
   try {
     await utmWasm({ zone: 33, ellipsoid: { a: 6378137, f: 0.02 } });

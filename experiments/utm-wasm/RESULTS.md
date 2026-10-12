@@ -81,7 +81,7 @@ baseline widens the gap further.
   `.set()`-based copies (memcpy-grade); simd128 feature-detect with TS fallback
   (`kernel: 'wasm-simd'` marker on the wasm path).
 - Every `utmWasm()` instance costs ~2 MiB of arena; the arena traps loudly in
-  release builds when exhausted (≈ 100k instances).
+  release builds when exhausted (≈ 128 instances at 2 MiB each).
 
 ## Notes
 

@@ -34,6 +34,7 @@ export function createConverter(e, { zone, south = false, ellipsoid = { a: 63781
   if (!Number.isInteger(zone) || zone < 1 || zone > 60) {
     throw new RangeError(`UTM zone must be an integer in 1-60, got ${zone}`);
   }
+  if (typeof south !== 'boolean') throw new TypeError(`south must be a boolean, got ${typeof south}`);
   const { a, f } = ellipsoid;
   if (!(a > 0 && a < Infinity)) throw new RangeError(`ellipsoid.a must be a positive finite number, got ${a}`);
   if (!(f >= 0 && f < 0.01)) throw new RangeError(`ellipsoid.f must satisfy 0 <= f < 0.01, got ${f}`);

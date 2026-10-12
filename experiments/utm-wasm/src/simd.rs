@@ -180,8 +180,9 @@ pub unsafe fn vlog(x: v128) -> v128 {
         ),
         f64x2_mul(ef, spl(LN2_LO)),
     );
-    // domain completion: +Inf -> +Inf, +0/-0 -> -Inf, x < 0 or NaN -> NaN
-    // (subnormals also map to NaN; the kernel only feeds positive normals)
+    // domain completion: +Inf -> +Inf, +0/-0 -> -Inf, x < 0 or NaN -> NaN.
+    // Positive subnormals are out of domain and return garbage (the poly runs
+    // with exponent -1023); the kernel only feeds positive normals.
     let r = v128_bitselect(spl(f64::INFINITY), r, f64x2_eq(x, spl(f64::INFINITY)));
     let r = v128_bitselect(spl(f64::NEG_INFINITY), r, f64x2_eq(x, spl(0.0)));
     let nan_or_neg = v128_or(f64x2_lt(x, spl(0.0)), f64x2_ne(x, x));

@@ -115,7 +115,10 @@ function alloc(n) {
     const want = Math.atan2(y, x);
     const ok = Number.isNaN(want)
       ? Number.isNaN(got[i])
-      : Object.is(got[i], want) || Math.abs(got[i] - want) <= 2e-16 * Math.PI;
+      : // zero results must match in sign too (+0 vs -0)
+        want === 0
+        ? Object.is(got[i], want)
+        : Object.is(got[i], want) || Math.abs(got[i] - want) <= 2e-16 * Math.PI;
     check(`atan2(${y}, ${x})`, ok, `got ${got[i]} want ${want}`);
   }
 }
