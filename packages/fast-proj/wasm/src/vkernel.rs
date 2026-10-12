@@ -9,7 +9,6 @@
 //!   fast path, any out-of-domain lane falls back to the atan2/asinh blend;
 //! - `vexp` clamps its exponent term at ±1000 (RESULTS.md documents the
 //!   boundary where classification diverges from libm).
-#![allow(unsafe_op_in_unsafe_fn)]
 
 use crate::kernel::{reduce_lon, K, D2R, R2D};
 use core::arch::wasm32::{
@@ -18,7 +17,7 @@ use core::arch::wasm32::{
     v128_or, v128_xor,
 };
 
-use crate::simd::{vatan, vatan2, vexp, vlog1p, vsincos};
+use crate::simd::{load_pair, store_pair, vatan, vatan2, vexp, vlog1p, vsincos};
 
 #[inline]
 fn spl(x: f64) -> v128 {
@@ -66,7 +65,7 @@ fn splat_k(k: &K) -> KS {
 }
 
 #[inline]
-unsafe fn poly6(p: v128, c: &[v128; 6]) -> v128 {
+fn poly6(p: v128, c: &[v128; 6]) -> v128 {
     let mut r = f64x2_add(c[4], f64x2_mul(p, c[5]));
     r = f64x2_add(c[3], f64x2_mul(p, r));
     r = f64x2_add(c[2], f64x2_mul(p, r));
@@ -76,12 +75,11 @@ unsafe fn poly6(p: v128, c: &[v128; 6]) -> v128 {
 
 /// Per-32-bit-lane-all-ones mask when the f64 lane is finite.
 #[inline]
-unsafe fn is_finite(x: v128) -> v128 {
+fn is_finite(x: v128) -> v128 {
     f64x2_lt(f64x2_abs(x), spl(f64::INFINITY))
 }
 
-#[target_feature(enable = "simd128")]
-pub unsafe fn forward2(mut lon: v128, lat: v128, q: &KS) -> (v128, v128) {
+pub fn forward2(mut lon: v128, lat: v128, q: &KS) -> (v128, v128) {
     let phi = f64x2_mul(lat, q.d2r);
     // Rare: whole turns are removed per lane by the scalar reduction, so both kernels agree.
     let out = v128_or(f64x2_gt(lon, spl(180.0)), f64x2_lt(lon, spl(-180.0)));
@@ -183,8 +181,7 @@ pub unsafe fn forward2(mut lon: v128, lat: v128, q: &KS) -> (v128, v128) {
     )
 }
 
-#[target_feature(enable = "simd128")]
-pub unsafe fn inverse2(x: v128, y: v128, q: &KS) -> (v128, v128) {
+pub fn inverse2(x: v128, y: v128, q: &KS) -> (v128, v128) {
     let xi = f64x2_mul(f64x2_sub(y, q.fnorth), q.inv_k_a);
     let eta = f64x2_mul(f64x2_sub(x, q.feast), q.inv_k_a);
 
@@ -289,42 +286,24 @@ pub unsafe fn inverse2(x: v128, y: v128, q: &KS) -> (v128, v128) {
     (lon, f64x2_mul(phi, spl(R2D)))
 }
 
-pub unsafe fn forward_batch(
-    lonp: *const f64,
-    latp: *const f64,
-    xp: *mut f64,
-    yp: *mut f64,
-    n: usize,
-    k: &K,
-) {
+pub fn forward_batch(lon: &[f64], lat: &[f64], x: &mut [f64], y: &mut [f64], k: &K) {
     let q = splat_k(k);
     let mut i = 0;
-    while i < n {
-        let lon = crate::simd::load_pair(lonp, i, n);
-        let lat = crate::simd::load_pair(latp, i, n);
-        let (x, y) = forward2(lon, lat, &q);
-        crate::simd::store_pair(x, xp, i, n);
-        crate::simd::store_pair(y, yp, i, n);
+    while i < lon.len() {
+        let (a, b) = forward2(load_pair(lon, i), load_pair(lat, i), &q);
+        store_pair(a, x, i);
+        store_pair(b, y, i);
         i += 2;
     }
 }
 
-pub unsafe fn inverse_batch(
-    xp: *const f64,
-    yp: *const f64,
-    lonp: *mut f64,
-    latp: *mut f64,
-    n: usize,
-    k: &K,
-) {
+pub fn inverse_batch(x: &[f64], y: &[f64], lon: &mut [f64], lat: &mut [f64], k: &K) {
     let q = splat_k(k);
     let mut i = 0;
-    while i < n {
-        let x = crate::simd::load_pair(xp, i, n);
-        let y = crate::simd::load_pair(yp, i, n);
-        let (lon, lat) = inverse2(x, y, &q);
-        crate::simd::store_pair(lon, lonp, i, n);
-        crate::simd::store_pair(lat, latp, i, n);
+    while i < x.len() {
+        let (a, b) = inverse2(load_pair(x, i), load_pair(y, i), &q);
+        store_pair(a, lon, i);
+        store_pair(b, lat, i);
         i += 2;
     }
 }
