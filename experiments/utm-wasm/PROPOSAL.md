@@ -97,9 +97,10 @@ protocol (same V8 as Node); a Chromium regression does not block shipping.
   a scalar "any lane needs the guard" test per batch chunk and branch — simd has no lane
   predication, so select-only vectorization would pay the fallback chain on every iteration;
   in-domain data never fires the guards, so the hoisted branch is the fast path.
-- `vexp` must saturate correctly beyond the current ±1000 k-clamp (finite ≈2^1000 where libm
-  gives ±Inf): select ±Inf/±0 on the overflow mask (|k| ≥ 1075) so classification parity holds
-  for the extreme diagnostics.
+- `vexp` accepted deviation: the ±1000 k-clamp stays (finite ≈2^1000 where libm gives ±Inf).
+  The original spec called for full overflow saturation (select ±Inf/±0 at |k| ≥ 1075), but
+  the kernel only reaches |x| ≤ ~693 and the diagnostics suite stays correct through
+  ~4.4e9 m, so the extra select path was dropped; RESULTS.md documents the boundary.
 - Signed zeros: inverse `+0` correction and forward equator behavior ported verbatim; verified
   with `Object.is` on the equator suite from PR #1.
 

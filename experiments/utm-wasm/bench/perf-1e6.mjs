@@ -56,7 +56,21 @@ if (args.includes('--worker')) {
       const rows = JSON.parse(
         execFileSync(exe, [import.meta.filename, '--worker', `--revision=${path}`], { encoding: 'utf8' }),
       );
-      for (const dir of ['forward', 'inverse']) acc[revision][dir].push(rows[dir].medianMs);
+      for (const dir of ['forward', 'inverse']) {
+        acc[revision][dir].push(rows[dir].medianMs);
+        const prev = acc[revision][dir].checksum ?? rows[dir].checksum;
+        if (prev !== rows[dir].checksum) throw new Error(`checksum drift in ${revision} ${dir}`);
+        acc[revision][dir].checksum = rows[dir].checksum;
+      }
+    }
+  }
+  // the two kernels agree to <= 3.7e-9 m, so checksums must be close but are
+  // not bit-identical; fail only on gross divergence (NaN/garbage candidates)
+  for (const dir of ['forward', 'inverse']) {
+    const b = acc.base[dir].checksum;
+    const c = acc.candidate[dir].checksum;
+    if (!Number.isFinite(b) || !Number.isFinite(c) || Math.abs(b - c) > 1e-3 * Math.max(1, Math.abs(b))) {
+      throw new Error(`checksum mismatch for ${dir}: base ${b} vs candidate ${c}`);
     }
   }
   const med = (v) => v.sort((a, b) => a - b)[Math.floor(v.length / 2)];

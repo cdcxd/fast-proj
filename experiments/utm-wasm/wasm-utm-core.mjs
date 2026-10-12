@@ -19,7 +19,14 @@ export function simdSupported() {
 }
 
 export function createConverter(e, { zone, south = false, ellipsoid = { a: 6378137, f: 1 / 298.257223563 } }) {
+  // mirror the TypeScript API's option validation so the wasm path and the TS
+  // fallback reject the same inputs (messages match packages/utm/src)
+  if (!Number.isInteger(zone) || zone < 1 || zone > 60) {
+    throw new RangeError(`UTM zone must be an integer in 1-60, got ${zone}`);
+  }
   const { a, f } = ellipsoid;
+  if (!(a > 0 && a < Infinity)) throw new RangeError(`ellipsoid.a must be a positive finite number, got ${a}`);
+  if (!(f >= 0 && f < 0.01)) throw new RangeError(`ellipsoid.f must satisfy 0 <= f < 0.01, got ${f}`);
   const southFlag = south ? 1 : 0;
 
   // allocate-once scratch: batch (4 buffers) + a persistent point pair.
@@ -119,15 +126,19 @@ export function createConverter(e, { zone, south = false, ellipsoid = { a: 63781
       if (out) checkOut(out, n, 'out');
       else out = new Float64Array(n);
       const half = n / 2;
-      // route interleaved halves through the same scratch, then interleave
-      for (let i = 0; i < half; i++) {
-        wX[i] = xy[2 * i];
-        wY[i] = xy[2 * i + 1];
-      }
-      e.inverse_batch(bX, bY, bLon, bLat, half, zone, southFlag, a, f);
-      for (let i = 0; i < half; i++) {
-        out[2 * i] = wLon[i];
-        out[2 * i + 1] = wLat[i];
+      // interleave/deinterleave through the same CAP-sized scratch as the
+      // batch forms; the strided loops cannot use .set, so they run per chunk
+      for (let i0 = 0; i0 < half; i0 += CAP) {
+        const m = Math.min(CAP, half - i0);
+        for (let j = 0; j < m; j++) {
+          wX[j] = xy[2 * (i0 + j)];
+          wY[j] = xy[2 * (i0 + j) + 1];
+        }
+        e.inverse_batch(bX, bY, bLon, bLat, m, zone, southFlag, a, f);
+        for (let j = 0; j < m; j++) {
+          out[2 * (i0 + j)] = wLon[j];
+          out[2 * (i0 + j) + 1] = wLat[j];
+        }
       }
       return out;
     },
@@ -137,14 +148,17 @@ export function createConverter(e, { zone, south = false, ellipsoid = { a: 63781
       if (out) checkOut(out, n, 'out');
       else out = new Float64Array(n);
       const half = n / 2;
-      for (let i = 0; i < half; i++) {
-        wLon[i] = lonlat[2 * i];
-        wLat[i] = lonlat[2 * i + 1];
-      }
-      e.forward_batch(bLon, bLat, bX, bY, half, zone, southFlag, a, f);
-      for (let i = 0; i < half; i++) {
-        out[2 * i] = wX[i];
-        out[2 * i + 1] = wY[i];
+      for (let i0 = 0; i0 < half; i0 += CAP) {
+        const m = Math.min(CAP, half - i0);
+        for (let j = 0; j < m; j++) {
+          wLon[j] = lonlat[2 * (i0 + j)];
+          wLat[j] = lonlat[2 * (i0 + j) + 1];
+        }
+        e.forward_batch(bLon, bLat, bX, bY, m, zone, southFlag, a, f);
+        for (let j = 0; j < m; j++) {
+          out[2 * (i0 + j)] = wX[j];
+          out[2 * (i0 + j) + 1] = wY[j];
+        }
       }
       return out;
     },

@@ -90,6 +90,30 @@ function alloc(n) {
   check('atan(-0) is -0', Object.is(got[1], -0), String(got[1]));
 }
 
+// --- atan2 seams: full IEEE quadrant table incl. ±0 and NaN -------------------
+{
+  const pairs = [];
+  for (const y of [0, -0, 1, -1, 1e-300, Infinity, -Infinity, NaN]) {
+    for (const x of [0, -0, 1, -1, 1e-300, -1e-300, Infinity, -Infinity, NaN]) {
+      pairs.push([y, x]);
+    }
+  }
+  const n = pairs.length;
+  const yp = alloc(n), xp = alloc(n), out = alloc(n);
+  const yv = F64(yp, n), xv = F64(xp, n);
+  for (let i = 0; i < n; i++) { yv[i] = pairs[i][0]; xv[i] = pairs[i][1]; }
+  e.atan2_batch(yp, xp, out, n);
+  const got = F64(out, n);
+  for (let i = 0; i < n; i++) {
+    const [y, x] = pairs[i];
+    const want = Math.atan2(y, x);
+    const ok = Number.isNaN(want)
+      ? Number.isNaN(got[i])
+      : Object.is(got[i], want) || Math.abs(got[i] - want) <= 2e-16 * Math.PI;
+    check(`atan2(${y}, ${x})`, ok, `got ${got[i]} want ${want}`);
+  }
+}
+
 // --- log seams at powers of two ----------------------------------------------
 {
   const xs = [1, 2, 4, 0.5, 0.25, 1024, 2 ** -20, 2 ** 20, 1 + 1e-18, 1 - 1e-18, Infinity, NaN, 0];

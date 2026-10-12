@@ -7,8 +7,8 @@ use core::arch::wasm32::{
     f32x4_demote_f64x2_zero, f64x2, f64x2_abs, f64x2_add, f64x2_div, f64x2_eq, f64x2_ge,
     f64x2_gt, f64x2_le, f64x2_lt, f64x2_mul, f64x2_neg, f64x2_ne, f64x2_nearest, f64x2_pmax,
     f64x2_pmin, f64x2_splat, f64x2_sub, i32x4_trunc_sat_f32x4, i32x4_trunc_sat_f64x2_zero,
-    i64x2_add, i64x2_extend_low_i32x4, i64x2_lt, i64x2_shl, i64x2_splat, i64x2_sub, u64x2_shr,
-    v128, v128_and, v128_bitselect, v128_or,
+    i64x2_add, i64x2_extend_low_i32x4, i64x2_lt, i64x2_shl, i64x2_splat, i64x2_sub,
+    u64x2_shr, v128, v128_and, v128_bitselect, v128_or,
 };
 
 #[inline]
@@ -81,11 +81,15 @@ pub unsafe fn vatan2(y: v128, x: v128) -> v128 {
     let neg_y = i64x2_lt(y, i64x2_splat(0));
     let m = v128_bitselect(f64x2_sub(spl(M_PI), r1), r1, neg_x);
     let m = v128_bitselect(f64x2_neg(m), m, neg_y);
-    // both operands zero: +-0 / +-pi quadrant values
+    // x = +-0: Math.atan2/glibc return +-pi/2 by sign of y for any nonzero y
+    // (the x sign only matters when y is also zero). i64 compares catch -0.
     let v_pi = v128_bitselect(spl(-M_PI), spl(M_PI), neg_y);
     let v_zero = v128_bitselect(spl(-0.0), spl(0.0), neg_y);
     let both_zero = v128_bitselect(v_pi, v_zero, neg_x);
-    let m = v128_bitselect(both_zero, m, f64x2_eq(mx, spl(0.0)));
+    let v_half = v128_bitselect(f64x2_neg(spl(PI_2)), spl(PI_2), neg_y);
+    let x_zero = f64x2_eq(ax, spl(0.0));
+    let v_xz = v128_bitselect(both_zero, v_half, f64x2_eq(ay, spl(0.0)));
+    let m = v128_bitselect(v_xz, m, x_zero);
     // both infinite: +-pi/4 (x > 0) or +-3pi/4 (x < 0) — mn/mx is NaN there
     let both_inf = v128_and(
         f64x2_eq(ay, spl(f64::INFINITY)),
@@ -97,7 +101,10 @@ pub unsafe fn vatan2(y: v128, x: v128) -> v128 {
         f64x2_gt(x, spl(0.0)),
     );
     let v_inf = v128_bitselect(f64x2_neg(v_inf), v_inf, neg_y);
-    v128_bitselect(v_inf, m, both_inf)
+    let m = v128_bitselect(v_inf, m, both_inf);
+    // NaN in either operand propagates: pmin/pmax can drop a NaN lane
+    let nan_in = v128_or(f64x2_ne(y, y), f64x2_ne(x, x));
+    v128_bitselect(spl(f64::NAN), m, nan_in)
 }
 
 #[target_feature(enable = "simd128")]

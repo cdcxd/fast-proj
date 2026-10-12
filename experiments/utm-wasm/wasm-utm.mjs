@@ -18,8 +18,10 @@ async function loadInstance() {
       const bytes = readFileSync(candidate);
       const { instance } = await WebAssembly.instantiate(bytes, {});
       return instance;
-    } catch {
-      // try next location
+    } catch (err) {
+      // only fall through on a missing file; a present-but-invalid artifact
+      // must surface its real error instead of "not found"
+      if (err?.code !== 'ENOENT') throw err;
     }
   }
   throw new Error('simd.wasm not found; build with scripts/build.sh');

@@ -76,6 +76,46 @@ for (const n of [1, 2, 7, 1000, CAP - 1, CAP, CAP + 1, CAP + 513, 2 * CAP + 7]) 
   gate("odd interleaved throws", threw);
 }
 
+// interleaved forms across the CAP chunk boundary (regression: they used to
+// run a single unchunked kernel call and returned NaN past 65536 points)
+{
+  const half = CAP + 7;
+  const { lon, lat } = makeData(half, 17);
+  const t = ts.fromLonLat(lon, lat);
+  const lonlat = new Float64Array(2 * half);
+  for (let i = 0; i < half; i++) { lonlat[2 * i] = lon[i]; lonlat[2 * i + 1] = lat[i]; }
+  const r = w.fromLonLatInterleaved(lonlat);
+  const flat = new Float64Array(2 * half);
+  for (let i = 0; i < half; i++) { flat[2 * i] = t.x[i]; flat[2 * i + 1] = t.y[i]; }
+  let bad = 0;
+  for (let i = 0; i < 2 * half; i++) if (!(Math.abs(r[i] - flat[i]) <= 5e-9)) bad++;
+  gate("interleaved fwd > CAP", bad === 0, `${bad} mismatched outputs`);
+
+  const xy = new Float64Array(2 * half);
+  for (let i = 0; i < half; i++) { xy[2 * i] = t.x[i]; xy[2 * i + 1] = t.y[i]; }
+  const ri = w.toLonLatInterleaved(xy);
+  const ti = ts.toLonLat(t.x, t.y);
+  bad = 0;
+  for (let i = 0; i < half; i++) {
+    if (!(Math.abs(ri[2 * i] - ti.lon[i]) <= 1e-13 && Math.abs(ri[2 * i + 1] - ti.lat[i]) <= 1e-13)) bad++;
+  }
+  gate("interleaved inv > CAP", bad === 0, `${bad} mismatched outputs`);
+}
+
+// option validation matches the TypeScript API on the wasm path
+{
+  for (const zone of [0, 61, 33.5, NaN]) {
+    let threw = false;
+    try { await utmWasm({ zone }); } catch (err) { threw = err instanceof RangeError && /1-60/.test(err.message); }
+    gate(`zone ${zone} throws`, threw);
+  }
+  let threw = false;
+  try { await utmWasm({ zone: 33, ellipsoid: { a: 6378137, f: 0.02 } }); } catch (err) { threw = err instanceof RangeError && /f must/.test(err.message); }
+  gate("flattening throws", threw);
+  threw = false;
+  try { await utmWasm({ zone: 33, ellipsoid: { a: -1, f: 0.1 } }); } catch (err) { threw = err instanceof RangeError && /a must/.test(err.message); }
+  gate("semi-axis throws", threw);
+}
 // interleaved + point forms agree with the batch form
 {
   const { lon, lat } = makeData(257, 11);
