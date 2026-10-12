@@ -35,13 +35,13 @@ at the tan(π/8) and |x| = 1 seams — the kernel's actual argument ranges (forw
 
 **Performance** (median-of-samples, fresh inputs; ns/point; Ryzen 9 3900X):
 
-| op | Node 24, n=1e4 js→simd | Node 24, n=1e6 js→simd | Bun 1.4, n=1e4 js→simd | Bun 1.4, n=1e6 js→simd |
-|---|---:|---:|---:|---:|
-| sincos | 24.8 → 9.7 (2.6×) | 28.0 → 9.7 (2.9×) | 22.3 → 9.0 (2.5×) | 23.9 → 9.0 (2.6×) |
-| atan | 8.7 → 10.2 (0.85×) | 21.2 → 10.9 (1.9×) | 8.9 → 9.8 (0.91×) | 17.8 → 9.8 (1.8×) |
-| exp | 23.4 → 6.0 (3.9×) | 26.9 → 6.0 (4.5×) | 5.2 → 5.5 (0.95×) | 13.4 → 5.5 (2.4×) |
-| log | 30.4 → 8.3 (3.7×) | 24.7 → 8.3 (3.0×) | 5.2 → 6.9 (0.76×) | 13.4 → 7.0 (1.9×) |
-| *scalar libm* | — | sincos 20.0, atan 9.3, exp 8.9, log 7.7 | — | sincos 21.8, atan 9.5, exp 8.5, log 6.9 |
+| op            | Node 24, n=1e4 js→simd |                  Node 24, n=1e6 js→simd | Bun 1.4, n=1e4 js→simd |                  Bun 1.4, n=1e6 js→simd |
+| ------------- | ---------------------: | --------------------------------------: | ---------------------: | --------------------------------------: |
+| sincos        |      24.8 → 9.7 (2.6×) |                       28.0 → 9.7 (2.9×) |      22.3 → 9.0 (2.5×) |                       23.9 → 9.0 (2.6×) |
+| atan          |     8.7 → 10.2 (0.85×) |                      21.2 → 10.9 (1.9×) |      8.9 → 9.8 (0.91×) |                       17.8 → 9.8 (1.8×) |
+| exp           |      23.4 → 6.0 (3.9×) |                       26.9 → 6.0 (4.5×) |      5.2 → 5.5 (0.95×) |                       13.4 → 5.5 (2.4×) |
+| log           |      30.4 → 8.3 (3.7×) |                       24.7 → 8.3 (3.0×) |      5.2 → 6.9 (0.76×) |                       13.4 → 7.0 (1.9×) |
+| _scalar libm_ |                      — | sincos 20.0, atan 9.3, exp 8.9, log 7.7 |                      — | sincos 21.8, atan 9.5, exp 8.5, log 6.9 |
 
 Boundary costs: wasm call 60–120 ns (amortizes to noise at n ≥ 1k); memcpy 0.17 ns/point.
 
@@ -158,7 +158,7 @@ moot). No scalar wasm artifact, no changes to the default package.
 i32-lane masks from `trunc_sat_f64x2_zero` do not align with f64 lanes (compute quadrant masks
 in f64 space); no f64→i64 lane conversion exists (demote→i32→extend path for exp k);
 `bitselect(v1, v2, c)` picks `v1` where `c` bits are 1; `π/2` compensation and `+π/8` belong
-on the *result*, not the poly argument; log mantissa must be normalized into [√½, √2) for the
+on the _result_, not the poly argument; log mantissa must be normalized into [√½, √2) for the
 fit domain; select-based "branches" execute on all lanes (hoist real branches); edition-2024
 needs `#[unsafe(no_mangle)]`; `f64::round` doesn't exist in `no_std` core (use
 `f64x2_nearest` / a 2^52 trick).

@@ -1,4 +1,5 @@
 # Superseded by PROPOSAL.md (measured data, revised decision bar).
+
 # Handoff: Rust + WASM SIMD UTM kernel experiment
 
 Status: PLAN ONLY (nothing built). Started 2026-10-11. Owner resumes after context compact.
@@ -9,11 +10,11 @@ Quantify whether a Rust → wasm32 + `simd128` (f64x2, 2 lanes) kernel beats the
 
 Baseline to beat (PR #1 head `2aea9e8`, Ryzen 9 3900X, ms per 10k points, split buffers):
 
-| Runtime | forward | inverse |
-|---|---:|---:|
-| Node 24 | 1.07 | 1.13 |
-| Bun 1.4 | 0.76 | 0.98 |
-| Chromium 150 | 2.16 | 1.88 |
+| Runtime      | forward | inverse |
+| ------------ | ------: | ------: |
+| Node 24      |    1.07 |    1.13 |
+| Bun 1.4      |    0.76 |    0.98 |
+| Chromium 150 |    2.16 |    1.88 |
 
 TS ceiling context: transcendentals are ~75% of remaining time (Node ns/pt: sin 12.9, cos 13.5, exp 12.0, atan 8.6, atan2 17.7, asinh 19.0; Bun roughly half that; sqrt ~1). A wasm scalar build isolates the "Rust/no-JIT" win; the simd build adds the vector-math win.
 
@@ -27,10 +28,10 @@ TS ceiling context: transcendentals are ~75% of remaining time (Node ns/pt: sin 
 
 ## Crate design
 
-
 `experiments/utm-wasm/Cargo.toml`: `[lib] crate-type = ["cdylib"]`, no dependencies, `[profile.release] opt-level=3, lto=true, codegen-units=1`. Build twice:
-cargo build --release --target wasm32-unknown-unknown                       # scalar.wasm
-RUSTFLAGS="-C target-feature=+simd128" cargo build --release --target wasm32-unknown-unknown  # simd.wasm
+cargo build --release --target wasm32-unknown-unknown # scalar.wasm
+RUSTFLAGS="-C target-feature=+simd128" cargo build --release --target wasm32-unknown-unknown # simd.wasm
+
 ```
 
 Exports (C ABI, `#[no_mangle] pub extern "C"`): `alloc(n: usize) -> *mut f64` (bump allocator, memory exported by default), `forward_batch(lonp, latp, xp, yp, n, zone: u8, south: u32, a: f64, f: f64)`, `inverse_batch(xp, yp, lonp, latp, n, ...)`. Compute `tmSeries` coefficients inside per call (negligible for n ≥ 10k). Port the **PR-head kernel** (`packages/utm/src/utm.ts` at `2aea9e8`, including the `log1p` eta′ form and guarded `atan`) formula-for-formula; coefficients via the same `tmSeries` expressions (`ellipsoid.ts`).
@@ -65,3 +66,4 @@ Vector math (`core::arch::wasm32`, f64x2, behind `#[target_feature(enable = "sim
 - If simd.wasm ≥ 3× TS on Node+Bun at 10k and accuracy holds: recommend a `@fast-proj/utm/wasm` opt-in subpath (async init, ~10-20 kB wasm) for large-batch users; keep TS default.
 - If 1.5–3×: report numbers, recommend staying TS unless users convert ≥1e7 pts.
 - If < 1.5×: document why (boundary overhead / f64 lane count), close.
+```
