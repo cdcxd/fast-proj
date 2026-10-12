@@ -8,7 +8,8 @@ export function simdSupported() {
   // (module (func (result f64) f64x2.extract_lane 0 (v128.const i64x2 0 0)))
   // verified to compile+run on Node 24 / Bun 1.4 / Chromium 150
   const probe = new Uint8Array([
-    0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 124, 3, 2, 1, 0, 10, 25, 1, 23, 0, 253, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 253, 33, 0, 11,
+    0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 124, 3, 2, 1, 0, 10, 25, 1, 23, 0, 253, 12, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 253, 33, 0, 11,
   ]);
   try {
     new WebAssembly.Module(probe);

@@ -35,22 +35,22 @@ n=10 000 — repo protocol `packages/utm/bench/compare-performance.mjs`
 (fresh worker process per revision, order alternating over 3 rounds, 51 runs ×
 5 reps, 150 warmups, median):
 
-| runtime | dataset | forward | inverse |
-|---|---|---|---|
-| Node 24.21 | UTM | 1.996x | 1.971x |
-| Node 24.21 | wide | 1.952x | 1.930x |
-| Bun 1.4.2 | UTM | 1.325x | 1.680x |
-| Bun 1.4.2 | wide | 1.450x | 1.695x |
-| Chromium 150 | UTM | 3.516x | 3.129x |
-| Chromium 150 | wide | 3.516x | 3.267x |
+| runtime      | dataset | forward | inverse |
+| ------------ | ------- | ------- | ------- |
+| Node 24.21   | UTM     | 1.996x  | 1.971x  |
+| Node 24.21   | wide    | 1.952x  | 1.930x  |
+| Bun 1.4.2    | UTM     | 1.325x  | 1.680x  |
+| Bun 1.4.2    | wide    | 1.450x  | 1.695x  |
+| Chromium 150 | UTM     | 3.516x  | 3.129x  |
+| Chromium 150 | wide    | 3.516x  | 3.267x  |
 
 n=1 000 000 — `bench/perf-1e6.mjs`, same discipline (fresh process per
 revision, 3 alternating rounds, median of 15, checksum-guarded):
 
-| runtime | forward | inverse |
-|---|---|---|
+| runtime    | forward                  | inverse                  |
+| ---------- | ------------------------ | ------------------------ |
 | Node 24.21 | 1.748x (120.2 → 68.8 ms) | 1.727x (116.1 → 67.2 ms) |
-| Bun 1.4.2 | 1.255x (86.5 → 69.0 ms) | 1.509x (98.6 → 65.3 ms) |
+| Bun 1.4.2  | 1.255x (86.5 → 69.0 ms)  | 1.509x (98.6 → 65.3 ms)  |
 
 Chromium is report-only (no 1e6 leg; its TS baseline is 2.5–3x slower than
 Node's, so wasm gains are largest there).

@@ -99,9 +99,15 @@ function alloc(n) {
     }
   }
   const n = pairs.length;
-  const yp = alloc(n), xp = alloc(n), out = alloc(n);
-  const yv = F64(yp, n), xv = F64(xp, n);
-  for (let i = 0; i < n; i++) { yv[i] = pairs[i][0]; xv[i] = pairs[i][1]; }
+  const yp = alloc(n),
+    xp = alloc(n),
+    out = alloc(n);
+  const yv = F64(yp, n),
+    xv = F64(xp, n);
+  for (let i = 0; i < n; i++) {
+    yv[i] = pairs[i][0];
+    xv[i] = pairs[i][1];
+  }
   e.atan2_batch(yp, xp, out, n);
   const got = F64(out, n);
   for (let i = 0; i < n; i++) {
