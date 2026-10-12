@@ -1,4 +1,8 @@
-import { readFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import vm from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
 import { utm } from '../src/index.js';
 import { loadWasm } from '../src/wasm.js';
@@ -47,6 +51,23 @@ describe('loadWasm', () => {
     );
     await expect(loadWasm({ source: new URL('./missing.wasm', url) })).rejects.toThrow(/ENOENT/);
     expect((await loadWasm({ source: url })).backend).toBe('wasm-simd');
+  });
+
+  it('evicts a module that fails initialization, so a fixed file can be retried', async () => {
+    const file = join(mkdtempSync(join(tmpdir(), 'fast-proj-')), 'm.wasm');
+    writeFileSync(file, new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));
+    const source = pathToFileURL(file);
+    await expect(loadWasm({ source })).rejects.toThrow(/not a fast-proj wasm module/);
+    copyFileSync(url, file);
+    expect((await loadWasm({ source })).backend).toBe('wasm-simd');
+  });
+
+  it('accepts a module compiled in another realm', async () => {
+    const module = vm.runInNewContext('new WebAssembly.Module(bytes)', {
+      bytes: readFileSync(url),
+    }) as WebAssembly.Module;
+    expect(module instanceof WebAssembly.Module).toBe(false);
+    expect((await loadWasm({ source: module })).backend).toBe('wasm-simd');
   });
 
   it('handles inputs larger than the 64 Ki-point workspace', async () => {

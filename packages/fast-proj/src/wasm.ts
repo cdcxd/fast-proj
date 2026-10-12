@@ -55,11 +55,19 @@ const SIMD_PROBE = new Uint8Array([
   0, 0, 0, 0, 0, 0, 0, 253, 33, 0, 11,
 ]);
 
-const modules = new Map<unknown, Promise<WebAssembly.Module>>();
+// Bundlers rewrite `new URL(variable, import.meta.url)` into an asset context; resolve caller URLs against this instead.
+const base = import.meta.url;
+const byUrl = new Map<string, Promise<WebAssembly.Module>>();
+// Weak, so the cache doesn't keep the caller's bytes (and their whole backing buffer) alive.
+const byBytes = new WeakMap<object, Promise<WebAssembly.Module>>();
+
+const REQUIRED = ['alloc', 'simd_enabled', 'tm_forward_batch', 'tm_inverse_batch'] as const;
 
 async function readFileUrl(url: URL): Promise<Uint8Array> {
   const fs = 'node:fs/promises';
-  const { readFile } = (await import(/* @vite-ignore */ fs)) as { readFile(u: URL): Promise<Uint8Array> };
+  const { readFile } = (await import(/* @vite-ignore */ /* webpackIgnore: true */ fs)) as {
+    readFile(u: URL): Promise<Uint8Array>;
+  };
   return readFile(url);
 }
 
@@ -70,7 +78,7 @@ async function compile(source: Loadable): Promise<WebAssembly.Module> {
       : new Uint8Array(source);
     return WebAssembly.compile(bytes as Uint8Array<ArrayBuffer>);
   }
-  const url = new URL(source, import.meta.url);
+  const url = new URL(source, base);
   if (url.protocol === 'file:') return WebAssembly.compile((await readFileUrl(url)) as Uint8Array<ArrayBuffer>);
   const response = fetch(url);
   if (typeof WebAssembly.compileStreaming === 'function') {
@@ -86,15 +94,25 @@ async function compile(source: Loadable): Promise<WebAssembly.Module> {
   return WebAssembly.compile(await res.arrayBuffer());
 }
 
-function getModule(source: Loadable): Promise<WebAssembly.Module> {
-  const key = typeof source === 'string' || source instanceof URL ? new URL(source, import.meta.url).href : source;
-  let promise = modules.get(key);
+/** Returns the cached compile promise and a function evicting it, for compile or initialization failures. */
+function getModule(source: Loadable): [Promise<WebAssembly.Module>, () => void] {
+  const cache: Map<unknown, Promise<WebAssembly.Module>> | WeakMap<object, Promise<WebAssembly.Module>> =
+    typeof source === 'string' || source instanceof URL ? byUrl : byBytes;
+  const key = cache === byUrl ? new URL(source as string | URL, base).href : (source as object);
+  let promise = cache.get(key as object);
   if (!promise) {
     promise = compile(source);
-    modules.set(key, promise);
-    promise.catch(() => modules.delete(key));
+    cache.set(key as object, promise);
   }
-  return promise;
+  const evict = () => {
+    if (cache.get(key as object) === promise) cache.delete(key as object);
+  };
+  return [promise, evict];
+}
+
+// Also accepts modules compiled in another realm (iframe, Node vm), which fail instanceof.
+function isModule(source: WasmSource): source is WebAssembly.Module {
+  return Object.prototype.toString.call(source) === '[object WebAssembly.Module]';
 }
 
 function jsContext(): WasmContext {
@@ -133,7 +151,8 @@ function jsContext(): WasmContext {
 
 /**
  * Loads the WebAssembly backend and returns a context owning one instance and a fixed 64 Ki-point workspace (about
- * 2 MiB). The compiled module is cached per source; each call creates a new context. A failed load can be retried.
+ * 2 MiB). The compiled module is cached per source; each call creates a new context. A failed load or
+ * initialization can be retried.
  */
 export async function loadWasm(options: LoadWasmOptions = {}): Promise<WasmContext> {
   if (typeof WebAssembly === 'undefined') return jsContext();
@@ -142,10 +161,27 @@ export async function loadWasm(options: LoadWasmOptions = {}): Promise<WasmConte
   const source =
     options.source ??
     (simd ? new URL('./fast-proj.wasm', import.meta.url) : new URL('./fast-proj-scalar.wasm', import.meta.url));
-  const module = source instanceof WebAssembly.Module ? source : await getModule(source as Loadable);
-  const instance = await WebAssembly.instantiate(module, {});
-  const exports = instance.exports as unknown as Exports;
-  return wasmContext(exports, exports.simd_enabled() ? 'wasm-simd' : 'wasm');
+  let module = source as WebAssembly.Module;
+  let evict: (() => void) | undefined;
+  if (!isModule(source)) {
+    const [promise, ev] = getModule(source);
+    evict = ev;
+    module = await promise.catch((err: unknown) => {
+      ev();
+      throw err;
+    });
+  }
+  try {
+    const instance = await WebAssembly.instantiate(module, {});
+    const exports = instance.exports as unknown as Exports;
+    if (!(exports.memory instanceof WebAssembly.Memory) || REQUIRED.some((k) => typeof exports[k] !== 'function')) {
+      throw new TypeError('fast-proj: not a fast-proj wasm module');
+    }
+    return wasmContext(exports, exports.simd_enabled() ? 'wasm-simd' : 'wasm');
+  } catch (err) {
+    evict?.();
+    throw err;
+  }
 }
 
 function wasmContext(exports: Exports, backend: WasmBackend): WasmContext {
