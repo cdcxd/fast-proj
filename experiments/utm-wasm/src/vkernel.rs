@@ -101,11 +101,18 @@ pub unsafe fn forward2(lon: v128, lat: v128, q: &KS) -> (v128, v128) {
     let sc2 = f64x2_mul(sc, sc);
     let ccl2 = f64x2_mul(ccl, ccl);
     let ir = f64x2_div(spl(1.0), f64x2_sqrt(f64x2_add(sc2, ccl2)));
-    let xip = v128_bitselect(
-        vatan(f64x2_div(sc, ccl)),
-        vatan2(sc, ccl),
-        f64x2_gt(ccl, spl(0.0)),
-    );
+    let ccl0 = f64x2_extract_lane::<0>(ccl);
+    let ccl1 = f64x2_extract_lane::<1>(ccl);
+    let xip = if ccl0 > 0.0 && ccl1 > 0.0 {
+        // every lane in-domain: atan alone matches atan2 for x > 0
+        vatan(f64x2_div(sc, ccl))
+    } else {
+        v128_bitselect(
+            vatan(f64x2_div(sc, ccl)),
+            vatan2(sc, ccl),
+            f64x2_gt(ccl, spl(0.0)),
+        )
+    };
     let she = f64x2_mul(f64x2_mul(cc, sl), ir);
     // log1p eta' with the |she| <= 1024 guard; the test is hoisted out of the
     // lanes (select-based fallbacks would pay the asinh chain every iteration)
@@ -217,16 +224,34 @@ pub unsafe fn inverse2(x: v128, y: v128, q: &KS) -> (v128, v128) {
 
     let h2 = f64x2_add(f64x2_mul(she, she), f64x2_mul(cx, cx));
     let h = f64x2_sqrt(h2);
-    let lam = v128_bitselect(
-        vatan(f64x2_div(she, cx)),
-        vatan2(she, cx),
-        v128_and(f64x2_gt(cx, spl(0.0)), is_finite(she)),
-    );
-    let chi = v128_bitselect(
-        vatan(f64x2_div(sx, h)),
-        vatan2(sx, h),
-        v128_and(f64x2_gt(h, spl(0.0)), is_finite(sx)),
-    );
+    // guarded atan sites hoisted per pair: in-domain lanes (cx > 0, she finite)
+    // pay only atan; any out-of-domain lane falls back to the atan2 blend
+    let cx0 = f64x2_extract_lane::<0>(cx);
+    let cx1 = f64x2_extract_lane::<1>(cx);
+    let she0 = f64x2_extract_lane::<0>(she);
+    let she1 = f64x2_extract_lane::<1>(she);
+    let lam = if cx0 > 0.0 && cx1 > 0.0 && she0.is_finite() && she1.is_finite() {
+        vatan(f64x2_div(she, cx))
+    } else {
+        v128_bitselect(
+            vatan(f64x2_div(she, cx)),
+            vatan2(she, cx),
+            v128_and(f64x2_gt(cx, spl(0.0)), is_finite(she)),
+        )
+    };
+    let h0 = f64x2_extract_lane::<0>(h);
+    let h1 = f64x2_extract_lane::<1>(h);
+    let sx0 = f64x2_extract_lane::<0>(sx);
+    let sx1 = f64x2_extract_lane::<1>(sx);
+    let chi = if h0 > 0.0 && h1 > 0.0 && sx0.is_finite() && sx1.is_finite() {
+        vatan(f64x2_div(sx, h))
+    } else {
+        v128_bitselect(
+            vatan(f64x2_div(sx, h)),
+            vatan2(sx, h),
+            v128_and(f64x2_gt(h, spl(0.0)), is_finite(sx)),
+        )
+    };
 
     let sx2 = f64x2_mul(sx, sx);
     let r2 = f64x2_add(sx2, h2);
