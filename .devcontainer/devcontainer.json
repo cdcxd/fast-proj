@@ -3,9 +3,13 @@
   "image": "mcr.microsoft.com/devcontainers/base:2.1.8-noble",
   "features": {
     "ghcr.io/devcontainers/features/node:1": { "version": "24" },
-    "ghcr.io/devcontainers-extra/features/bun:1": { "version": "1.4.2" }
+    "ghcr.io/devcontainers-extra/features/bun:1": { "version": "1.4.2" },
+    "ghcr.io/devcontainers/features/rust:1": {
+      "version": "stable",
+      "profile": "minimal"
+    }
   },
-  "postCreateCommand": "bun install && bunx playwright install --with-deps chromium",
+  "postCreateCommand": "bun install && bunx playwright install --with-deps chromium && rustup target add wasm32-unknown-unknown && rustup component add rust-src",
   "customizations": {
     "vscode": {
       "extensions": ["oven.bun-vscode", "oxc.oxc-vscode"]
