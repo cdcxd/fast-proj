@@ -1,6 +1,6 @@
 # fast-proj 0.1 design
 
-Status: accepted, implemented in 0.1 (except `webMercator` and `gcj02`, whose names and shapes are fixed here for later; `gcj02` landed in 0.2). See [Implementation notes](#implementation-notes) for where 0.1 refines this proposal.
+Status: accepted, implemented in 0.1 (except `webMercator` and `gcj02`, whose names and shapes are fixed here for later; `gcj02` is added in 0.2). See [Implementation notes](#implementation-notes) for where 0.1 refines this proposal.
 
 The goal is to fix every decision that would be a breaking change after 0.1. Everything else can come in 0.1.x.
 
@@ -231,6 +231,6 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
 - The wasm converters' single-point methods run the JavaScript kernel: one point costs more to pass into wasm than to
   compute.
 - Re-entrant calls into a context (from array-like getters) throw; `dispose()` during a call throws.
-- `gcj02` (0.2) is JavaScript only. Its 11 sines come from two sin/cos pairs by multiple-angle identities; the inverse
+- `gcj02` (0.2) is JavaScript only, also in the wasm context. Its 11 sines come from two sin/cos pairs by multiple-angle identities; the inverse
   takes four fixed-point steps (2e-11°). Two Newton steps measured no faster and need the √|x| term's derivative,
   which is singular at longitude 105°.

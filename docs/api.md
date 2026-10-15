@@ -235,7 +235,7 @@ wasm.dispose(); // or: using wasm = await loadWasm();
   invalidates its converters. Output arrays already returned are caller-owned and stay valid.
 - **Copies.** Converters take and return caller-owned arrays, so each batch call copies the input into the workspace
   and the result back (about 0.17 ns per point). There is no zero-copy access to wasm memory.
-- **GCJ-02.** The context has no `gcj02` yet; use the root `gcj02()`.
+- **GCJ-02.** The context's `gcj02()` runs the JavaScript kernel on every backend; there is no wasm kernel yet.
 - **Single points.** `toLonLatPoint`/`fromLonLatPoint` run the JavaScript kernel: passing one point into wasm costs
   more than computing it.
 - **Re-entrancy.** Calling the same context from inside an array-like getter during a batch call throws.
