@@ -17,6 +17,8 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
+    "coordtransform": "^2.1.2",
+    "gcoord": "^1.0.7",
     "oxfmt": "^0.72.0",
     "oxlint": "^1.87.0",
     "playwright": "^1.64.0",

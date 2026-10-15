@@ -35,19 +35,23 @@ export interface Projection {
  * {@link Projection}.
  */
 export interface GeographicTransform {
+  /** This system's longitude/latitude arrays -> WGS84 longitude/latitude arrays. */
   toWgs84(
     lon: ArrayLike<number>,
     lat: ArrayLike<number>,
     outLon?: Float64Array,
     outLat?: Float64Array,
   ): { lon: Float64Array; lat: Float64Array };
+  /** WGS84 longitude/latitude arrays -> this system's longitude/latitude arrays. */
   fromWgs84(
     lon: ArrayLike<number>,
     lat: ArrayLike<number>,
     outLon?: Float64Array,
     outLat?: Float64Array,
   ): { lon: Float64Array; lat: Float64Array };
+  /** Interleaved [lon0, lat0, ...] in this system -> interleaved WGS84. */
   toWgs84Interleaved(lonlat: ArrayLike<number>, out?: Float64Array): Float64Array;
+  /** Interleaved WGS84 [lon0, lat0, ...] -> interleaved in this system. */
   fromWgs84Interleaved(lonlat: ArrayLike<number>, out?: Float64Array): Float64Array;
   toWgs84Point(lon: number, lat: number): [lon: number, lat: number];
   fromWgs84Point(lon: number, lat: number): [lon: number, lat: number];

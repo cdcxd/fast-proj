@@ -6,8 +6,9 @@
  */
 /// <reference lib="esnext.disposable" preserve="true" />
 import { checkEven, checkOut } from './checks.js';
+import { type Gcj02Options, gcj02 as jsGcj02 } from './gcj02.js';
 import { type TransverseMercatorOptions, tmerc as jsTmerc } from './tmerc.js';
-import type { TransverseMercator, Utm } from './types.js';
+import type { GeographicTransform, TransverseMercator, Utm } from './types.js';
 import { type UtmOptions, utm as jsUtm } from './utm.js';
 
 type Loadable = URL | string | ArrayBuffer | ArrayBufferView;
@@ -39,6 +40,8 @@ export interface WasmContext extends WasmDisposable {
   readonly backend: WasmBackend;
   tmerc(options: TransverseMercatorOptions): TransverseMercator & WasmDisposable;
   utm(options: UtmOptions): Utm & WasmDisposable;
+  /** Runs the JavaScript kernel on every backend. */
+  gcj02(options?: Gcj02Options): GeographicTransform & WasmDisposable;
 }
 
 interface Exports {
@@ -129,23 +132,26 @@ function getModule(source: Loadable): [Promise<WebAssembly.Module>, () => void] 
   return [promise, evict];
 }
 
+// Wraps a JavaScript converter so it throws once it or its context is disposed.
+function guarded<T extends object>(conv: T, disposed: () => boolean): T & WasmDisposable {
+  let closed = false;
+  const guard = () => {
+    if (closed || disposed()) throw new Error('fast-proj: converter used after dispose()');
+  };
+  const out = {} as T & WasmDisposable;
+  for (const [k, v] of Object.entries(conv)) {
+    (out as Record<string, unknown>)[k] = typeof v === 'function' ? (...args: unknown[]) => (guard(), v(...args)) : v;
+  }
+  out.dispose = () => {
+    closed = true;
+  };
+  out[DISPOSE] = out.dispose;
+  return out;
+}
+
 function jsContext(): WasmContext {
   let disposed = false;
-  const live = <T extends object>(conv: T): T & WasmDisposable => {
-    let closed = false;
-    const guard = () => {
-      if (closed || disposed) throw new Error('fast-proj: converter used after dispose()');
-    };
-    const out = {} as T & WasmDisposable;
-    for (const [k, v] of Object.entries(conv)) {
-      (out as Record<string, unknown>)[k] = typeof v === 'function' ? (...args: unknown[]) => (guard(), v(...args)) : v;
-    }
-    out.dispose = () => {
-      closed = true;
-    };
-    out[DISPOSE] = out.dispose;
-    return out;
-  };
+  const live = <T extends object>(conv: T): T & WasmDisposable => guarded(conv, () => disposed);
   const open = () => {
     if (disposed) throw new Error('fast-proj: context used after dispose()');
   };
@@ -153,6 +159,7 @@ function jsContext(): WasmContext {
     backend: 'js',
     tmerc: (o) => (open(), live(jsTmerc(o))),
     utm: (o) => (open(), live(jsUtm(o))),
+    gcj02: (o) => (open(), live(jsGcj02(o))),
     dispose() {
       disposed = true;
     },
@@ -340,6 +347,10 @@ function wasmContext(exports: Exports, backend: WasmBackend): WasmContext {
     utm: (o) => {
       if (!e) throw new Error('fast-proj: context used after dispose()');
       return build(jsUtm(o));
+    },
+    gcj02: (o) => {
+      if (!e) throw new Error('fast-proj: context used after dispose()');
+      return guarded(jsGcj02(o), () => !e);
     },
     dispose,
     [DISPOSE]: dispose,

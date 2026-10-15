@@ -1,7 +1,7 @@
 # fast-proj API
 
 ```ts
-import { tmerc, utm, utmFor, zoneFor, centralMeridian, WGS84, GRS80, MAX_FLATTENING } from 'fast-proj';
+import { gcj02, tmerc, utm, utmFor, zoneFor, centralMeridian, WGS84, GRS80, MAX_FLATTENING } from 'fast-proj';
 import { positions, positionsFromArrays, lineString, latLngs } from 'fast-proj/geojson';
 import { loadWasm } from 'fast-proj/wasm';
 ```
@@ -12,6 +12,7 @@ angles are in degrees, all distances in metres.
 - [The hub: WGS84 longitude/latitude](#the-hub-wgs84-longitudelatitude)
 - [`utm(options)`](#utmoptions)
 - [`tmerc(options)`](#tmercoptions)
+- [`gcj02(options)`](#gcj02options)
 - [Converter methods](#converter-methods)
 - [Buffers and aliasing](#buffers-and-aliasing)
 - [Zones: `utmFor`, `zoneFor`, `centralMeridian`](#zones)
@@ -27,7 +28,7 @@ angles are in degrees, all distances in metres.
 
 Every converter is defined relative to one hub: geodetic longitude/latitude in degrees, longitude in [-180, 180].
 Projections (`Projection`: `utm`, `tmerc`) convert projected x/y ↔ hub longitude/latitude with `toLonLat` /
-`fromLonLat`. Datum transforms (`GeographicTransform`, e.g. GCJ-02, not yet implemented) convert another system's
+`fromLonLat`. Datum transforms (`GeographicTransform`: `gcj02`) convert another system's
 longitude/latitude ↔ WGS84 with `toWgs84` / `fromWgs84`. Converting between two non-hub systems is two calls on the
 same buffer; see [Chaining](#chaining).
 
@@ -88,9 +89,39 @@ interface TransverseMercator extends Projection {
 Throws `TypeError` for a non-number option and `RangeError` for a non-finite one, `k0 <= 0`, or an unsupported
 ellipsoid. A latitude of origin other than 0 (`+lat_0`, e.g. the British National Grid) is not supported yet.
 
+## `gcj02(options)`
+
+GCJ-02, the obfuscated datum required for maps of mainland China (AMap/Gaode, Tencent, Google Maps in China). It
+follows the published WGS84 → GCJ-02 formula, as gcoord and coordtransform do; Baidu's BD-09 is not supported yet.
+
+```ts
+function gcj02(options?: Gcj02Options): GeographicTransform;
+
+interface Gcj02Options {
+  outsideChina?: 'passthrough' | 'transform'; // default 'passthrough'
+}
+```
+
+- **Outside China.** With `'passthrough'`, points outside the box longitude 72.004–137.8347, latitude 0.8293–55.8271
+  (the box gcoord uses) are returned unchanged. With `'transform'`, the offset is applied everywhere; see below for
+  the poles and the antimeridian. Throws `RangeError` for any other value.
+- **Accuracy.** `fromWgs84` is within one ulp (1.6e-14°) of a 40-digit evaluation of the formula. The formula has no
+  closed-form inverse; `toWgs84` takes four fixed-point steps, six within 1e-4° of longitude 105° (where the formula
+  has a √|x| cusp), and is within 2e-11° (about 2 µm; longitude errors scaled by the cosine of latitude) of the exact
+  inverse. gcoord's inverse stops at about 1e-6° (0.1 m), and coordtransform's one-step inverse is off by up to 3e-5°
+  (3 m).
+- **`'transform'` near the poles and the antimeridian.** `toWgs84` iterates until converged. Up to latitude ±89° it
+  round-trips within 1e-11° (longitude errors scaled by the cosine of latitude), except within 1e-4° of longitude
+  105°, where rounding the GCJ-02 coordinates alone moves the exact inverse by up to 1e-10° at ±89°. Closer to the poles the formula isn't one-to-one: `toWgs84` gives `NaN` or another point
+  with the same GCJ-02 coordinates, and `fromWgs84` gives `NaN` where the offset would push latitude past ±90°. The
+  offset differs at longitudes 180° and −180°; both are treated as 180°.
+- Input longitudes outside [-180, 180] are reduced first; output longitudes are in [-180, 180].
+
 ## Converter methods
 
-Every `Projection` has:
+Every `Projection` has the methods below. A `GeographicTransform` has the same set with lon/lat on both sides:
+`toWgs84(lon, lat, outLon?, outLat?)`, `fromWgs84(...)`, `toWgs84Interleaved(lonlat, out?)`, `fromWgs84Interleaved`,
+`toWgs84Point(lon, lat)` and `fromWgs84Point`.
 
 | method                                | input                         | output                                         |
 | ------------------------------------- | ----------------------------- | ---------------------------------------------- |
@@ -209,6 +240,7 @@ wasm.dispose(); // or: using wasm = await loadWasm();
   invalidates its converters. Output arrays already returned are caller-owned and stay valid.
 - **Copies.** Converters take and return caller-owned arrays, so each batch call copies the input into the workspace
   and the result back (about 0.17 ns per point). There is no zero-copy access to wasm memory.
+- **GCJ-02.** The context's `gcj02()` runs the JavaScript kernel on every backend; there is no wasm kernel yet.
 - **Single points.** `toLonLatPoint`/`fromLonLatPoint` run the JavaScript kernel: passing one point into wasm costs
   more than computing it.
 - **Re-entrancy.** Calling the same context from inside an array-like getter during a batch call throws.
@@ -244,7 +276,15 @@ zone50.toLonLatInterleaved(buf, buf); // UTM 50N -> lon/lat
 gk.fromLonLatInterleaved(buf, buf); // lon/lat -> CGCS2000 3° zone, lon0 117
 ```
 
-A fused single loop measured no faster than two passes: the steps share no expensive intermediate values.
+```ts
+const zone50 = utm({ zone: 50 });
+const gcj = gcj02();
+zone50.toLonLatInterleaved(buf, buf); // UTM 50N -> WGS84
+gcj.fromWgs84Interleaved(buf, buf); // WGS84 -> GCJ-02, for an AMap basemap
+```
+
+For two projections, a fused single loop measured no faster than two passes: the steps share no expensive
+intermediate values.
 
 ## Examples
 

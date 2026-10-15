@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import vm from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
-import { utm } from '../src/index.js';
+import { gcj02, utm } from '../src/index.js';
 import { loadWasm } from '../src/wasm.js';
 
 const url = new URL('../dist/fast-proj.wasm', import.meta.url);
@@ -131,16 +131,33 @@ describe('dispose', () => {
     expect(() => ctx.tmerc({ lon0: 0 })).toThrow(/dispose/);
   });
 
+  it('gcj02 runs the JavaScript kernel and follows the disposal rules', async () => {
+    const ctx = await loadWasm({ source: url });
+    const g = ctx.gcj02();
+    const h = ctx.gcj02({ outsideChina: 'transform' });
+    expect(g.fromWgs84Interleaved([116.391, 39.907])).toEqual(gcj02().fromWgs84Interleaved([116.391, 39.907]));
+    expect(h.fromWgs84Point(0, 0)).toEqual(gcj02({ outsideChina: 'transform' }).fromWgs84Point(0, 0));
+    g.dispose();
+    expect(() => g.toWgs84Point(116, 39)).toThrow(/dispose/);
+    expect(h.toWgs84Point(116, 39)[0]).toBeCloseTo(116, 1);
+    ctx.dispose();
+    expect(() => h.toWgs84([116], [39])).toThrow(/dispose/);
+    expect(() => ctx.gcj02()).toThrow(/dispose/);
+  });
+
   it('JavaScript fallback follows the same disposal rules', async () => {
     vi.stubGlobal('WebAssembly', undefined);
     const ctx = await loadWasm().finally(() => vi.unstubAllGlobals());
     expect(ctx.backend).toBe('js');
     const a = ctx.utm({ zone: 33 });
+    const g = ctx.gcj02();
     expect(a.toLonLatPoint(500000, 0)[0]).toBeCloseTo(15, 12);
     ctx.dispose();
     expect(() => a.toLonLatPoint(500000, 0)).toThrow(/dispose/);
+    expect(() => g.fromWgs84Point(116, 39)).toThrow(/dispose/);
     expect(() => ctx.utm({ zone: 33 })).toThrow(/dispose/);
     expect(() => ctx.tmerc({ lon0: 0 })).toThrow(/dispose/);
+    expect(() => ctx.gcj02()).toThrow(/dispose/);
   });
 
   it('supports using', async () => {

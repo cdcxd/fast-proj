@@ -1,5 +1,5 @@
 /**
- * Formatting of WGS84 longitude/latitude buffers (the output of any converter or chain) for map libraries. No
+ * Formatting of longitude/latitude buffers (the output of any converter or chain) for map libraries. No
  * conversion happens here.
  */
 export type Position = [lon: number, lat: number];

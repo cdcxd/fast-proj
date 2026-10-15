@@ -1,6 +1,6 @@
 # fast-proj 0.1 design
 
-Status: accepted, implemented in 0.1 (except `webMercator` and `gcj02`, whose names and shapes are fixed here for later). See [Implementation notes](#implementation-notes) for where 0.1 refines this proposal.
+Status: accepted, implemented in 0.1 (except `webMercator` and `gcj02`, whose names and shapes are fixed here for later; `gcj02` is added in 0.2). See [Implementation notes](#implementation-notes) for where 0.1 refines this proposal.
 
 The goal is to fix every decision that would be a breaking change after 0.1. Everything else can come in 0.1.x.
 
@@ -159,8 +159,9 @@ g.fromWgs84Interleaved(buf, buf); // WGS84 -> GCJ-02, in place
 map.getSource('track').setData(lineString(buf));
 ```
 
-A single fused UTM -> GCJ-02 loop measured no faster than two passes (Node and Chromium, 10k points), because the steps
-share no expensive intermediate values. A `pipe()` helper can be added later without a break.
+A fused UTM <-> GCJ-02 loop can reuse the tmerc step's sines and cosines in the GCJ-02 step (four fewer trigonometric
+calls per point); a prototype measured 9-25% faster UTM -> GCJ-02 and 0-11% faster GCJ-02 -> UTM (10k points). Not
+provided yet. A `pipe()` helper can be added later without a break.
 
 ## GeoJSON
 
@@ -230,3 +231,7 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
 - The wasm converters' single-point methods run the JavaScript kernel: one point costs more to pass into wasm than to
   compute.
 - Re-entrant calls into a context (from array-like getters) throw; `dispose()` during a call throws.
+- `gcj02` (0.2) is JavaScript only, also in the wasm context. Its 11 sines come from two sin/cos pairs by multiple-angle identities; the inverse
+  takes four fixed-point steps (2e-11°), six near longitude 105°, where the √|x| term slows convergence. Two Newton
+  steps measured no faster and need that term's derivative, which is singular there. `'transform'` mode iterates
+  until converged instead and gives `NaN` where it doesn't.

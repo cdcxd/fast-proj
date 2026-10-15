@@ -12,9 +12,9 @@ Rust/WebAssembly SIMD backend for large batches.
 npm install fast-proj
 ```
 
-| package                           | contents                                                   | docs                                             |
-| --------------------------------- | ---------------------------------------------------------- | ------------------------------------------------ |
-| [`fast-proj`](packages/fast-proj) | UTM and transverse Mercator ↔ WGS84, GeoJSON helpers, wasm | [API](docs/api.md) · [from proj4](docs/proj4.md) |
+| package                           | contents                                                           | docs                                             |
+| --------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------ |
+| [`fast-proj`](packages/fast-proj) | UTM and transverse Mercator ↔ WGS84, GCJ-02, GeoJSON helpers, wasm | [API](docs/api.md) · [from proj4](docs/proj4.md) |
 
 ## Performance
 
@@ -26,6 +26,13 @@ is faster), JavaScript / WebAssembly backend:
 | WGS84 → UTM              | **4.8× / 9.7×** | **3.4× / 4.5×** | **3.6× / 10.4×** |
 | UTM → WGS84              | **4.8× / 8.4×** | **2.7× / 4.5×** |  **3.2× / 8.7×** |
 | UTM → GeoJSON LineString | **4.7× / 7.6×** | **2.7× / 4.4×** |  **3.2× / 8.1×** |
+
+GCJ-02 against **gcoord 1.0.7**, 10,000 points, JavaScript:
+
+| Operation      |   Node 24 |   Bun 1.4 | Chromium 156 |
+| -------------- | --------: | --------: | -----------: |
+| WGS84 → GCJ-02 | **10.9×** | **11.7×** |     **4.9×** |
+| GCJ-02 → WGS84 |  **5.1×** |  **6.2×** |     **3.5×** |
 
 Timings vary with hardware, runtime and dataset. See the [full benchmark and reproduction commands](packages/fast-proj/README.md#benchmark).
 
