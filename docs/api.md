@@ -109,8 +109,9 @@ interface Gcj02Options {
   closed-form inverse; `toWgs84` takes four fixed-point steps, six within 1e-4° of longitude 105° (where the formula
   has a √|x| cusp), and is within 2e-11° (about 2 µm) of the exact inverse. gcoord's inverse stops at about 1e-6°
   (0.1 m), and coordtransform's one-step inverse is off by up to 3e-5° (3 m).
-- **`'transform'` near the poles and the antimeridian.** `toWgs84` iterates until converged and round-trips within
-  4e-12° up to latitude ±89°. Closer to the poles the formula isn't one-to-one: `toWgs84` gives `NaN` or another point
+- **`'transform'` near the poles and the antimeridian.** `toWgs84` iterates until converged. Up to latitude ±89° it
+  round-trips within 1e-11° (longitude errors scaled by the cosine of latitude), except within 1e-4° of longitude
+  105°, where rounding the GCJ-02 coordinates alone moves the exact inverse by up to 1e-10° at ±89°. Closer to the poles the formula isn't one-to-one: `toWgs84` gives `NaN` or another point
   with the same GCJ-02 coordinates, and `fromWgs84` gives `NaN` where the offset would push latitude past ±90°. The
   offset differs at longitudes 180° and −180°; both are treated as 180°.
 - Input longitudes outside [-180, 180] are reduced first; output longitudes are in [-180, 180].

@@ -200,13 +200,33 @@ export function gcj02({ outsideChina = 'passthrough' }: Gcj02Options = {}): Geog
     return step < LOOSE && Math.abs(wy) < 90;
   }
 
+  // A solution just past +-180 is on that side's branch of the formula: snap it to the nearest longitude of the same
+  // branch (180, or the double above -180, since -180 is treated as 180) and keep it only if the forward still hits
+  // the target.
+  function snap(lon: number, lat: number): boolean {
+    const wx = rx > 180 ? 180 : -180 + 2 ** -45;
+    const wy = ry;
+    const x = wx - 105;
+    const y = wy - 35;
+    offset(x, y, Math.sin(x * KX), Math.cos(x * KX), Math.sin(y * KY), Math.cos(y * KY));
+    let dx = Math.abs(wx + ox - lon) % 360;
+    if (dx > 180) dx = 360 - dx;
+    rx = wx;
+    return dx + Math.abs(wy + oy - lat) < LOOSE;
+  }
+
+  function seam(lon: number, lat: number): boolean {
+    if (rx >= -180 && rx <= 180 && rx !== -180) return true;
+    if (Math.abs(Math.abs(rx) - 180) < LOOSE) return snap(lon, lat);
+    return false;
+  }
+
   function toWgs84All(lon: number, lat: number): void {
     let ok = solve(lon, lat);
-    if (ok && rx > 180) ok = solve(lon - 360, lat);
-    else if (ok && rx < -180) ok = solve(lon + 360, lat);
-    // The solution for longitude 180 can round to just past it.
-    if (ok && (rx > 180 || rx <= -180) && Math.abs(Math.abs(rx) - 180) < LOOSE) rx = 180;
-    if (!ok || rx > 180 || rx < -180) {
+    if (ok && !seam(lon, lat)) {
+      ok = solve(rx > 0 ? lon - 360 : lon + 360, lat) && seam(lon, lat);
+    }
+    if (!ok) {
       rx = NaN;
       ry = NaN;
     }

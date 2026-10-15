@@ -105,13 +105,27 @@ describe('gcj02', () => {
     const t = gcj02({ outsideChina: 'transform' });
     expect(t.fromWgs84Point(-180, 30)).toEqual(t.fromWgs84Point(180, 30));
     for (const lat of [-75, -30, 0, 30, 60, 88]) {
-      for (const lon of [180, 179.9999, -179.9999, 179.5, -179.5]) {
+      for (const lon of [180, 179.9999, -179.9999, 179.5, -179.5, 180 - 2 ** -45, -180 + 2 ** -45, -180 + 2 ** -44]) {
         const [gl, gp] = t.fromWgs84Point(lon, lat);
         const [l, p] = t.toWgs84Point(gl, gp);
         expect(Math.abs(l - lon) * cosd(lat)).toBeLessThan(1e-11);
         expect(Math.abs(p - lat)).toBeLessThan(1e-11);
       }
     }
+  });
+
+  it("round-trips within 1e-11 degrees up to latitude 89 with outsideChina: 'transform'", () => {
+    const t = gcj02({ outsideChina: 'transform' });
+    let max = 0;
+    for (let lat = -89; lat <= 89; lat += 0.73) {
+      for (let lon = -180; lon <= 180; lon += 3.7) {
+        const [gl, gp] = t.fromWgs84Point(lon, lat);
+        const [l, p] = t.toWgs84Point(gl, gp);
+        const d = Math.abs(l - lon) % 360;
+        max = Math.max(max, Math.min(d, 360 - d) * cosd(lat), Math.abs(p - lat));
+      }
+    }
+    expect(max).toBeLessThan(1e-11);
   });
 
   it("gives valid coordinates or NaN near the poles with outsideChina: 'transform'", () => {
