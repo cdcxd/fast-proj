@@ -1,8 +1,16 @@
 # fast-proj
 
+[![npm](https://img.shields.io/npm/v/fast-proj)](https://www.npmjs.com/package/fast-proj)
+[![CI](https://github.com/cdcxd/fast-proj/actions/workflows/ci.yml/badge.svg)](https://github.com/cdcxd/fast-proj/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/fast-proj)](LICENSE)
+
 Fast coordinate conversions for JavaScript and TypeScript. Optimized arithmetic and typed-array batching support
 reusable output buffers and in-place conversion, with no per-point allocations in the batch APIs, and an optional
 Rust/WebAssembly SIMD backend for large batches.
+
+```sh
+npm install fast-proj
+```
 
 | package                           | contents                                                   | docs                                             |
 | --------------------------------- | ---------------------------------------------------------- | ------------------------------------------------ |
