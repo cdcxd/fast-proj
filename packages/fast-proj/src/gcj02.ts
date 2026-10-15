@@ -26,6 +26,10 @@ const C35 = Math.cos(35 * KY);
 const KLAT = 180 / (A * (1 - EE) * Math.PI);
 const KLON = 180 / (A * Math.PI);
 const STEPS = 4;
+const LON_MIN = 72.004;
+const LON_MAX = 137.8347;
+const LAT_MIN = 0.8293;
+const LAT_MAX = 55.8271;
 
 function reduce(lon: number): number {
   lon %= 360;
@@ -118,7 +122,7 @@ export function gcj02({ outsideChina = 'passthrough' }: Gcj02Options = {}): Geog
   }
 
   function inDomain(lon: number, lat: number): boolean {
-    return all ? lat > -90 && lat < 90 : lon >= 72.004 && lon <= 137.8347 && lat >= 0.8293 && lat <= 55.8271;
+    return all ? lat > -90 && lat < 90 : lon >= LON_MIN && lon <= LON_MAX && lat >= LAT_MIN && lat <= LAT_MAX;
   }
 
   function fromWgs84(lon: number, lat: number): void {

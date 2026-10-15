@@ -159,8 +159,9 @@ g.fromWgs84Interleaved(buf, buf); // WGS84 -> GCJ-02, in place
 map.getSource('track').setData(lineString(buf));
 ```
 
-A single fused UTM -> GCJ-02 loop measured no faster than two passes (Node and Chromium, 10k points), because the steps
-share no expensive intermediate values. A `pipe()` helper can be added later without a break.
+A fused UTM <-> GCJ-02 loop can reuse the tmerc step's sines and cosines in the GCJ-02 step (four fewer trigonometric
+calls per point); a prototype measured 9-25% faster UTM -> GCJ-02 and 0-11% faster GCJ-02 -> UTM (10k points). Not
+provided yet. A `pipe()` helper can be added later without a break.
 
 ## GeoJSON
 

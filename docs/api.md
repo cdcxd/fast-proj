@@ -112,6 +112,8 @@ interface Gcj02Options {
   poles (3e-7° at ±85°).
 - Input longitudes outside [-180, 180] are reduced first; output longitudes are in [-180, 180].
 
+## Converter methods
+
 Every `Projection` has the methods below. A `GeographicTransform` has the same set with lon/lat on both sides:
 `toWgs84(lon, lat, outLon?, outLat?)`, `fromWgs84(...)`, `toWgs84Interleaved(lonlat, out?)`, `fromWgs84Interleaved`,
 `toWgs84Point(lon, lat)` and `fromWgs84Point`.
@@ -276,7 +278,8 @@ zone50.toLonLatInterleaved(buf, buf); // UTM 50N -> WGS84
 gcj.fromWgs84Interleaved(buf, buf); // WGS84 -> GCJ-02, for an AMap basemap
 ```
 
-A fused single loop measured no faster than two passes: the steps share no expensive intermediate values.
+For two projections, a fused single loop measured no faster than two passes: the steps share no expensive
+intermediate values.
 
 ## Examples
 
