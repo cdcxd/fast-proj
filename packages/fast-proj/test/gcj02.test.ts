@@ -235,6 +235,22 @@ describe.each(backends)('$name backend gcj02 batch', ({ gcj02: make }) => {
     expect(batchError(lon.slice(1), lat.slice(1))).toBeLessThan(6e-14);
   });
 
+  it('decides the extra inverse steps like the point form at the edge of the 105 band', () => {
+    // GCJ-02 longitudes whose third iterate lands about 1e-4 from 105, finely spaced across that edge.
+    const lon: number[] = [];
+    const lat: number[] = [];
+    for (const p of [5, 25, 45]) {
+      for (const side of [-1e-4, 1e-4]) {
+        const c = ref.fromWgs84Point(105 + side, p)[0];
+        for (let k = -200; k <= 200; k++) {
+          lon.push(c + k * 2e-13);
+          lat.push(p);
+        }
+      }
+    }
+    expect(batchError(lon, lat)).toBeLessThan(6e-14);
+  });
+
   it('passes through, reduces and propagates like the point form', () => {
     expect(
       batchError(

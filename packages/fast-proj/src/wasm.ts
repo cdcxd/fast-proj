@@ -47,12 +47,15 @@ export interface WasmContext extends WasmDisposable {
   gcj02(options?: Gcj02Options): GeographicTransform & WasmDisposable;
 }
 
+// lon0, k0, falseEasting, falseNorthing, a, f
+type TmParams = [number, number, number, number, number, number];
+
 interface Exports {
   memory: WebAssembly.Memory;
   alloc(n: number): number;
   simd_enabled(): number;
-  tm_forward_batch(...args: number[]): void;
-  tm_inverse_batch(...args: number[]): void;
+  tm_forward_batch(lon: number, lat: number, x: number, y: number, n: number, ...params: TmParams): void;
+  tm_inverse_batch(x: number, y: number, lon: number, lat: number, n: number, ...params: TmParams): void;
   // Absent from builds without simd128 and from modules older than 0.2.1.
   gcj_forward_batch?(lon: number, lat: number, outLon: number, outLat: number, n: number): void;
   gcj_inverse_batch?(lon: number, lat: number, outLon: number, outLat: number, n: number): void;
@@ -288,7 +291,7 @@ function wasmContext(exports: Exports, backend: WasmBackend): WasmContext {
     }
   }
 
-  function build<T extends TransverseMercator>(js: T): T & WasmDisposable {
+  function buildTmerc<T extends TransverseMercator>(js: T): T & WasmDisposable {
     const { lon0, k0, falseEasting, falseNorthing } = js;
     const { a, f } = js.ellipsoid;
     let closed = false;
@@ -414,11 +417,11 @@ function wasmContext(exports: Exports, backend: WasmBackend): WasmContext {
     backend,
     tmerc: (o) => {
       if (!e) throw new Error('fast-proj: context used after dispose()');
-      return build(jsTmerc(o));
+      return buildTmerc(jsTmerc(o));
     },
     utm: (o) => {
       if (!e) throw new Error('fast-proj: context used after dispose()');
-      return build(jsUtm(o));
+      return buildTmerc(jsUtm(o));
     },
     gcj02: (o) => {
       if (!e) throw new Error('fast-proj: context used after dispose()');

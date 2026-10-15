@@ -231,9 +231,10 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
 - The wasm converters' single-point methods run the JavaScript kernel: one point costs more to pass into wasm than to
   compute.
 - Re-entrant calls into a context (from array-like getters) throw; `dispose()` during a call throws.
-- `gcj02` (0.2) has a wasm kernel since 0.2.1, for `'passthrough'` mode (`gcj_forward_batch` / `gcj_inverse_batch`,
-  SIMD build only, so other modules fall back to JavaScript). Its 11 sines come from two sin/cos pairs by multiple-angle identities; the inverse
-  takes four fixed-point steps (2e-11°), six near longitude 105°, where the √|x| term slows convergence. Two Newton
-  steps measured no faster and need that term's derivative, which is singular there. `'transform'` mode iterates
-  until converged instead and gives `NaN` where it doesn't. That per-point step count doesn't fit the fixed-step f64x2 kernel, so it stays JavaScript;
-  the kernel masks the extra steps near 105° per lane, so each point takes the steps the JavaScript loop would.
+- `gcj02` (0.2) has a wasm kernel since 0.2.1, for `'passthrough'` mode (`gcj_forward_batch` / `gcj_inverse_batch`, SIMD
+  build only, so other modules fall back to JavaScript). Its 11 sines come from two sin/cos pairs by multiple-angle
+  identities; the inverse takes four fixed-point steps (2e-11°), six near longitude 105°, where the √|x| term slows
+  convergence. Two Newton steps measured no faster and need that term's derivative, which is singular there.
+  `'transform'` mode iterates until converged instead and gives `NaN` where it doesn't. That per-point step count
+  doesn't fit the fixed-step f64x2 kernel, so it stays JavaScript; the kernel masks the extra steps near 105° per lane,
+  so each point takes the steps the JavaScript loop would.

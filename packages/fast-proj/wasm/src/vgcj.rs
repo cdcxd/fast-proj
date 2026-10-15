@@ -9,9 +9,8 @@
 use crate::gcj::*;
 use crate::kernel::reduce_lon;
 use core::arch::wasm32::{
-    f64x2, f64x2_abs, f64x2_add, f64x2_div, f64x2_extract_lane, f64x2_ge, f64x2_gt, f64x2_le,
-    f64x2_lt, f64x2_mul, f64x2_splat, f64x2_sqrt, f64x2_sub, v128, v128_and, v128_any_true,
-    v128_bitselect, v128_or,
+    f64x2, f64x2_abs, f64x2_add, f64x2_div, f64x2_extract_lane, f64x2_ge, f64x2_gt, f64x2_le, f64x2_lt, f64x2_mul,
+    f64x2_splat, f64x2_sqrt, f64x2_sub, v128, v128_and, v128_any_true, v128_bitselect, v128_or,
 };
 
 use crate::simd::{load_pair, store_pair, vsincos};
@@ -125,37 +124,28 @@ fn offset(x: v128, y: v128, s1: v128, c1: v128, u1: v128, v1: v128) -> (v128, v1
     )
 }
 
-/// Reduces lanes outside [-180, 180] by the scalar fmod (rare), and returns the box mask.
+/// Loads a pair, reduces lanes outside [-180, 180] by the scalar fmod (rare), and returns the box mask.
 #[inline]
-fn prepare(mut lon: v128, lat: v128) -> (v128, v128) {
-    if v128_any_true(v128_or(
-        f64x2_gt(lon, spl(180.0)),
-        f64x2_lt(lon, spl(-180.0)),
-    )) {
+fn prepare(lon: &[f64], lat: &[f64], i: usize) -> (v128, v128, v128) {
+    let mut lon = load_pair(lon, i);
+    let lat = load_pair(lat, i);
+    if v128_any_true(v128_or(f64x2_gt(lon, spl(180.0)), f64x2_lt(lon, spl(-180.0)))) {
         let r = |l: f64| {
-            if l > 180.0 || l < -180.0 {
-                reduce_lon(l)
-            } else {
-                l
-            }
+            if l > 180.0 || l < -180.0 { reduce_lon(l) } else { l }
         };
-        lon = f64x2(
-            r(f64x2_extract_lane::<0>(lon)),
-            r(f64x2_extract_lane::<1>(lon)),
-        );
+        lon = f64x2(r(f64x2_extract_lane::<0>(lon)), r(f64x2_extract_lane::<1>(lon)));
     }
     let inbox = v128_and(
         v128_and(f64x2_ge(lon, spl(LON_MIN)), f64x2_le(lon, spl(LON_MAX))),
         v128_and(f64x2_ge(lat, spl(LAT_MIN)), f64x2_le(lat, spl(LAT_MAX))),
     );
-    (lon, inbox)
+    (lon, lat, inbox)
 }
 
 pub fn forward_batch(lon: &[f64], lat: &[f64], olon: &mut [f64], olat: &mut [f64]) {
     let mut i = 0;
     while i < lon.len() {
-        let (l, inbox) = prepare(load_pair(lon, i), load_pair(lat, i));
-        let p = load_pair(lat, i);
+        let (l, p, inbox) = prepare(lon, lat, i);
         if !v128_any_true(inbox) {
             store_pair(l, olon, i);
             store_pair(p, olat, i);
@@ -225,8 +215,7 @@ fn near_cusp(w: &W) -> v128 {
 pub fn inverse_batch(lon: &[f64], lat: &[f64], olon: &mut [f64], olat: &mut [f64]) {
     let mut i = 0;
     while i < lon.len() {
-        let (l, inbox) = prepare(load_pair(lon, i), load_pair(lat, i));
-        let p = load_pair(lat, i);
+        let (l, p, inbox) = prepare(lon, lat, i);
         if !v128_any_true(inbox) {
             store_pair(l, olon, i);
             store_pair(p, olat, i);

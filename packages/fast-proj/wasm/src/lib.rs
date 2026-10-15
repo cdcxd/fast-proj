@@ -4,8 +4,8 @@
 //! Layout: `math` (coefficients/constants + libm scalar wrappers), `simd`
 //! (f64x2 vector math, +simd128 only), `kernel` (UTM series + scalar
 //! kernel), `vkernel` (f64x2 kernel, +simd128 only), `gcj` (GCJ-02 constants
-//! + scalar reference), `vgcj` (f64x2 GCJ-02 kernel, +simd128 only), `alloc`
-//! (bump arena).
+//! and scalar reference), `vgcj` (f64x2 GCJ-02 kernel, +simd128 only),
+//! `alloc` (bump arena).
 #![cfg_attr(not(test), no_std)]
 #![allow(static_mut_refs)]
 

@@ -105,6 +105,11 @@ describe('loadWasm', () => {
     expect(max).toBeLessThan(5e-9);
   });
 
+  it('ships the wasm gcj02 kernel', async () => {
+    const names = WebAssembly.Module.exports(await WebAssembly.compile(readFileSync(url))).map((e) => e.name);
+    expect(names).toEqual(expect.arrayContaining(['gcj_forward_batch', 'gcj_inverse_batch']));
+  });
+
   it('runs the JavaScript gcj02 kernel for modules without the wasm one', async () => {
     const module = await WebAssembly.compile(readFileSync(url));
     const instantiate = WebAssembly.instantiate;
@@ -171,11 +176,16 @@ describe('dispose', () => {
     expect(h.fromWgs84([0, 116.391], [0, 39.907])).toEqual(
       gcj02({ outsideChina: 'transform' }).fromWgs84([0, 116.391], [0, 39.907]),
     );
+    const k = ctx.gcj02();
     g.dispose();
     expect(() => g.toWgs84Point(116, 39)).toThrow(/dispose/);
+    expect(() => g.toWgs84([116], [39])).toThrow(/dispose/);
+    expect(() => g.fromWgs84Interleaved([116, 39])).toThrow(/dispose/);
+    expect(k.toWgs84([116], [39]).lon[0]).toBeCloseTo(116, 1);
     expect(h.toWgs84Point(116, 39)[0]).toBeCloseTo(116, 1);
     ctx.dispose();
     expect(() => h.toWgs84([116], [39])).toThrow(/dispose/);
+    expect(() => k.toWgs84([116], [39])).toThrow(/dispose/);
     expect(() => ctx.gcj02()).toThrow(/dispose/);
   });
 
