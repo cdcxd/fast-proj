@@ -1,7 +1,7 @@
 name: Release
 
 # Push a tag like `v0.1.0` to stage packages/fast-proj via npm trusted publishing (OIDC; no token),
-# then approve it on npmjs.com or with `npm stage approve`.
+# then approve it on npmjs.com or with `npm stage approve`. Also creates the GitHub release from CHANGELOG.md.
 on:
   push:
     tags: ['v*']
@@ -43,3 +43,20 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: npm stage publish --provenance --access public
         working-directory: packages/fast-proj
+
+  # Separate job: the publish job runs the dev dependencies and shouldn't hold a write token.
+  github-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create GitHub release from CHANGELOG.md
+        run: |
+          awk -v v="## ${GITHUB_REF_NAME#v}" '$0 == v || index($0, v " ") == 1 {f = 1; next} /^## / {f = 0} f' \
+            packages/fast-proj/CHANGELOG.md > notes.md
+          test -s notes.md
+          gh release create "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag
+        env:
+          GH_TOKEN: ${{ github.token }}
