@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
+
+### Minor Changes
 
 - `gcj02()`: WGS84 ↔ GCJ-02 for maps of China, with an `outsideChina` option. The inverse is accurate to 2e-11°.
   Against gcoord 1.0.7 it is 4.9–11.7× faster forward and 3.5–6.2× faster inverse (Node, Bun, Chromium).

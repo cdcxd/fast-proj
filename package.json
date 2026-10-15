@@ -13,9 +13,12 @@
     "lint": "oxlint --deny-warnings",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "check": "bun run format:check && bun run lint && bun run typecheck && bun run build && bun run test"
+    "check": "bun run format:check && bun run lint && bun run typecheck && bun run build && bun run test",
+    "changeset": "changeset",
+    "version-packages": "changeset version && bun install && oxfmt"
   },
   "devDependencies": {
+    "@changesets/cli": "^3.0.3",
     "@types/node": "^26.6.5",
     "coordtransform": "^2.1.2",
     "gcoord": "^1.0.7",

@@ -12,9 +12,9 @@ Rust/WebAssembly SIMD backend for large batches.
 npm install fast-proj
 ```
 
-| package                           | contents                                                           | docs                                             |
-| --------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------ |
-| [`fast-proj`](packages/fast-proj) | UTM and transverse Mercator ↔ WGS84, GCJ-02, GeoJSON helpers, wasm | [API](docs/api.md) · [from proj4](docs/proj4.md) |
+| package                           | contents                                                           | docs                                                                                            |
+| --------------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| [`fast-proj`](packages/fast-proj) | UTM and transverse Mercator ↔ WGS84, GCJ-02, GeoJSON helpers, wasm | [API](docs/api.md) · [from proj4](docs/proj4.md) · [changelog](packages/fast-proj/CHANGELOG.md) |
 
 ## Performance
 
@@ -45,7 +45,10 @@ wasm build; `rustup target add wasm32-unknown-unknown`). A devcontainer is inclu
 bun install
 bun run check    # format, lint, typecheck, build (TS + wasm), test
 cd packages/fast-proj && bun run bench    # Node, Bun and Chromium
+bun changeset    # describe a user-facing change for the CHANGELOG
 ```
+
+Releases: see [`.changeset/README.md`](.changeset/README.md).
 
 ## License
 
