@@ -3,8 +3,8 @@
  * formula on the Krasovsky ellipsoid, as in gcoord and coordtransform.
  *
  * The 11 sines of the formula come from two sin/cos pairs, sin(x pi/60) and sin(y pi/180), by multiple-angle
- * identities. The inverse has no closed form; four fixed-point steps w = g - offset(w) converge to ~1e-11 degrees, and
- * after the first step the two pairs are rotated by the step rather than recomputed.
+ * identities. The inverse has no closed form; four fixed-point steps w = g - offset(w) (six near longitude 105)
+ * converge to ~1e-11 degrees, and after the first step the two pairs are rotated by the step rather than recomputed.
  */
 import { checkEven, checkOut } from './checks.js';
 import type { GeographicTransform } from './types.js';
@@ -26,6 +26,13 @@ const C35 = Math.cos(35 * KY);
 const KLAT = 180 / (A * (1 - EE) * Math.PI);
 const KLON = 180 / (A * Math.PI);
 const STEPS = 4;
+// Near longitude 105 the sqrt(|x|) term slows the fixed-point iteration down; take extra steps there.
+const CUSP = 1e-4;
+const CUSP_STEPS = 6;
+// 'transform' mode iterates until a step is below TOL degrees, and gives NaN if none is below LOOSE.
+const MAX_STEPS = 20;
+const TOL = 1e-10;
+const LOOSE = 1e-9;
 const LON_MIN = 72.004;
 const LON_MAX = 137.8347;
 const LAT_MIN = 0.8293;
@@ -33,12 +40,6 @@ const LAT_MAX = 55.8271;
 
 function reduce(lon: number): number {
   lon %= 360;
-  if (lon > 180) return lon - 360;
-  if (lon < -180) return lon + 360;
-  return lon;
-}
-
-function wrap(lon: number): number {
   if (lon > 180) return lon - 360;
   if (lon < -180) return lon + 360;
   return lon;
@@ -132,39 +133,41 @@ export function gcj02({ outsideChina = 'passthrough' }: Gcj02Options = {}): Geog
       ry = all ? NaN : lat;
       return;
     }
+    // The offset differs at longitudes 180 and -180; use 180 for both.
+    if (lon === -180) lon = 180;
     const x = lon - 105;
     const y = lat - 35;
     offset(x, y, Math.sin(x * KX), Math.cos(x * KX), Math.sin(y * KY), Math.cos(y * KY));
-    rx = wrap(lon + ox);
-    ry = lat + oy;
-  }
-
-  function toWgs84(lon: number, lat: number): void {
-    if (lon > 180 || lon < -180) lon = reduce(lon);
-    if (!inDomain(lon, lat)) {
-      rx = all ? NaN : lon;
-      ry = all ? NaN : lat;
+    if (!all) {
+      rx = lon + ox;
+      ry = lat + oy;
       return;
     }
-    let s = Math.sin((lon - 105) * KX);
-    let c = Math.cos((lon - 105) * KX);
-    let u = Math.sin((lat - 35) * KY);
-    let v = Math.cos((lat - 35) * KY);
+    // Near the poles the offset can exceed a turn of longitude or push latitude past 90.
+    ry = lat + oy;
+    if (Math.abs(ry) <= 90) {
+      rx = reduce(lon + ox);
+    } else {
+      rx = NaN;
+      ry = NaN;
+    }
+  }
+
+  // 'transform' mode. The offset is not periodic in longitude, so iterate without wrapping and, if the solution falls
+  // outside [-180, 180] where the forward is defined, solve again for the target a turn away. Gives NaN if a
+  // solution isn't found.
+  function solve(lon: number, lat: number): boolean {
     let wx = lon;
     let wy = lat;
-    offset(wx - 105, wy - 35, s, c, u, v);
-    for (let k = 1; k < STEPS; k++) {
-      const nx = lon - ox;
-      const ny = lat - oy;
-      // Rotate the sines by the step instead of recomputing them; inside the China box a step is below 6e-4 rad.
-      const d = (nx - wx) * KX;
-      const e = (ny - wy) * KY;
-      if (all && !(Math.abs(d) < 1e-3 && Math.abs(e) < 1e-3)) {
-        s = Math.sin((nx - 105) * KX);
-        c = Math.cos((nx - 105) * KX);
-        u = Math.sin((ny - 35) * KY);
-        v = Math.cos((ny - 35) * KY);
-      } else {
+    let s = 0;
+    let c = 0;
+    let u = 0;
+    let v = 0;
+    let d = Infinity;
+    let e = Infinity;
+    let step = Infinity;
+    for (let k = 0; k < MAX_STEPS && !(step < TOL); k++) {
+      if (Math.abs(d) < 1e-3 && Math.abs(e) < 1e-3) {
         const d2 = d * d;
         const e2 = e * e;
         const sd = d * (1 - d2 / 6);
@@ -177,12 +180,76 @@ export function gcj02({ outsideChina = 'passthrough' }: Gcj02Options = {}): Geog
         c = c * cd - s0 * sd;
         u = u0 * ce + v * se;
         v = v * ce - u0 * se;
+      } else {
+        s = Math.sin((wx - 105) * KX);
+        c = Math.cos((wx - 105) * KX);
+        u = Math.sin((wy - 35) * KY);
+        v = Math.cos((wy - 35) * KY);
       }
+      offset(wx - 105, wy - 35, s, c, u, v);
+      const nx = lon - ox;
+      const ny = lat - oy;
+      d = (nx - wx) * KX;
+      e = (ny - wy) * KY;
+      step = Math.abs(nx - wx) + Math.abs(ny - wy);
+      wx = nx;
+      wy = ny;
+    }
+    rx = wx;
+    ry = wy;
+    return step < LOOSE && Math.abs(wy) < 90;
+  }
+
+  function toWgs84All(lon: number, lat: number): void {
+    let ok = solve(lon, lat);
+    if (ok && rx > 180) ok = solve(lon - 360, lat);
+    else if (ok && rx < -180) ok = solve(lon + 360, lat);
+    // The solution for longitude 180 can round to just past it.
+    if (ok && (rx > 180 || rx <= -180) && Math.abs(Math.abs(rx) - 180) < LOOSE) rx = 180;
+    if (!ok || rx > 180 || rx < -180) {
+      rx = NaN;
+      ry = NaN;
+    }
+  }
+
+  function toWgs84(lon: number, lat: number): void {
+    if (lon > 180 || lon < -180) lon = reduce(lon);
+    if (!inDomain(lon, lat)) {
+      rx = all ? NaN : lon;
+      ry = all ? NaN : lat;
+      return;
+    }
+    if (all) return toWgs84All(lon, lat);
+    let s = Math.sin((lon - 105) * KX);
+    let c = Math.cos((lon - 105) * KX);
+    let u = Math.sin((lat - 35) * KY);
+    let v = Math.cos((lat - 35) * KY);
+    let wx = lon;
+    let wy = lat;
+    offset(wx - 105, wy - 35, s, c, u, v);
+    for (let k = 1; k < STEPS || (k < CUSP_STEPS && Math.abs(wx - 105) < CUSP); k++) {
+      const nx = lon - ox;
+      const ny = lat - oy;
+      // Rotate the sines by the step instead of recomputing them; inside the China box a step is below 6e-4 rad.
+      const d = (nx - wx) * KX;
+      const e = (ny - wy) * KY;
+      const d2 = d * d;
+      const e2 = e * e;
+      const sd = d * (1 - d2 / 6);
+      const cd = 1 - d2 * (0.5 - d2 / 24);
+      const se = e * (1 - e2 / 6);
+      const ce = 1 - e2 * (0.5 - e2 / 24);
+      const s0 = s;
+      const u0 = u;
+      s = s0 * cd + c * sd;
+      c = c * cd - s0 * sd;
+      u = u0 * ce + v * se;
+      v = v * ce - u0 * se;
       wx = nx;
       wy = ny;
       offset(wx - 105, wy - 35, s, c, u, v);
     }
-    rx = wrap(lon - ox);
+    rx = lon - ox;
     ry = lat - oy;
   }
 

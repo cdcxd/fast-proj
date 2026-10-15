@@ -19,6 +19,7 @@ describe('gcj02', () => {
   const g = gcj02();
 
   it('matches the 40-digit reference', () => {
+    // Against the references rounded to doubles: fromWgs84 is correctly rounded at all but one coordinate.
     expect(maxError(fixture.fromWgs84, g.fromWgs84Point)).toBeLessThan(3e-16);
     expect(maxError(fixture.toWgs84, g.toWgs84Point)).toBeLessThan(2e-11);
   });
@@ -98,6 +99,33 @@ describe('gcj02', () => {
     expect(t.fromWgs84Point(116, 39.9)).toEqual(g.fromWgs84Point(116, 39.9));
     expect(t.fromWgs84Point(0, 90)).toEqual([NaN, NaN]);
     expect(t.toWgs84Point(0, -90)).toEqual([NaN, NaN]);
+  });
+
+  it("round-trips across the antimeridian with outsideChina: 'transform'", () => {
+    const t = gcj02({ outsideChina: 'transform' });
+    expect(t.fromWgs84Point(-180, 30)).toEqual(t.fromWgs84Point(180, 30));
+    for (const lat of [-75, -30, 0, 30, 60, 88]) {
+      for (const lon of [180, 179.9999, -179.9999, 179.5, -179.5]) {
+        const [gl, gp] = t.fromWgs84Point(lon, lat);
+        const [l, p] = t.toWgs84Point(gl, gp);
+        expect(Math.abs(l - lon) * cosd(lat)).toBeLessThan(1e-11);
+        expect(Math.abs(p - lat)).toBeLessThan(1e-11);
+      }
+    }
+  });
+
+  it("gives valid coordinates or NaN near the poles with outsideChina: 'transform'", () => {
+    const t = gcj02({ outsideChina: 'transform' });
+    for (const lat of [89.9, 89.99, 89.999, -89.999]) {
+      for (let lon = -180; lon <= 180; lon += 7.5) {
+        for (const [l, p] of [t.fromWgs84Point(lon, lat), t.toWgs84Point(lon, lat)]) {
+          const valid = Math.abs(l) <= 180 && Math.abs(p) <= 90;
+          const nan = Number.isNaN(l) && Number.isNaN(p);
+          expect(valid || nan).toBe(true);
+        }
+      }
+    }
+    expect(t.fromWgs84Point(105, 89.999)).toEqual([NaN, NaN]);
   });
 
   it('reduces input longitudes and keeps output in [-180, 180]', () => {

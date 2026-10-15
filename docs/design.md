@@ -232,5 +232,6 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
   compute.
 - Re-entrant calls into a context (from array-like getters) throw; `dispose()` during a call throws.
 - `gcj02` (0.2) is JavaScript only, also in the wasm context. Its 11 sines come from two sin/cos pairs by multiple-angle identities; the inverse
-  takes four fixed-point steps (2e-11°). Two Newton steps measured no faster and need the √|x| term's derivative,
-  which is singular at longitude 105°.
+  takes four fixed-point steps (2e-11°), six near longitude 105°, where the √|x| term slows convergence. Two Newton
+  steps measured no faster and need that term's derivative, which is singular there. `'transform'` mode iterates
+  until converged instead and gives `NaN` where it doesn't.

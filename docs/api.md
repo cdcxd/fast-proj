@@ -103,13 +103,16 @@ interface Gcj02Options {
 ```
 
 - **Outside China.** With `'passthrough'`, points outside the box longitude 72.004–137.8347, latitude 0.8293–55.8271
-  (the box gcoord uses) are returned unchanged. With `'transform'`, the offset is applied everywhere, and latitudes
-  of ±90° or beyond give `NaN`. Throws `RangeError` for any other value.
-- **Accuracy.** `fromWgs84` matches a 40-digit evaluation of the formula within 3e-16°. The formula has no closed-form
-  inverse; `toWgs84` takes four fixed-point steps and is within 2e-11° (about 2 µm) of the exact inverse. gcoord's
-  inverse stops at about 1e-6° (0.1 m), and coordtransform's one-step inverse is off by up to 3e-5° (3 m). With
-  `'transform'` the inverse is within 1e-10° up to latitude ±45° anywhere, 1e-9° up to ±70°, and degrades towards the
-  poles (3e-7° at ±85°).
+  (the box gcoord uses) are returned unchanged. With `'transform'`, the offset is applied everywhere; see below for
+  the poles and the antimeridian. Throws `RangeError` for any other value.
+- **Accuracy.** `fromWgs84` is within one ulp (1.6e-14°) of a 40-digit evaluation of the formula. The formula has no
+  closed-form inverse; `toWgs84` takes four fixed-point steps, six within 1e-4° of longitude 105° (where the formula
+  has a √|x| cusp), and is within 2e-11° (about 2 µm) of the exact inverse. gcoord's inverse stops at about 1e-6°
+  (0.1 m), and coordtransform's one-step inverse is off by up to 3e-5° (3 m).
+- **`'transform'` near the poles and the antimeridian.** `toWgs84` iterates until converged and round-trips within
+  4e-12° up to latitude ±89°. Closer to the poles the formula isn't one-to-one: `toWgs84` gives `NaN` or another point
+  with the same GCJ-02 coordinates, and `fromWgs84` gives `NaN` where the offset would push latitude past ±90°. The
+  offset differs at longitudes 180° and −180°; both are treated as 180°.
 - Input longitudes outside [-180, 180] are reduced first; output longitudes are in [-180, 180].
 
 ## Converter methods

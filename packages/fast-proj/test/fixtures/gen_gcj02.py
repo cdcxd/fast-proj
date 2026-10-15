@@ -1,7 +1,8 @@
 """Generate high-precision GCJ-02 reference points.
 
 The published WGS84 -> GCJ-02 offset formula (Krasovsky a, e^2) evaluated at 40 digits with exact pi; the inverse
-solves it with findroot. Inputs are doubles, given exactly.
+iterates it to convergence. Near longitude 105, where the sqrt(|x|) term stalls that iteration, the inverse instead
+runs Newton on each side of the cusp in t = sqrt(|x|). Inputs are doubles, given exactly.
 
 Usage: python gen_gcj02.py > gcj02.json   (requires mpmath)
 """
@@ -9,18 +10,20 @@ Usage: python gen_gcj02.py > gcj02.json   (requires mpmath)
 import json
 import random
 
-from mpmath import cos, findroot, matrix, mp, mpf, pi, sin, sqrt
+from mpmath import cos, findroot, mp, mpf, pi, sin, sqrt
 
 mp.dps = 40
 a = mpf(6378245)
 ee = mpf("0.00669342162296594323")
 
 
-def offset(lon, lat):
+def offset(lon, lat, r=None):
     x = lon - 105
     y = lat - 35
-    dlat = -100 + 2 * x + 3 * y + mpf("0.2") * y * y + mpf("0.1") * x * y + mpf("0.2") * sqrt(abs(x))
-    dlon = 300 + x + 2 * y + mpf("0.1") * x * x + mpf("0.1") * x * y + mpf("0.1") * sqrt(abs(x))
+    if r is None:
+        r = sqrt(abs(x))
+    dlat = -100 + 2 * x + 3 * y + mpf("0.2") * y * y + mpf("0.1") * x * y + mpf("0.2") * r
+    dlon = 300 + x + 2 * y + mpf("0.1") * x * x + mpf("0.1") * x * y + mpf("0.1") * r
     common = (20 * sin(6 * x * pi) + 20 * sin(2 * x * pi)) * 2 / 3
     dlat += common + (20 * sin(y * pi) + 40 * sin(y / 3 * pi)) * 2 / 3
     dlat += (160 * sin(y / 12 * pi) + 320 * sin(y * pi / 30)) * 2 / 3
@@ -50,6 +53,27 @@ def inverse(glon, glat):
     raise RuntimeError("no convergence")
 
 
+def inverse_cusp(glon, glat):
+    best = None
+    with mp.workdps(60):
+        for s in (1, -1):
+
+            def f(t, lat):
+                lon = 105 + s * t * t
+                d = offset(lon, lat, t)
+                return [lon + d[0] - glon, lat + d[1] - glat]
+
+            for t0 in (mpf("0.01"), mpf("1e-4"), mpf("1e-6")):
+                t, lat = findroot(f, (t0, glat - mpf("0.001")), tol=mpf(10) ** -100, verify=False, maxsteps=40)
+                r = f(t, lat)
+                res = abs(r[0]) + abs(r[1])
+                if t >= 0 and res < mpf(10) ** -45 and (best is None or res < best[0]):
+                    best = (res, 105 + s * t * t, lat)
+    if best is None:
+        raise RuntimeError("no convergence")
+    return [best[1], best[2]]
+
+
 random.seed(2026)
 inputs = []
 for i in range(14):
@@ -75,5 +99,14 @@ for lon, lat in inputs:
     fwd.append([lon, lat, s(g[0]), s(g[1])])
     w = inverse(mpf(lon), mpf(lat))
     inv.append([lon, lat, s(w[0]), s(w[1])])
+
+# GCJ-02 points whose exact inverse lies within 1e-15 to 1e-1 degrees of longitude 105
+for e in range(-15, 0, 2):
+    for sgn in (1, -1):
+        for lat in (1.0, 35.0, 55.8):
+            g = forward(mpf(105.0 + sgn * 10.0**e * random.uniform(1, 9)), mpf(lat))
+            gl, ga = float(g[0]), float(g[1])
+            w = inverse_cusp(mpf(gl), mpf(ga))
+            inv.append([gl, ga, s(w[0]), s(w[1])])
 
 print(json.dumps({"fromWgs84": fwd, "toWgs84": inv}))
