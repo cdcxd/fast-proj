@@ -1,3 +1,15 @@
+function time(fn, runs, reps) {
+  for (let i = 0; i < 10; i++) fn();
+  const t = [];
+  for (let i = 0; i < runs; i++) {
+    const s = performance.now();
+    for (let r = 0; r < reps; r++) fn();
+    t.push((performance.now() - s) / reps);
+  }
+  t.sort((x, y) => x - y);
+  return t[runs >> 1];
+}
+
 // `backends` maps a column name to a `utm` factory, e.g. { js: utm, wasm: ctx.utm }.
 export function runCases(proj4, backends, lineString, { n = 10000, runs = 31, reps = 5 } = {}) {
   const xs = new Float64Array(n);
@@ -51,24 +63,69 @@ export function runCases(proj4, backends, lineString, { n = 10000, runs = 31, re
     ],
   ];
 
-  function time(fn) {
-    for (let i = 0; i < 10; i++) fn();
-    const t = [];
-    for (let i = 0; i < runs; i++) {
-      const s = performance.now();
-      for (let r = 0; r < reps; r++) fn();
-      t.push((performance.now() - s) / reps);
-    }
-    t.sort((x, y) => x - y);
-    return t[runs >> 1];
-  }
-
-  const proj4Ms = Object.fromEntries(Object.entries(baselines).map(([k, fn]) => [k, time(fn)]));
-  const rows = cases(null).map(([direction, method]) => ({ direction, method, proj4: proj4Ms[direction], ms: {} }));
+  const proj4Ms = Object.fromEntries(Object.entries(baselines).map(([k, fn]) => [k, time(fn, runs, reps)]));
+  const rows = cases(null).map(([direction, method]) => ({ direction, method, base: proj4Ms[direction], ms: {} }));
   for (const [name, utm] of Object.entries(backends)) {
     cases(utm({ zone: 33 })).forEach(([, , fn], i) => {
-      rows[i].ms[name] = time(fn);
+      rows[i].ms[name] = time(fn, runs, reps);
     });
   }
   return rows;
+}
+
+// Points spread over eastern China; the baseline is gcoord's per-point `transform`.
+export function runGcjCases(gcoord, gcj02, { n = 10000, runs = 31, reps = 5 } = {}) {
+  const lon = new Float64Array(n);
+  const lat = new Float64Array(n);
+  const ll = new Float64Array(2 * n);
+  for (let i = 0; i < n; i++) {
+    lon[i] = ll[2 * i] = 100 + ((i * 7919) % n) * (20 / n);
+    lat[i] = ll[2 * i + 1] = 22 + ((i * 104729) % n) * (18 / n);
+  }
+  const a = new Float64Array(n);
+  const b = new Float64Array(n);
+  const out = new Float64Array(2 * n);
+  const g = gcj02();
+  const rows = [
+    [
+      'WGS84 → GCJ-02',
+      gcoord.WGS84,
+      gcoord.GCJ02,
+      [
+        [
+          'fromWgs84Point',
+          () => {
+            for (let i = 0; i < n; i++) g.fromWgs84Point(lon[i], lat[i]);
+          },
+        ],
+        ['fromWgs84 (output buffers)', () => g.fromWgs84(lon, lat, a, b)],
+        ['fromWgs84Interleaved (output buffer)', () => g.fromWgs84Interleaved(ll, out)],
+      ],
+    ],
+    [
+      'GCJ-02 → WGS84',
+      gcoord.GCJ02,
+      gcoord.WGS84,
+      [
+        [
+          'toWgs84Point',
+          () => {
+            for (let i = 0; i < n; i++) g.toWgs84Point(lon[i], lat[i]);
+          },
+        ],
+        ['toWgs84 (output buffers)', () => g.toWgs84(lon, lat, a, b)],
+        ['toWgs84Interleaved (output buffer)', () => g.toWgs84Interleaved(ll, out)],
+      ],
+    ],
+  ];
+  return rows.flatMap(([direction, from, to, cases]) => {
+    const base = time(
+      () => {
+        for (let i = 0; i < n; i++) gcoord.transform([lon[i], lat[i]], from, to);
+      },
+      runs,
+      reps,
+    );
+    return cases.map(([method, fn]) => ({ direction, method, base, ms: { js: time(fn, runs, reps) } }));
+  });
 }

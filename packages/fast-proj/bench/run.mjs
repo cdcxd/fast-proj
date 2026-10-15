@@ -11,13 +11,19 @@ const n = 10000;
 
 async function inProcess() {
   const { default: proj4 } = await import('proj4');
-  const { utm } = await import('../dist/index.js');
+  const { default: gcoord } = await import('gcoord');
+  const { gcj02, utm } = await import('../dist/index.js');
   const { lineString } = await import('../dist/geojson.js');
   const { loadWasm } = await import('../dist/wasm.js');
+  const { runCases, runGcjCases } = await import('./cases.mjs');
   const ctx = await loadWasm();
   const runtime = typeof Bun === 'undefined' ? `Node ${process.version}` : `Bun ${Bun.version}`;
   const backends = { js: utm, [ctx.backend]: ctx.utm };
-  return { runtime, rows: (await import('./cases.mjs')).runCases(proj4, backends, lineString, { n, runs }) };
+  return {
+    runtime,
+    rows: runCases(proj4, backends, lineString, { n, runs }),
+    gcjRows: runGcjCases(gcoord, gcj02, { n, runs }),
+  };
 }
 
 async function inBrowser() {
@@ -27,6 +33,7 @@ async function inBrowser() {
   const files = {
     '/': ['text/html', '<!doctype html><title>bench</title>'],
     '/proj4.js': ['text/javascript', join(root, '../../node_modules/proj4/dist/proj4.js')],
+    '/gcoord.js': ['text/javascript', join(root, '../../node_modules/gcoord/dist/gcoord.global.prod.js')],
     '/cases.mjs': ['text/javascript', join(root, 'bench/cases.mjs')],
   };
   await page.route('http://bench.local/**', async (route) => {
@@ -42,28 +49,37 @@ async function inBrowser() {
   });
   await page.goto('http://bench.local/');
   await page.addScriptTag({ url: '/proj4.js' });
-  const rows = await page.evaluate(
+  await page.addScriptTag({ url: '/gcoord.js' });
+  const { rows, gcjRows } = await page.evaluate(
     async (opts) => {
-      const { utm } = await import('/dist/index.js');
+      const { gcj02, utm } = await import('/dist/index.js');
       const { lineString } = await import('/dist/geojson.js');
       const { loadWasm } = await import('/dist/wasm.js');
-      const { runCases } = await import('/cases.mjs');
+      const { runCases, runGcjCases } = await import('/cases.mjs');
       const ctx = await loadWasm();
-      return runCases(window.proj4, { js: utm, [ctx.backend]: ctx.utm }, lineString, opts);
+      return {
+        rows: runCases(window.proj4, { js: utm, [ctx.backend]: ctx.utm }, lineString, opts),
+        gcjRows: runGcjCases(window.gcoord, gcj02, opts),
+      };
     },
     { n, runs },
   );
   const runtime = `Chromium ${browser.version()}`;
   await browser.close();
-  return { runtime, rows };
+  return { runtime, rows, gcjRows };
 }
 
-const { runtime, rows } = args.includes('--browser') ? await inBrowser() : await inProcess();
-const names = Object.keys(rows[0].ms);
-console.log(`${n} points, median of ${runs} (5 calls each) (${runtime})\n`);
-console.log(`| direction | method | proj4 ms | ${names.map((k) => `${k} ms`).join(' | ')} |`);
-console.log(`|---|---|---:|${names.map(() => '---:').join('|')}|`);
-for (const r of rows) {
-  const cells = names.map((k) => `${r.ms[k].toFixed(2)} (${(r.proj4 / r.ms[k]).toFixed(1)}×)`);
-  console.log(`| ${r.direction} | ${r.method} | ${r.proj4.toFixed(2)} | ${cells.join(' | ')} |`);
+const { runtime, rows, gcjRows } = args.includes('--browser') ? await inBrowser() : await inProcess();
+console.log(`${n} points, median of ${runs} (5 calls each) (${runtime})`);
+for (const [baseline, table] of [
+  ['proj4', rows],
+  ['gcoord', gcjRows],
+]) {
+  const names = Object.keys(table[0].ms);
+  console.log(`\n| direction | method | ${baseline} ms | ${names.map((k) => `${k} ms`).join(' | ')} |`);
+  console.log(`|---|---|---:|${names.map(() => '---:').join('|')}|`);
+  for (const r of table) {
+    const cells = names.map((k) => `${r.ms[k].toFixed(2)} (${(r.base / r.ms[k]).toFixed(1)}×)`);
+    console.log(`| ${r.direction} | ${r.method} | ${r.base.toFixed(2)} | ${cells.join(' | ')} |`);
+  }
 }
