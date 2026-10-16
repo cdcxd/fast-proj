@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { latLngs, lineString, positions, positionsFromArrays } from '../src/geojson.js';
+import { latLngs, lineString, positions } from '../src/geojson.js';
 import { utm } from '../src/index.js';
 
 const lonlat = [15, 52, 16.5, 53, 14, 51.5];
@@ -15,8 +15,12 @@ describe('geojson', () => {
   });
 
   it('positions from separate arrays', () => {
-    expect(positionsFromArrays([15, 16.5, 14], [52, 53, 51.5])).toEqual(positions(lonlat));
-    expect(() => positionsFromArrays([15, 16.5], [52])).toThrow(RangeError);
+    const lon = [15, 16.5, 14];
+    const lat = [52, 53, 51.5];
+    expect(positions(lon, lat)).toEqual(positions(lonlat));
+    expect(lineString(lon, lat)).toEqual(lineString(lonlat));
+    expect(latLngs(lon, lat)).toEqual(latLngs(lonlat));
+    expect(() => positions([15, 16.5], [52])).toThrow(RangeError);
   });
 
   it('lineString', () => {

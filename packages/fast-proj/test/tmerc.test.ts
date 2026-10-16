@@ -123,6 +123,9 @@ describe.each(backends)('$name backend', ({ tmerc, utm }) => {
     expect(() => tmerc({ centralMeridian: 0, ellipsoid: { a: 6378137, f: 0.02 } })).toThrow(RangeError);
     expect(() => tmerc({ lon0: 15 } as never)).toThrow(/lon0 was renamed to centralMeridian/);
     expect(() => tmerc({ centralMeridian: 15, k0: 1 } as never)).toThrow(/k0 was renamed to scaleFactor/);
-    expect(() => tmerc({ centralMeridian: 15, latitudeOfOrigin: 0 } as never)).toThrow(/not supported yet/);
+    expect(tmerc({ centralMeridian: 15, latitudeOfOrigin: 0 }).centralMeridian).toBe(15);
+    expect(() => tmerc({ centralMeridian: 15, latitudeOfOrigin: 49 })).toThrow(/not supported yet/);
+    expect(() => tmerc({ centralMeridian: 15, centralMeridan: 1 } as never)).toThrow(/unknown tmerc\(\) option/);
+    expect(() => tmerc(undefined as never)).toThrow(TypeError);
   });
 });

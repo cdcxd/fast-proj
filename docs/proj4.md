@@ -13,7 +13,7 @@ projection you have. A small `fromEpsg()` for the supported codes may be added l
 | `+proj=tmerc +lat_0=0 +lon_0=117 +k=1 +x_0=39500000 +y_0=0 +ellps=GRS80` (CGCS2000 3° zone 39 with zone prefix, EPSG:4527) | `tmerc({ centralMeridian: 117, falseEasting: 39500000, ellipsoid: GRS80 })`                   |
 | `+proj=tmerc +lat_0=0 +lon_0=L +k=K +x_0=E +y_0=N +ellps=…`                                                                | `tmerc({ centralMeridian: L, scaleFactor: K, falseEasting: E, falseNorthing: N, ellipsoid })` |
 | `+proj=longlat +datum=WGS84`, EPSG:4326                                                                                    | the hub: what `toLonLat` returns and `fromLonLat` takes                                       |
-| GCJ-02 (not in proj4; gcoord `GCJ02`, coordtransform `wgs84togcj02`)                                                       | `gcj02()`: `fromWgs84` / `toWgs84`                                                            |
+| GCJ-02 (not in proj4; gcoord `GCJ02`, coordtransform `wgs84togcj02`)                                                       | `GCJ02.fromWgs84` / `toWgs84`; a projection's `geographic: GCJ02`                             |
 
 How calls map:
 

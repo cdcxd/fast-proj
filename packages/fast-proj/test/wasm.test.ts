@@ -23,7 +23,7 @@ describe('loadWasm', () => {
     const contexts = await Promise.all(sources.map((source) => loadWasm({ source })));
     const expected = utm({ zone: 33 }).fromLonLat([15, 16], [52, -1]);
     for (const ctx of contexts) {
-      expect(ctx.backend).toBe('wasm-simd');
+      expect(ctx.backend).toBe('wasm');
       const got = ctx.utm({ zone: 33 }).fromLonLat([15, 16], [52, -1]);
       expect(Math.abs(got.x[1]! - expected.x[1]!)).toBeLessThan(5e-9);
       ctx.dispose();
@@ -40,7 +40,7 @@ describe('loadWasm', () => {
   it('without SIMD, still loads a given source, and falls back if it does not compile', async () => {
     const validate = vi.spyOn(WebAssembly, 'validate').mockReturnValue(false);
     try {
-      expect((await loadWasm({ source: url })).backend).toBe('wasm-simd');
+      expect((await loadWasm({ source: url })).backend).toBe('wasm');
       const bad = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 9]);
       expect((await loadWasm({ source: bad })).backend).toBe('js');
     } finally {
@@ -63,7 +63,7 @@ describe('loadWasm', () => {
       WebAssembly.CompileError,
     );
     await expect(loadWasm({ source: new URL('./missing.wasm', url) })).rejects.toThrow(/ENOENT/);
-    expect((await loadWasm({ source: url })).backend).toBe('wasm-simd');
+    expect((await loadWasm({ source: url })).backend).toBe('wasm');
   });
 
   it('evicts a module that fails initialization, so a fixed file can be retried', async () => {
@@ -72,7 +72,7 @@ describe('loadWasm', () => {
     const source = pathToFileURL(file);
     await expect(loadWasm({ source })).rejects.toThrow(/not a fast-proj wasm module/);
     copyFileSync(url, file);
-    expect((await loadWasm({ source })).backend).toBe('wasm-simd');
+    expect((await loadWasm({ source })).backend).toBe('wasm');
   });
 
   it('accepts a module compiled in another realm', async () => {
@@ -80,7 +80,7 @@ describe('loadWasm', () => {
       bytes: readFileSync(url),
     }) as WebAssembly.Module;
     expect(module instanceof WebAssembly.Module).toBe(false);
-    expect((await loadWasm({ source: module })).backend).toBe('wasm-simd');
+    expect((await loadWasm({ source: module })).backend).toBe('wasm');
   });
 
   it('handles inputs larger than the 64 Ki-point workspace', async () => {
@@ -134,7 +134,7 @@ describe('loadWasm', () => {
       return { exports };
     }) as typeof WebAssembly.instantiate);
     const ctx = await loadWasm({ source: module }).finally(() => spy.mockRestore());
-    expect(ctx.backend).toBe('wasm-simd');
+    expect(ctx.backend).toBe('wasm');
     const lon = [116.391, 105.004];
     const lat = [39.907, 30];
     expect(ctx.gcj02().toWgs84(lon, lat)).toEqual(gcj02().toWgs84(lon, lat));
@@ -157,24 +157,20 @@ describe('loadWasm', () => {
 });
 
 describe('dispose', () => {
-  it('converter dispose is idempotent and only affects that converter', async () => {
+  it('only the context is disposable', async () => {
     const ctx = await loadWasm({ source: url });
-    const a = ctx.utm({ zone: 33 });
-    const b = ctx.tmerc({ centralMeridian: 117 });
-    const out = a.toLonLat([500000], [0]);
-    a.dispose();
-    a[Symbol.dispose]();
-    expect(() => a.toLonLat([500000], [0])).toThrow(/dispose/);
-    expect(() => a.fromLonLatInterleaved([15, 0])).toThrow(/dispose/);
-    expect(() => a.toLonLatPoint(500000, 0)).toThrow(/dispose/);
-    expect(out.lon[0]).toBeCloseTo(15, 12);
-    expect(b.fromLonLatPoint(117, 0)[0]).toBeCloseTo(0, 9);
+    for (const conv of [ctx.utm({ zone: 33 }), ctx.tmerc({ centralMeridian: 117 }), ctx.gcj02()]) {
+      expect('dispose' in conv || Symbol.dispose in conv).toBe(false);
+      expect(Object.isFrozen(conv)).toBe(true);
+    }
   });
 
   it('context dispose invalidates its converters and factories', async () => {
     const ctx = await loadWasm({ source: url });
     const a = ctx.utm({ zone: 33 });
+    const out = a.toLonLat([500000], [0]);
     ctx[Symbol.dispose]();
+    expect(out.lon[0]).toBeCloseTo(15, 12);
     ctx.dispose();
     expect(() => a.fromLonLatPoint(15, 0)).toThrow(/dispose/);
     expect(() => ctx.utm({ zone: 33 })).toThrow(/dispose/);
@@ -201,16 +197,11 @@ describe('dispose', () => {
     });
     expect(m.fromWgs84([13.4], [52.5]).lon[0]).toBe(m.fromWgs84Point(13.4, 52.5)[0]);
     expect(reads).toBe(1);
-    const k = ctx.gcj02();
-    g.dispose();
-    expect(() => g.toWgs84Point(116, 39)).toThrow(/dispose/);
-    expect(() => g.toWgs84([116], [39])).toThrow(/dispose/);
-    expect(() => g.fromWgs84Interleaved([116, 39])).toThrow(/dispose/);
-    expect(k.toWgs84([116], [39]).lon[0]).toBeCloseTo(116, 1);
     expect(h.toWgs84Point(116, 39)[0]).toBeCloseTo(116, 1);
     ctx.dispose();
+    expect(() => g.toWgs84Point(116, 39)).toThrow(/dispose/);
+    expect(() => g.fromWgs84Interleaved([116, 39])).toThrow(/dispose/);
     expect(() => h.toWgs84([116], [39])).toThrow(/dispose/);
-    expect(() => k.toWgs84([116], [39])).toThrow(/dispose/);
     expect(() => ctx.gcj02()).toThrow(/dispose/);
   });
 

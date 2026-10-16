@@ -5,11 +5,12 @@
  * outputs above 2^25 m; single-point methods run the JavaScript kernel.
  */
 /// <reference lib="esnext.disposable" preserve="true" />
-import { checkEven, checkOut } from './checks.js';
-import { type Gcj02Options, gcj02 as jsGcj02 } from './gcj02.js';
-import { type TransverseMercatorOptions, tmerc as jsTmerc } from './tmerc.js';
-import type { Datum, TransverseMercator, Utm } from './types.js';
-import { type UtmOptions, utm as jsUtm } from './utm.js';
+import { checkEven, checkOptions, checkOut, checkSame } from './checks.js';
+import { type Gcj02Options, buildGcj02, gcj02Mode, gcj02 as jsGcj02 } from './gcj02.js';
+import { withGeographic } from './geographic.js';
+import { type TransverseMercatorOptions, parseTmerc, tmerc as jsTmerc } from './tmerc.js';
+import type { Geographic, TransverseMercator, Utm } from './types.js';
+import { type UtmOptions, parseUtm, utm as jsUtm } from './utm.js';
 
 type Loadable = URL | string | ArrayBuffer | ArrayBufferView;
 
@@ -25,26 +26,27 @@ export interface LoadWasmOptions {
   source?: WasmSource;
 }
 
-export type WasmBackend = 'wasm-simd' | 'js';
+export type WasmBackend = 'wasm' | 'js';
 
-export interface WasmDisposable extends Disposable {
-  /** Idempotent. Later calls on the disposed object throw. Output arrays already returned stay valid. */
-  dispose(): void;
-}
-
-export interface WasmContext extends WasmDisposable {
+/**
+ * Same factories as the root entry. Converters hold no resources of their own: they stay valid until the context is
+ * disposed, and throw after that.
+ */
+export interface WasmContext extends Disposable {
   /**
    * `js` when WebAssembly or wasm SIMD is unavailable (a `source` that doesn't compile without SIMD, or a custom
    * non-SIMD build, also falls back); converters then run the JavaScript backend.
    */
   readonly backend: WasmBackend;
-  tmerc(options: TransverseMercatorOptions): TransverseMercator & WasmDisposable;
-  utm(options: UtmOptions): Utm & WasmDisposable;
+  tmerc(options: TransverseMercatorOptions): TransverseMercator;
+  utm(options: UtmOptions): Utm;
   /**
    * Batch methods run the wasm kernel in `'passthrough'` mode; `'transform'` mode, single points, and the `js`
    * backend run the JavaScript kernel.
    */
-  gcj02(options?: Gcj02Options): Datum & WasmDisposable;
+  gcj02(options?: Gcj02Options): Geographic;
+  /** Idempotent. Output arrays already returned stay valid. */
+  dispose(): void;
 }
 
 // centralMeridian, scaleFactor, falseEasting, falseNorthing, a, f
@@ -141,26 +143,21 @@ function getModule(source: Loadable): [Promise<WebAssembly.Module>, () => void] 
   return [promise, evict];
 }
 
-// Wraps a JavaScript converter so it throws once it or its context is disposed.
-function guarded<T extends object>(conv: T, disposed: () => boolean): T & WasmDisposable {
-  let closed = false;
+// Wraps a JavaScript converter so it throws once its context is disposed.
+function guarded<T extends object>(conv: T, disposed: () => boolean): T {
   const guard = () => {
-    if (closed || disposed()) throw new Error('fast-proj: converter used after dispose()');
+    if (disposed()) throw new Error('fast-proj: converter used after dispose()');
   };
-  const out = {} as T & WasmDisposable;
+  const out = {} as Record<string, unknown>;
   for (const [k, v] of Object.entries(conv)) {
-    (out as Record<string, unknown>)[k] = typeof v === 'function' ? (...args: unknown[]) => (guard(), v(...args)) : v;
+    out[k] = typeof v === 'function' ? (...args: unknown[]) => (guard(), v(...args)) : v;
   }
-  out.dispose = () => {
-    closed = true;
-  };
-  out[DISPOSE] = out.dispose;
-  return out;
+  return Object.freeze(out) as T;
 }
 
 function jsContext(): WasmContext {
   let disposed = false;
-  const live = <T extends object>(conv: T): T & WasmDisposable => guarded(conv, () => disposed);
+  const live = <T extends object>(conv: T): T => guarded(conv, () => disposed);
   const open = () => {
     if (disposed) throw new Error('fast-proj: context used after dispose()');
   };
@@ -185,6 +182,7 @@ function jsContext(): WasmContext {
  * initialization can be retried.
  */
 export async function loadWasm(options: LoadWasmOptions = {}): Promise<WasmContext> {
+  checkOptions(options, 'loadWasm', ['source']);
   if (typeof WebAssembly === 'undefined') return jsContext();
   // A scalar wasm build measured no faster than the JavaScript kernel, so engines without SIMD use that.
   const simd = WebAssembly.validate(SIMD_PROBE);
@@ -234,8 +232,8 @@ function wasmContext(exports: Exports): WasmContext {
     pc = wc.byteOffset,
     pd = wd.byteOffset;
 
-  function enter(closed: boolean): Exports {
-    if (closed || !e) throw new Error('fast-proj: converter used after dispose()');
+  function enter(): Exports {
+    if (!e) throw new Error('fast-proj: converter used after dispose()');
     if (busy) throw new Error('fast-proj: re-entrant call into the wasm backend');
     busy = true;
     return e;
@@ -243,15 +241,8 @@ function wasmContext(exports: Exports): WasmContext {
 
   type Kernel = (ex: Exports, m: number) => void;
 
-  function run(
-    closed: boolean,
-    kernel: Kernel,
-    sa: ArrayLike<number>,
-    sb: ArrayLike<number>,
-    oa: Float64Array,
-    ob: Float64Array,
-  ) {
-    const ex = enter(closed);
+  function run(kernel: Kernel, sa: ArrayLike<number>, sb: ArrayLike<number>, oa: Float64Array, ob: Float64Array) {
+    const ex = enter();
     try {
       const n = sa.length;
       for (let i0 = 0; i0 < n; i0 += CAP) {
@@ -267,8 +258,8 @@ function wasmContext(exports: Exports): WasmContext {
     }
   }
 
-  function runInterleaved(closed: boolean, kernel: Kernel, src: ArrayLike<number>, out: Float64Array) {
-    const ex = enter(closed);
+  function runInterleaved(kernel: Kernel, src: ArrayLike<number>, out: Float64Array) {
+    const ex = enter();
     try {
       const half = src.length / 2;
       const A = wa!,
@@ -292,40 +283,35 @@ function wasmContext(exports: Exports): WasmContext {
     }
   }
 
-  function buildTmerc<T extends TransverseMercator>(js: T): T & WasmDisposable {
+  function live(): void {
+    if (!e) throw new Error('fast-proj: converter used after dispose()');
+  }
+
+  function buildTmerc<T extends TransverseMercator>(js: T): T {
     const { centralMeridian: lon0, scaleFactor: k0, falseEasting, falseNorthing } = js;
     const { a, f } = js.ellipsoid;
-    let closed = false;
     const fwd: Kernel = (ex, m) => ex.tm_forward_batch(pa, pb, pc, pd, m, lon0, k0, falseEasting, falseNorthing, a, f);
     const inv: Kernel = (ex, m) => ex.tm_inverse_batch(pa, pb, pc, pd, m, lon0, k0, falseEasting, falseNorthing, a, f);
-
-    function live(): void {
-      if (closed || !e) throw new Error('fast-proj: converter used after dispose()');
-    }
-
-    const dispose = () => {
-      closed = true;
-    };
     return {
       ...js,
       toLonLat(x, y, lon, lat) {
         const n = x.length;
-        if (y.length !== n) throw new RangeError('x and y must have the same length');
+        checkSame(n, y.length, 'x and y');
         if (lon) checkOut(lon, n, 'lon');
         else lon = new Float64Array(n);
         if (lat) checkOut(lat, n, 'lat');
         else lat = new Float64Array(n);
-        run(closed, inv, x, y, lon, lat);
+        run(inv, x, y, lon, lat);
         return { lon, lat };
       },
       fromLonLat(lon, lat, x, y) {
         const n = lon.length;
-        if (lat.length !== n) throw new RangeError('lon and lat must have the same length');
+        checkSame(n, lat.length, 'lon and lat');
         if (x) checkOut(x, n, 'x');
         else x = new Float64Array(n);
         if (y) checkOut(y, n, 'y');
         else y = new Float64Array(n);
-        run(closed, fwd, lon, lat, x, y);
+        run(fwd, lon, lat, x, y);
         return { x, y };
       },
       toLonLatInterleaved(xy, out) {
@@ -333,7 +319,7 @@ function wasmContext(exports: Exports): WasmContext {
         checkEven(n);
         if (out) checkOut(out, n, 'out');
         else out = new Float64Array(n);
-        runInterleaved(closed, inv, xy, out);
+        runInterleaved(inv, xy, out);
         return out;
       },
       fromLonLatInterleaved(lonlat, out) {
@@ -341,49 +327,38 @@ function wasmContext(exports: Exports): WasmContext {
         checkEven(n);
         if (out) checkOut(out, n, 'out');
         else out = new Float64Array(n);
-        runInterleaved(closed, fwd, lonlat, out);
+        runInterleaved(fwd, lonlat, out);
         return out;
       },
       // A single point costs more to pass into wasm than to compute; the JavaScript kernel handles it.
       toLonLatPoint: (x, y) => (live(), js.toLonLatPoint(x, y)),
       fromLonLatPoint: (lon, lat) => (live(), js.fromLonLatPoint(lon, lat)),
-      dispose,
-      [DISPOSE]: dispose,
     };
   }
 
   const gcjFwd: Kernel = (ex, m) => ex.gcj_forward_batch!(pa, pb, pc, pd, m);
   const gcjInv: Kernel = (ex, m) => ex.gcj_inverse_batch!(pa, pb, pc, pd, m);
 
-  function buildGcj(js: Datum): Datum & WasmDisposable {
-    let closed = false;
-
-    function live(): void {
-      if (closed || !e) throw new Error('fast-proj: converter used after dispose()');
-    }
-
-    const dispose = () => {
-      closed = true;
-    };
-    return {
+  function buildGcj(js: Geographic): Geographic {
+    return Object.freeze({
       toWgs84(lon, lat, outLon, outLat) {
         const n = lon.length;
-        if (lat.length !== n) throw new RangeError('lon and lat must have the same length');
+        checkSame(n, lat.length, 'lon and lat');
         if (outLon) checkOut(outLon, n, 'outLon');
         else outLon = new Float64Array(n);
         if (outLat) checkOut(outLat, n, 'outLat');
         else outLat = new Float64Array(n);
-        run(closed, gcjInv, lon, lat, outLon, outLat);
+        run(gcjInv, lon, lat, outLon, outLat);
         return { lon: outLon, lat: outLat };
       },
       fromWgs84(lon, lat, outLon, outLat) {
         const n = lon.length;
-        if (lat.length !== n) throw new RangeError('lon and lat must have the same length');
+        checkSame(n, lat.length, 'lon and lat');
         if (outLon) checkOut(outLon, n, 'outLon');
         else outLon = new Float64Array(n);
         if (outLat) checkOut(outLat, n, 'outLat');
         else outLat = new Float64Array(n);
-        run(closed, gcjFwd, lon, lat, outLon, outLat);
+        run(gcjFwd, lon, lat, outLon, outLat);
         return { lon: outLon, lat: outLat };
       },
       toWgs84Interleaved(lonlat, out) {
@@ -391,7 +366,7 @@ function wasmContext(exports: Exports): WasmContext {
         checkEven(n);
         if (out) checkOut(out, n, 'out');
         else out = new Float64Array(n);
-        runInterleaved(closed, gcjInv, lonlat, out);
+        runInterleaved(gcjInv, lonlat, out);
         return out;
       },
       fromWgs84Interleaved(lonlat, out) {
@@ -399,14 +374,12 @@ function wasmContext(exports: Exports): WasmContext {
         checkEven(n);
         if (out) checkOut(out, n, 'out');
         else out = new Float64Array(n);
-        runInterleaved(closed, gcjFwd, lonlat, out);
+        runInterleaved(gcjFwd, lonlat, out);
         return out;
       },
       toWgs84Point: (lon, lat) => (live(), js.toWgs84Point(lon, lat)),
       fromWgs84Point: (lon, lat) => (live(), js.fromWgs84Point(lon, lat)),
-      dispose,
-      [DISPOSE]: dispose,
-    };
+    } satisfies Geographic);
   }
 
   const dispose = () => {
@@ -414,24 +387,28 @@ function wasmContext(exports: Exports): WasmContext {
     e = null;
     wa = wb = wc = wd = null;
   };
+  const open = () => {
+    if (!e) throw new Error('fast-proj: context used after dispose()');
+    return e;
+  };
   return {
-    backend: 'wasm-simd',
+    backend: 'wasm',
     tmerc: (o) => {
-      if (!e) throw new Error('fast-proj: context used after dispose()');
-      return buildTmerc(jsTmerc(o));
+      open();
+      const [p, g] = parseTmerc(o);
+      return withGeographic(buildTmerc(p), g);
     },
     utm: (o) => {
-      if (!e) throw new Error('fast-proj: context used after dispose()');
-      return buildTmerc(jsUtm(o));
+      open();
+      const [p, g] = parseUtm(o);
+      return withGeographic(buildTmerc(p), g);
     },
     gcj02: (o) => {
-      if (!e) throw new Error('fast-proj: context used after dispose()');
-      const outsideChina = o?.outsideChina;
-      const js = jsGcj02({ outsideChina });
+      const ex = open();
+      const mode = gcj02Mode(o);
+      const js = buildGcj02(mode);
       // 'transform' mode iterates to a tolerance per point, which the fixed-step kernel doesn't do.
-      if (outsideChina === 'transform' || !e.gcj_forward_batch || !e.gcj_inverse_batch) {
-        return guarded(js, () => !e);
-      }
+      if (mode === 'transform' || !ex.gcj_forward_batch || !ex.gcj_inverse_batch) return guarded(js, () => !e);
       return buildGcj(js);
     },
     dispose,

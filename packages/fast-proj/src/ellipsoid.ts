@@ -12,13 +12,22 @@ export const GRS80: Ellipsoid = Object.freeze({ a: 6378137, f: 1 / 298.257222101
  * Largest supported flattening. The small-angle expansions in `tmerc.ts` are exact to double precision only for
  * terrestrial flattenings (Earth: 0.0034).
  */
-export const MAX_FLATTENING = 0.01;
+const MAX_FLATTENING = 0.01;
 
-export function checkEllipsoid({ a, f }: Ellipsoid): void {
-  if (!(a > 0 && a < Infinity)) throw new RangeError(`ellipsoid.a must be a positive finite number, got ${a}`);
-  if (!(f >= 0 && f < MAX_FLATTENING)) {
-    throw new RangeError(`ellipsoid.f must satisfy 0 <= f < ${MAX_FLATTENING}, got ${f}`);
+/** Validates an ellipsoid and returns it if frozen, else a frozen copy. */
+export function checkEllipsoid(e: unknown): Ellipsoid {
+  if (typeof e !== 'object' || e === null) {
+    throw new TypeError(`fast-proj: ellipsoid must be an object, got ${e === null ? 'null' : typeof e}`);
   }
+  const { a, f } = e as Ellipsoid;
+  if (typeof a !== 'number' || typeof f !== 'number') {
+    throw new TypeError(`fast-proj: ellipsoid.a and ellipsoid.f must be numbers, got ${typeof a}, ${typeof f}`);
+  }
+  if (!(a > 0 && a < Infinity)) throw new RangeError(`fast-proj: ellipsoid.a must be positive and finite, got ${a}`);
+  if (!(f >= 0 && f < MAX_FLATTENING)) {
+    throw new RangeError(`fast-proj: ellipsoid.f must satisfy 0 <= f < ${MAX_FLATTENING}, got ${f}`);
+  }
+  return Object.isFrozen(e) ? (e as Ellipsoid) : Object.freeze({ a, f });
 }
 
 export type Series6 = readonly [number, number, number, number, number, number];

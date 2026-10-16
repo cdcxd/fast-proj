@@ -1,7 +1,7 @@
 // Imports the built package through its `exports` (package self-reference). Run after `bun run build`.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { GRS80, WGS84, gcj02, tmerc, utm, utmFor, zoneFor } from 'fast-proj';
+import { GRS80, WGS84, gcj02, tmerc, utm, utmFor, utmZoneFor } from 'fast-proj';
 import { latLngs, lineString } from 'fast-proj/geojson';
 import { loadWasm } from 'fast-proj/wasm';
 
@@ -10,7 +10,7 @@ assert.equal(pkg.name, 'fast-proj');
 assert.equal(typeof GRS80.a, 'number');
 assert.equal(Object.isFrozen(WGS84), true);
 assert.equal(utm({ zone: 33 }).centralMeridian, 15);
-assert.equal(zoneFor(15, 52), 33);
+assert.equal(utmZoneFor(15, 52), 33);
 assert.deepEqual(utmFor(15, -1), { zone: 33, south: true });
 const conv = utm({ zone: 33 });
 const [x, y] = conv.fromLonLatPoint(15, 0);

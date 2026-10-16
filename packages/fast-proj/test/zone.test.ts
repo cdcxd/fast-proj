@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { utmFor, zoneFor } from '../src/index.js';
+import { utmFor, utmZoneFor } from '../src/index.js';
 
-describe('zoneFor', () => {
+describe('utmZoneFor', () => {
   it.each([
     [-180, 0, 1],
     [-177, 0, 1],
@@ -27,7 +27,7 @@ describe('zoneFor', () => {
     [20, 84, 33],
     [20, -80, 34],
   ])('lon %d lat %d -> %d', (lon, lat, zone) => {
-    expect(zoneFor(lon, lat)).toBe(zone);
+    expect(utmZoneFor(lon, lat)).toBe(zone);
   });
 
   it('rejects non-finite input and latitudes outside UTM', () => {
@@ -39,7 +39,7 @@ describe('zoneFor', () => {
       [10, -80.0001],
       [10, 89],
     ]) {
-      expect(() => zoneFor(lon!, lat!)).toThrow(RangeError);
+      expect(() => utmZoneFor(lon!, lat!)).toThrow(RangeError);
     }
   });
 });

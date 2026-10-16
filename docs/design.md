@@ -2,8 +2,9 @@
 
 Status: accepted, implemented in 0.1 (except `webMercator` and `gcj02`, whose names and shapes are fixed here for later; `gcj02` is added in 0.2). See [Implementation notes](#implementation-notes) for where 0.1 refines this proposal.
 
-Names follow 0.3, which renamed `GeographicTransform` to `Datum` and `lon0`/`k0` to `centralMeridian`/`scaleFactor`;
-see the [migration table](api.md#migrating-from-02).
+Updated for 0.3, the one breaking release before 1.0: `Geographic` systems and the `geographic` projection option,
+spelled-out transverse Mercator parameters, and context-only disposal; see the
+[migration table](api.md#migrating-from-02).
 
 The goal is to fix every decision that would be a breaking change after 0.1. Everything else can come in 0.1.x.
 
@@ -38,7 +39,11 @@ Every converter is defined relative to one hub: WGS84 geodetic longitude/latitud
 [-180, 180]. No module owns it; it is stated here and in the type docs. Conversions between two non-hub systems are two
 calls on the same buffer (see Chaining).
 
-There is no datum or CRS object.
+There is no CRS object. A `Geographic` system (GCJ-02, later BD-09) is defined by its conversion to WGS84, and a
+projection can carry one as `geographic`: its `toLonLat`/`fromLonLat` then use that system's longitude/latitude, while
+x/y stay on the grid of WGS84 longitude/latitude (x/y ↔ WGS84 ↔ `geographic`). The option is named for the
+longitude/latitude side on purpose: a geodetic datum (a Helmert shift such as OSGB36) sits on the grid side instead
+(x/y ↔ datum lon/lat ↔ WGS84), so the name `datum` stays free for that.
 
 ## Ellipsoids
 
@@ -55,12 +60,14 @@ Ellipsoids used only internally (Krasovsky for GCJ-02) stay private. Series coef
 
 ## Two kinds of converter
 
-Projections and datum transforms are different things and get different method names, so one can't be passed where the
-other is expected.
+Projections and geographic systems are different things and get different method names, so one can't be passed where
+the other is expected. Nothing in the projection types is UTM-specific: `webMercator` and other projections return
+`Projection` and take the same `geographic` option.
 
 ```ts
-// projected x/y (metres) <-> hub lon/lat
+// projected x/y (metres) <-> lon/lat on `geographic`, WGS84 when unset
 interface Projection {
+  readonly geographic?: Geographic;
   toLonLat(
     x: ArrayLike<number>,
     y: ArrayLike<number>,
@@ -79,8 +86,8 @@ interface Projection {
   fromLonLatPoint(lon: number, lat: number): [x: number, y: number];
 }
 
-// other lon/lat <-> hub lon/lat
-interface Datum {
+// this system's lon/lat <-> hub lon/lat
+interface Geographic {
   toWgs84(
     lon: ArrayLike<number>,
     lat: ArrayLike<number>,
@@ -119,7 +126,9 @@ Buffer rules, shared by every converter:
 - Output buffers are optional; when given they must be at least as long as the input, otherwise `RangeError`.
 - An output buffer may be the input itself (in place) or must not overlap it.
 - Interleaved input must have even length, otherwise `RangeError`.
-- Invalid options throw `RangeError`, except wrong types (`TypeError`).
+- Invalid option values throw `RangeError`; wrong types and unknown option keys throw `TypeError`. Messages start with
+  `fast-proj:`.
+- Converters are frozen plain objects whose methods don't use `this`.
 - Points outside a converter's valid domain give `NaN`, never a huge finite number.
 
 ## Converters
@@ -132,18 +141,21 @@ export function tmerc(opts: {
   scaleFactor?: number;
   falseEasting?: number;
   falseNorthing?: number;
+  latitudeOfOrigin?: number; // only 0 for now
   ellipsoid?: Ellipsoid;
+  geographic?: Geographic;
 }): TransverseMercator;
-export function utm(opts: { zone: number; south?: boolean; ellipsoid?: Ellipsoid }): Utm; // tmerc preset
-export function zoneFor(lon: number, lat: number): number;
+export function utm(opts: { zone: number; south?: boolean; ellipsoid?: Ellipsoid; geographic?: Geographic }): Utm;
+export function utmZoneFor(lon: number, lat: number): number;
 export function utmFor(lon: number, lat: number): { zone: number; south: boolean };
 
-export function webMercator(): Projection; // EPSG:3857, sphere of radius WGS84.a
-export function gcj02(opts?: { outsideChina?: 'passthrough' | 'transform' }): Datum;
+export function webMercator(opts?: { geographic?: Geographic }): Projection; // EPSG:3857, sphere of radius WGS84.a
+export function gcj02(opts?: { outsideChina?: 'passthrough' | 'transform' }): Geographic;
+export const GCJ02: Geographic; // gcj02(), the same object
 ```
 
 `webMercator` and `gcj02` come after 0.1; their names and shapes are fixed here so 0.1 doesn't need to change for them.
-BD-09, if added, is another `Datum` relative to WGS84 (composing GCJ-02 internally).
+BD-09, if added, is another `Geographic` relative to WGS84 (composing GCJ-02 internally).
 
 GCJ-02's reverse direction has no closed form; `toWgs84` iterates and documents its accuracy.
 
@@ -188,14 +200,15 @@ modern bundlers resolve). No base64 inlining.
 import { loadWasm } from 'fast-proj/wasm';
 
 const wasm = await loadWasm(); // or loadWasm({ source: url | bytes | WebAssembly.Module })
-wasm.backend; // 'wasm-simd' | 'js'
-const u = wasm.utm({ zone: 50 }); // same signature, returns Utm & Disposable
+wasm.backend; // 'wasm' | 'js'
+const u = wasm.utm({ zone: 50 }); // same signature and return type
 u.toLonLatInterleaved(buf, buf);
 wasm.dispose(); // or `using wasm = await loadWasm()`
 ```
 
 - `loadWasm` returns a context with the same factories as the root (`tmerc`, `utm`, `webMercator`, `gcj02`), returning
-  the same interfaces plus `Disposable`.
+  the same interfaces; JavaScript-backed where there is no kernel. Only the context is `Disposable`: converters hold
+  nothing of their own and throw once their context is disposed.
 - The compiled `WebAssembly.Module` is cached per source; each context gets its own instance and bounded workspace (see
   `experiments/utm-wasm/RESOURCE-LIFECYCLE.md`).
 - `source` is accepted from the start: esbuild doesn't rewrite `new URL(..., import.meta.url)`, and Node can't `fetch` a
@@ -216,7 +229,7 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
 ## Breaking-change checklist before 0.1.0
 
 1. Single package `fast-proj` with the entries above, nothing more.
-2. `Projection` / `Datum` / `TransverseMercator` / `Utm` types; `utm()` built on `tmerc()`.
+2. `Projection` / `Geographic` / `TransverseMercator` / `Utm` types; `utm()` built on `tmerc()`.
 3. GeoJSON helpers take lon/lat buffers.
 4. Every converter is a factory.
 5. `loadWasm` with `source`, context, `dispose`; no wasm in the root.
