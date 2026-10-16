@@ -48,7 +48,8 @@
     "provenance": true
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.build.json && bash wasm/build.sh",
+    "build": "bun scripts/inline.ts --check && rm -rf dist && tsc -p tsconfig.build.json && bash wasm/build.sh",
+    "inline": "bun scripts/inline.ts",
     "prepack": "bun run build",
     "test": "vitest run",
     "bench": "bun run build && node bench/run.mts && bun bench/run.mts && node bench/run.mts --browser"

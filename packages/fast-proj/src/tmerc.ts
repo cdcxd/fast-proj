@@ -122,6 +122,7 @@ export function transverseMercator(
   let rx = 0;
   let ry = 0;
 
+  // @kernel
   function forward(lonDeg: number, latDeg: number): void {
     const phi = latDeg * D2R;
     // Whole turns first, exactly (% is exact): in radians their rounding error exceeds the NaN cutoff below.
@@ -190,6 +191,7 @@ export function transverseMercator(
     ry = fn + kA * (xip + tr * sr - ti * si);
   }
 
+  // @kernel
   function inverse(x: number, y: number): void {
     const xi = (y - fn) * invKA;
     const eta = (x - fe) * invKA;
@@ -253,6 +255,159 @@ export function transverseMercator(
     ry = phi * R2D;
   }
 
+  // Batch loops over element j of a and b[j + o1], every `step` up to `end`, written to the same places in outA and
+  // outB: (0, 1) for separate arrays, (1, 2) interleaved. Each holds a copy of its kernel (see scripts/inline.ts).
+  function inverseBatch(
+    a: ArrayLike<number>,
+    b: ArrayLike<number>,
+    outA: Float64Array,
+    outB: Float64Array,
+    o1: number,
+    step: number,
+    end: number,
+  ): void {
+    for (let j = 0; j < end; j += step) {
+      // @inline inverse(a[j]!, b[j + o1]!); rx = outA[j]; ry = outB[j + o1]
+      {
+        const x = a[j]!;
+        const y = b[j + o1]!;
+        const xi = (y - fn) * invKA;
+        const eta = (x - fe) * invKA;
+
+        const s1 = Math.sin(xi);
+        const c1x = Math.cos(xi);
+        const e = Math.exp(eta);
+        const ie = 1 / e;
+        const ch1 = 0.5 * (e + ie);
+        const sh1 = 0.5 * (e - ie);
+        const s2 = 2 * s1 * c1x;
+        const c2x = c1x * c1x - s1 * s1;
+        const ch = ch1 * ch1 + sh1 * sh1;
+        const sh = 2 * sh1 * ch1;
+        const ar = 2 * c2x * ch;
+        const ai = -2 * s2 * sh;
+
+        const rho = ar * ar + ai * ai;
+        const twiceAr = 2 * ar;
+        const u4 = b5 + twiceAr * b6;
+        const u3 = bp3 + twiceAr * u4 - rho * b6;
+        const u2 = bp2 + twiceAr * u3 - rho * u4;
+        const u1 = bp1 + twiceAr * u2 - rho * u3;
+        const tr = bp0 + ar * u1 - rho * u2;
+        const ti = ai * u1 + 0;
+
+        const sr = s2 * ch;
+        const si = c2x * sh;
+        const dxi = tr * sr - ti * si;
+        const deta = tr * si + ti * sr;
+
+        const dx2 = dxi * dxi;
+        const sdx = dxi * (1 + dx2 * (-1 / 6 + dx2 / 120));
+        const cdx = 1 + dx2 * (-1 / 2 + dx2 / 24);
+        const de2 = deta * deta;
+        const shd = deta * (1 + de2 * (1 / 6 + de2 / 120));
+        const chd = 1 + de2 * (1 / 2 + de2 / 24);
+        const sx = s1 * cdx - c1x * sdx;
+        const cx = c1x * cdx + s1 * sdx;
+        const she = sh1 * chd - ch1 * shd;
+
+        const h2 = she * she + cx * cx;
+        const h = Math.sqrt(h2);
+        const lam = cx > 0 && Number.isFinite(she) ? Math.atan(she / cx) : Math.atan2(she, cx);
+        const chi = h > 0 && Number.isFinite(sx) ? Math.atan(sx / h) : Math.atan2(sx, h);
+
+        const sx2 = sx * sx;
+        const r2 = sx2 + h2;
+        const p = (2 * (h2 - sx2)) / r2;
+        const q1 = dp0 + p * (dp1 + p * (dp2 + p * (dp3 + p * (d5 + p * d6))));
+        const phi = chi + ((2 * sx * h) / r2) * q1;
+
+        let lon = (lon0 + lam) * R2D;
+        if (lon > 180) lon -= 360;
+        else if (lon < -180) lon += 360;
+        outA[j] = lon;
+        outB[j + o1] = phi * R2D;
+      }
+      // @end
+    }
+  }
+
+  function forwardBatch(
+    a: ArrayLike<number>,
+    b: ArrayLike<number>,
+    outA: Float64Array,
+    outB: Float64Array,
+    o1: number,
+    step: number,
+    end: number,
+  ): void {
+    for (let j = 0; j < end; j += step) {
+      // @inline forward(a[j]!, b[j + o1]!); rx = outA[j]; ry = outB[j + o1]
+      {
+        let lonDeg = a[j]!;
+        const latDeg = b[j + o1]!;
+        const phi = latDeg * D2R;
+        if (lonDeg > 180 || lonDeg < -180) {
+          lonDeg %= 360;
+          if (lonDeg > 180) lonDeg -= 360;
+          else if (lonDeg < -180) lonDeg += 360;
+        }
+        const lam = lonDeg * D2R - lon0;
+
+        const sp = Math.sin(phi);
+        const cp = Math.cos(phi);
+        const p = 2 - 4 * sp * sp;
+        const q1 = cp0 + p * (cp1 + p * (cp2 + p * (cp3 + p * (c5 + p * c6))));
+        const dchi = 2 * sp * cp * q1;
+        const dd = dchi * dchi;
+        const sd = dchi * (1 + dd * (-1 / 6 + dd / 120));
+        const cd = 1 + dd * (-1 / 2 + dd / 24);
+        const sc = sp * cd + cp * sd;
+        const cc = cp * cd - sp * sd;
+
+        const sl = Math.sin(lam);
+        const cl = Math.cos(lam);
+        if (!(cl > 1e-15)) {
+          outA[j] = NaN;
+          outB[j + o1] = NaN;
+          continue;
+        }
+
+        const ccl = cc * cl;
+        const sc2 = sc * sc;
+        const ccl2 = ccl * ccl;
+        const ir = 1 / Math.sqrt(sc2 + ccl2);
+        const xip = ccl > 0 ? Math.atan(sc / ccl) : Math.atan2(sc, ccl);
+        const she = cc * sl * ir;
+        const etap = she > -1024 && she < 1024 ? Math.log1p(she + (she * she) / (ir + 1)) : Math.asinh(she);
+
+        const ir2 = ir * ir;
+        const s2 = 2 * sc * ccl * ir2;
+        const c2x = (ccl2 - sc2) * ir2;
+        const ch = ir2 + she * she;
+        const sh = 2 * she * ir;
+        const ar = 2 * c2x * ch;
+        const ai = -2 * s2 * sh;
+
+        const rho = ar * ar + ai * ai;
+        const twiceAr = 2 * ar;
+        const u4 = a5 + twiceAr * a6;
+        const u3 = ap3 + twiceAr * u4 - rho * a6;
+        const u2 = ap2 + twiceAr * u3 - rho * u4;
+        const u1 = ap1 + twiceAr * u2 - rho * u3;
+        const tr = ap0 + ar * u1 - rho * u2;
+        const ti = ai * u1;
+
+        const sr = s2 * ch;
+        const si = c2x * sh;
+
+        outA[j] = fe + kA * (etap + tr * si + ti * sr);
+        outB[j + o1] = fn + kA * (xip + tr * sr - ti * si);
+      }
+      // @end
+    }
+  }
+
   return {
     centralMeridian: lon0Deg,
     scaleFactor: k0,
@@ -267,13 +422,8 @@ export function transverseMercator(
       else lon = new Float64Array(n);
       if (lat) checkOut(lat, n, 'lat');
       else lat = new Float64Array(n);
-      const res = { lon, lat };
-      for (let i = 0; i < n; i++) {
-        inverse(x[i]!, y[i]!);
-        lon[i] = rx;
-        lat[i] = ry;
-      }
-      return res;
+      inverseBatch(x, y, lon, lat, 0, 1, n);
+      return { lon, lat };
     },
     fromLonLat(lon, lat, x, y) {
       const n = lon.length;
@@ -282,24 +432,15 @@ export function transverseMercator(
       else x = new Float64Array(n);
       if (y) checkOut(y, n, 'y');
       else y = new Float64Array(n);
-      const res = { x, y };
-      for (let i = 0; i < n; i++) {
-        forward(lon[i]!, lat[i]!);
-        x[i] = rx;
-        y[i] = ry;
-      }
-      return res;
+      forwardBatch(lon, lat, x, y, 0, 1, n);
+      return { x, y };
     },
     toLonLatInterleaved(xy, out) {
       const n = xy.length;
       checkEven(n);
       if (out) checkOut(out, n, 'out');
       else out = new Float64Array(n);
-      for (let i = 0; i < n; i += 2) {
-        inverse(xy[i]!, xy[i + 1]!);
-        out[i] = rx;
-        out[i + 1] = ry;
-      }
+      inverseBatch(xy, xy, out, out, 1, 2, n);
       return out;
     },
     fromLonLatInterleaved(lonlat, out) {
@@ -307,11 +448,7 @@ export function transverseMercator(
       checkEven(n);
       if (out) checkOut(out, n, 'out');
       else out = new Float64Array(n);
-      for (let i = 0; i < n; i += 2) {
-        forward(lonlat[i]!, lonlat[i + 1]!);
-        out[i] = rx;
-        out[i + 1] = ry;
-      }
+      forwardBatch(lonlat, lonlat, out, out, 1, 2, n);
       return out;
     },
     toLonLatPoint(x, y) {
