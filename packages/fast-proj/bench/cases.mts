@@ -152,3 +152,69 @@ export function runGcjCases(
   }
   return rows;
 }
+
+// UTM zone 50 <-> GCJ-02, points in China. `backends` maps column name to a converter with `geographic` set.
+export function runComposedCases(
+  proj4: (from: string, to: string) => { forward(point: unknown): unknown; inverse(point: unknown): unknown },
+  gcoord: { readonly WGS84: unknown; readonly GCJ02: unknown; transform(...args: unknown[]): unknown },
+  backends: Record<string, Projection>,
+  { n = 10000, runs = 31, reps = 5 }: BenchOptions = {},
+): BenchRow[] {
+  const xs = new Float64Array(n);
+  const ys = new Float64Array(n);
+  const xy = new Float64Array(2 * n);
+  const lon = new Float64Array(n);
+  const lat = new Float64Array(n);
+  const ll = new Float64Array(2 * n);
+  for (let i = 0; i < n; i++) {
+    xs[i] = xy[2 * i] = 300000 + ((i * 7919) % n) * (400000 / n);
+    ys[i] = xy[2 * i + 1] = 2500000 + ((i * 104729) % n) * (2000000 / n);
+    lon[i] = ll[2 * i] = 114 + ((i * 7919) % n) * (6 / n);
+    lat[i] = ll[2 * i + 1] = 22.5 + ((i * 104729) % n) * (18 / n);
+  }
+  const a = new Float64Array(n);
+  const b = new Float64Array(n);
+  const out = new Float64Array(2 * n);
+  const inv = proj4('+proj=utm +zone=50 +datum=WGS84 +units=m +no_defs', 'WGS84');
+  const baselines: Record<string, () => void> = {
+    'UTM → GCJ-02': () => {
+      for (let i = 0; i < n; i++) gcoord.transform(inv.forward([xs[i], ys[i]]), gcoord.WGS84, gcoord.GCJ02);
+    },
+    'GCJ-02 → UTM': () => {
+      for (let i = 0; i < n; i++) inv.inverse(gcoord.transform([lon[i], lat[i]], gcoord.GCJ02, gcoord.WGS84));
+    },
+  };
+  const cases = (conv: Projection | null): [string, string, () => void][] => [
+    [
+      'UTM → GCJ-02',
+      'toLonLatPoint',
+      () => {
+        for (let i = 0; i < n; i++) conv!.toLonLatPoint(xs[i]!, ys[i]!);
+      },
+    ],
+    ['UTM → GCJ-02', 'toLonLat (output buffers)', () => conv!.toLonLat(xs, ys, a, b)],
+    ['UTM → GCJ-02', 'toLonLatInterleaved (output buffer)', () => conv!.toLonLatInterleaved(xy, out)],
+    [
+      'GCJ-02 → UTM',
+      'fromLonLatPoint',
+      () => {
+        for (let i = 0; i < n; i++) conv!.fromLonLatPoint(lon[i]!, lat[i]!);
+      },
+    ],
+    ['GCJ-02 → UTM', 'fromLonLat (output buffers)', () => conv!.fromLonLat(lon, lat, a, b)],
+    ['GCJ-02 → UTM', 'fromLonLatInterleaved (output buffer)', () => conv!.fromLonLatInterleaved(ll, out)],
+  ];
+  const baseMs = Object.fromEntries(Object.entries(baselines).map(([k, fn]) => [k, time(fn, runs, reps)]));
+  const rows: BenchRow[] = cases(null).map(([direction, method]) => ({
+    direction,
+    method,
+    base: baseMs[direction]!,
+    ms: {},
+  }));
+  for (const [name, conv] of Object.entries(backends)) {
+    cases(conv).forEach(([, , fn], i) => {
+      rows[i]!.ms[name] = time(fn, runs, reps);
+    });
+  }
+  return rows;
+}
