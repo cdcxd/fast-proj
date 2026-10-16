@@ -1,5 +1,5 @@
 // Smoke benchmark: wasm scalar/simd vector math vs JS Math.*, call overhead,
-// zero-copy buffers. Run: node bench/smoke.mjs [--json]   /   bun bench/smoke.mjs
+// zero-copy buffers. Run: node bench/smoke.mts [--json]   /   bun bench/smoke.mts
 import { readFileSync } from 'node:fs';
 
 const json = process.argv.includes('--json');

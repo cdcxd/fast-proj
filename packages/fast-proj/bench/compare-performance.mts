@@ -1,7 +1,7 @@
 /* eslint-disable no-await-in-loop -- Benchmark revisions must run serially to avoid CPU contention. */
 // Compare built revisions without sharing JIT feedback between them.
-// node bench/compare-performance.mjs --base=/path/to/base/dist/utm.js [--browser]
-// bun bench/compare-performance.mjs --base=/path/to/base/dist/utm.js
+// node bench/compare-performance.mts --base=/path/to/base/dist/utm.js [--browser]
+// bun bench/compare-performance.mts --base=/path/to/base/dist/utm.js
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';

@@ -1,4 +1,4 @@
-// Usage: node compare-outputs.mjs --base=/path/dist/utm.js --candidate=/path/dist/utm.js
+// Usage: node compare-outputs.mts --base=/path/dist/utm.js --candidate=/path/dist/utm.js
 //   [--reference=/path/reference.json] [--csv=/path/matrix.csv] [--summary=/path/summary.json]
 //   [--json=/path/full-results.json] [--markdown=/path/results.md]
 // The default reference is ../test/fixtures/reference.json relative to this script.

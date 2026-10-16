@@ -2,7 +2,7 @@
 // (independent reference). If our implementation is wrong on either side and
 // proj4 is right, the per-side proj4 deltas expose it — a pure wasm-vs-TS
 // comparison would cancel shared errors.
-// Run: node bench/accuracy.mjs   (also works under bun)
+// Run: node bench/accuracy.mts   (also works under bun)
 import { readFileSync } from 'node:fs';
 import proj4 from 'proj4';
 import { utm as tsUtm } from '../../dist/utm.js';

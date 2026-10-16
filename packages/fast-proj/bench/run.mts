@@ -1,4 +1,4 @@
-// Usage: node bench/run.mjs [--browser] [--runs=N]   (bun bench/run.mjs for Bun)
+// Usage: node bench/run.mts [--browser] [--runs=N]   (bun bench/run.mts for Bun)
 // CHROME=/path/to/chrome overrides the Playwright Chromium.
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -15,7 +15,7 @@ async function inProcess() {
   const { gcj02, utm } = await import('../dist/index.js');
   const { lineString } = await import('../dist/geojson.js');
   const { loadWasm } = await import('../dist/wasm.js');
-  const { runCases, runGcjCases } = await import('./cases.mjs');
+  const { runCases, runGcjCases } = await import('./cases.mts');
   const ctx = await loadWasm();
   const runtime = typeof Bun === 'undefined' ? `Node ${process.version}` : `Bun ${Bun.version}`;
   const backends = { js: utm, [ctx.backend]: ctx.utm };
@@ -34,7 +34,7 @@ async function inBrowser() {
     '/': ['text/html', '<!doctype html><title>bench</title>'],
     '/proj4.js': ['text/javascript', join(root, '../../node_modules/proj4/dist/proj4.js')],
     '/gcoord.js': ['text/javascript', join(root, '../../node_modules/gcoord/dist/gcoord.global.prod.js')],
-    '/cases.mjs': ['text/javascript', join(root, 'bench/cases.mjs')],
+    '/cases.mjs': ['text/javascript', join(root, 'bench/cases.mts')],
   };
   await page.route('http://bench.local/**', async (route) => {
     const path = new URL(route.request().url()).pathname;

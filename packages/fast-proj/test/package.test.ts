@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 
-const smoke = fileURLToPath(new URL('./smoke.mjs', import.meta.url));
+const smoke = fileURLToPath(new URL('./smoke.mts', import.meta.url));
 const built = existsSync(fileURLToPath(new URL('../dist/index.js', import.meta.url)));
 
 it.skipIf(!built)('built package imports through its exports', () => {

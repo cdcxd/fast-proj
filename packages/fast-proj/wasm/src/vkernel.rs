@@ -4,7 +4,7 @@
 //!
 //! Deviations from the scalar twin, all accuracy-gated in bench/:
 //! - transcendental calls go to the hand-written f64x2 primitives in
-//!   `simd.rs` (≤ 2 ulp on the kernel ranges, `bench/sweeps.mjs`);
+//!   `simd.rs` (≤ 2 ulp on the kernel ranges, `bench/sweeps.mts`);
 //! - the guarded atan/log1p sites branch per pair: in-domain lanes take the
 //!   fast path, any out-of-domain lane falls back to the atan2/asinh blend;
 //! - `vexp` clamps its exponent term at ±1000 (RESULTS.md documents the
