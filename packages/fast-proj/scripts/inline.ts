@@ -15,6 +15,16 @@ const FILES = ['tmerc.ts', 'gcj02.ts'];
 
 type Kernel = { params: string[]; body: string[] };
 
+const MARKER = /\/\/\s*@(kernel|inline|end)\b/;
+
+// Every marker-like comment must be one the script reads: a typo would otherwise leave a region unexpanded.
+function checkMarkers(lines: string[]): void {
+  lines.forEach((l, i) => {
+    if (MARKER.test(l) && !/^\s*\/\/ @(kernel|end)$/.test(l) && !REGION.test(l))
+      throw new Error(`malformed marker at line ${i + 1}: ${l.trim()}`);
+  });
+}
+
 function kernels(lines: string[]): Map<string, Kernel> {
   const found = new Map<string, Kernel>();
   for (let i = 0; i < lines.length; i++) {
@@ -54,8 +64,10 @@ function regions(
   for (let i = 0; i < lines.length; i++) {
     const m = REGION.exec(lines[i]!);
     if (!m) continue;
-    const end = lines.indexOf(`${m[1]}// @end`, i + 1);
-    if (end < 0) throw new Error(`@inline at line ${i + 1} has no @end`);
+    // The next marker must be this region's @end: an @end at another indent would otherwise pair with a later one.
+    const end = lines.findIndex((l, j) => j > i && MARKER.test(l));
+    if (end < 0 || lines[end] !== `${m[1]}// @end`)
+      throw new Error(`@inline at line ${i + 1} has no @end at its indent`);
     const opts = m[4]!
       .split(';')
       .slice(1)
@@ -92,11 +104,21 @@ function expand(k: Kernel, name: string, args: string[], opts: [string, string][
   });
   const exit = opts.find(([key]) => key === 'return')?.[1] ?? 'continue;';
   const renames = opts.filter(([key]) => key !== 'return');
+  // Blocks opened by loops and functions: a `return;` inside one can't become `continue;`.
+  const nested: boolean[] = [];
   for (let line of body) {
     if (/\breturn\b(?!;)/.test(line.replace(/\breturn;/g, '')))
       throw new Error(`@inline ${name}: only a bare return can be replaced`);
+    if (/\breturn;/.test(line) && nested.includes(true))
+      throw new Error(`@inline ${name}: return inside a nested loop or function`);
+    for (const [from] of renames)
+      if (new RegExp(`['"\`][^'"\`]*\\b${from}\\b`).test(line)) throw new Error(`@inline ${name}: ${from} in a string`);
+    for (const ch of line) {
+      if (ch === '{') nested.push(/^\s*(?:for|while|do)\b|=>|\bfunction\b/.test(line));
+      if (ch === '}') nested.pop();
+    }
     line = line.replace(/\breturn;/g, exit);
-    for (const [from, to] of renames) line = line.replace(new RegExp(`\\b${from}\\b`, 'g'), to);
+    for (const [from, to] of renames) line = line.replace(new RegExp(`(?<![.\\w$])${from}\\b`, 'g'), to);
     out.push(line ? `  ${line}` : '');
   }
   out.push('}');
@@ -105,6 +127,7 @@ function expand(k: Kernel, name: string, args: string[], opts: [string, string][
 
 function generate(text: string): string {
   let lines = text.split('\n');
+  checkMarkers(lines);
   // A copy of a kernel that itself has regions may be stale until those are expanded: repeat until nothing changes.
   for (let pass = 0; pass < 10; pass++) {
     const ks = kernels(lines);
