@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GCJ02, GRS80, WGS84, gcj02, utm as jsUtm, utmFor, utmZoneFor } from '../src/index.js';
+import type { Geographic, Projection } from '../src/index.js';
 import { loadWasm } from '../src/wasm.js';
 import { backends } from './backends.js';
 
@@ -7,6 +8,9 @@ const close = (a: ArrayLike<number>, b: ArrayLike<number>, tol: number) => {
   expect(a.length).toBe(b.length);
   for (let i = 0; i < a.length; i++) expect(Math.abs(a[i]! - b[i]!)).toBeLessThan(tol);
 };
+
+const overlaps = (a: unknown, b: unknown) =>
+  a !== b && a instanceof Float64Array && b instanceof Float64Array && a.buffer === b.buffer;
 
 describe.each(backends)('$name backend geographic option', ({ utm, tmerc, gcj02: make }) => {
   const g = make();
@@ -78,11 +82,69 @@ describe.each(backends)('$name backend geographic option', ({ utm, tmerc, gcj02:
     expect([back[xy.length], back[xy.length + 2]]).toEqual([s, s]);
   });
 
+  it('passes a geographic system one array as input and output, never two overlapping views', () => {
+    // Delegates to GCJ02 after checking the documented aliasing rule.
+    const strict = Object.fromEntries(
+      Object.entries(GCJ02).map(([k, f]: [string, (...a: unknown[]) => unknown]) => [
+        k,
+        (...a: unknown[]) => {
+          const bad = k.endsWith('Interleaved') ? overlaps(a[0], a[1]) : overlaps(a[0], a[2]) || overlaps(a[1], a[3]);
+          if (bad) throw new Error(`overlapping views passed to ${k}`);
+          return f(...a);
+        },
+      ]),
+    ) as unknown as Geographic;
+    const s = utm({ zone: 50, geographic: strict });
+    const xy = x.flatMap((v, i) => [v, y[i]!]);
+    for (const extra of [0, 3]) {
+      const r = s.toLonLat(x, y, new Float64Array(x.length + extra), new Float64Array(x.length + extra));
+      close(r.lon.subarray(0, x.length), p.toLonLat(x, y).lon, 1e-12);
+      const back = s.fromLonLat(r.lon.slice(0, x.length), r.lat.slice(0, x.length), r.lon, r.lat);
+      close(back.x.subarray(0, x.length), x, 1e-6);
+      const out = new Float64Array(xy.length + extra);
+      expect(s.toLonLatInterleaved(xy, out)).toBe(out);
+      const xyOut = new Float64Array(xy.length + extra);
+      expect(s.fromLonLatInterleaved(out.subarray(0, xy.length), xyOut)).toBe(xyOut);
+      close(xyOut.subarray(0, xy.length), xy, 1e-6);
+    }
+  });
+
+  it('matches the explicit two steps for south, transform mode, other ellipsoids and NaN', () => {
+    const t = make({ outsideChina: 'transform' });
+    const cases: [Projection, Projection, Geographic][] = [
+      [utm({ zone: 50, south: true }), utm({ zone: 50, south: true, geographic: g }), g],
+      [utm({ zone: 31 }), utm({ zone: 31, geographic: t }), t],
+      [
+        tmerc({ centralMeridian: 117, falseEasting: 500000, ellipsoid: GRS80 }),
+        tmerc({ centralMeridian: 117, falseEasting: 500000, ellipsoid: GRS80, geographic: g }),
+        g,
+      ],
+    ];
+    const xs = [400000, 500000, NaN, 600000];
+    const ys = [6000000, 3000000, 3000000, NaN];
+    for (const [base, composed, geo] of cases) {
+      const w = base.toLonLat(xs, ys);
+      const ref = geo.fromWgs84(w.lon, w.lat);
+      const r = composed.toLonLat(xs, ys);
+      expect(Array.from(r.lon)).toEqual(Array.from(ref.lon));
+      expect(Array.from(r.lat)).toEqual(Array.from(ref.lat));
+      const wb = geo.toWgs84(r.lon, r.lat);
+      const fwd = base.fromLonLat(wb.lon, wb.lat);
+      const back = composed.fromLonLat(r.lon, r.lat);
+      expect(Array.from(back.x)).toEqual(Array.from(fwd.x));
+      expect(Array.from(back.y)).toEqual(Array.from(fwd.y));
+      expect(Number.isNaN(back.x[2]) && Number.isNaN(back.y[3])).toBe(true);
+    }
+  });
+
   it('checks buffers and the geographic value', () => {
     expect(() => p.fromLonLat([1, 2], [1])).toThrow(RangeError);
     expect(() => p.fromLonLat([1, 2], [1, 2], new Float64Array(1))).toThrow(RangeError);
     expect(() => p.toLonLatInterleaved([1, 2, 3])).toThrow(RangeError);
     expect(() => tmerc({ centralMeridian: 117, geographic: {} as never })).toThrow(TypeError);
+    expect(() => utm({ zone: 50, geographic: 42 as never })).toThrow(/geographic must be an object, got number/);
+    const { toWgs84Point: _, ...five } = GCJ02;
+    expect(() => utm({ zone: 50, geographic: five as never })).toThrow(/missing the methods toWgs84Point$/);
     expect(tmerc({ centralMeridian: 117, geographic: GCJ02 }).geographic).toBe(GCJ02);
   });
 });
@@ -94,6 +156,15 @@ describe.each(backends)('$name backend option and error rules', ({ utm, tmerc, g
     expect(() => make({ outside: 'transform' } as never)).toThrow(/unknown gcj02\(\) option/);
     expect(() => utm(null as never)).toThrow(TypeError);
     expect(() => make(5 as never)).toThrow(TypeError);
+    expect(() => utm({ zone: 33, sout: undefined } as never)).toThrow(/unknown utm\(\) option 'sout'/);
+    expect(utm(utmFor(15, -33)).toLonLatPoint(500000, 10000000)[0]).toBeCloseTo(15, 12);
+  });
+
+  it('accepts only a zero latitudeOfOrigin', () => {
+    expect(tmerc({ centralMeridian: 3, latitudeOfOrigin: 0 }).latitudeOfOrigin).toBe(0);
+    expect(utm({ zone: 33 }).latitudeOfOrigin).toBe(0);
+    expect(() => tmerc({ centralMeridian: 3, latitudeOfOrigin: 49 })).toThrow(RangeError);
+    expect(() => tmerc({ centralMeridian: 3, latitudeOfOrigin: '0' as never })).toThrow(TypeError);
   });
 
   it('throws TypeError for wrong types and RangeError for bad values, with the fast-proj prefix', () => {
@@ -163,6 +234,43 @@ describe('root rules', () => {
     const u = jsUtm({ zone: 33, ellipsoid: e });
     expect(u.ellipsoid).not.toBe(e);
     expect(u.ellipsoid.a).toBe(6378137);
+  });
+
+  it('composed GCJ-02 results agree across backends within 1e-12 degrees at the 105 degree cusp', () => {
+    const [js, w] = backends;
+    // One ulp of WGS84 longitude at 105 moves GCJ-02 latitude by about 2e-13 degrees.
+    const x = [2192544.951861106];
+    const y = [5871177.155890386];
+    const a = js!.utm({ zone: 44, geographic: GCJ02 }).toLonLat(x, y);
+    const b = w!.utm({ zone: 44, geographic: w!.gcj02() }).toLonLat(x, y);
+    expect(Math.abs(a.lat[0]! - b.lat[0]!)).toBeLessThan(1e-12);
+    // Away from the cusp the standalone 6e-14 degree bound holds.
+    const plain = js!.utm({ zone: 48 });
+    const lon = [],
+      lat = [];
+    for (let i = 0; i < 200; i++) {
+      const [px, py] = plain.fromLonLatPoint(105 + (i % 2 ? 1 : -1) * 1e-11 * (1 + (i % 7)), 5 + i / 4);
+      lon.push(px);
+      lat.push(py);
+    }
+    const c = js!.utm({ zone: 48, geographic: GCJ02 }).toLonLat(lon, lat);
+    const d = w!.utm({ zone: 48, geographic: w!.gcj02() }).toLonLat(lon, lat);
+    close(c.lat, d.lat, 6e-14);
+    for (let i = 0; i < 200; i++) {
+      expect(Math.abs(c.lon[i]! - d.lon[i]!) * Math.cos((c.lat[i]! * Math.PI) / 180)).toBeLessThan(6e-14);
+    }
+  });
+
+  it('wasm gcj02() returns one converter per mode per context', async () => {
+    const a = await loadWasm({ source: new URL('../dist/fast-proj.wasm', import.meta.url) });
+    const b = await loadWasm({ source: new URL('../dist/fast-proj.wasm', import.meta.url) });
+    expect(a.gcj02()).toBe(a.gcj02({ outsideChina: 'passthrough' }));
+    expect(a.gcj02({ outsideChina: 'transform' })).toBe(a.gcj02({ outsideChina: 'transform' }));
+    expect(a.gcj02()).not.toBe(b.gcj02());
+    const u = a.utm({ zone: 50, geographic: b.gcj02() });
+    b.dispose();
+    expect(() => u.toLonLat([440000], [4420000])).toThrow(/its wasm context was disposed/);
+    a.dispose();
   });
 
   it('loadWasm rejects bad sources', async () => {

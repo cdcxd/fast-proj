@@ -12,18 +12,22 @@ const METHODS = [
 
 export function checkGeographic(g: unknown): asserts g is Geographic | undefined {
   if (g === undefined) return;
-  if (
-    typeof g !== 'object' ||
-    g === null ||
-    METHODS.some((m) => typeof (g as Record<string, unknown>)[m] !== 'function')
-  ) {
-    throw new TypeError(`fast-proj: geographic must have the methods ${METHODS.join(', ')}`);
+  if (typeof g !== 'object' || g === null) {
+    throw new TypeError(`fast-proj: geographic must be an object, got ${g === null ? 'null' : typeof g}`);
   }
+  const missing = METHODS.filter((m) => typeof (g as Record<string, unknown>)[m] !== 'function');
+  if (missing.length) throw new TypeError(`fast-proj: geographic is missing the methods ${missing.join(', ')}`);
+}
+
+// The first n elements, as the buffer itself when it has exactly n: a geographic system gets one array as both input
+// and output (in place), never two overlapping views.
+function head(a: Float64Array, n: number): Float64Array {
+  return a.length === n ? a : a.subarray(0, n);
 }
 
 /**
  * Freezes `p`, first composing it with `g` when given: x/y <-> WGS84 (`p`) <-> `g`. Each batch method runs the two
- * steps on the first n elements of the output buffer. `live` runs before any step, so a call on a disposed wasm
+ * steps on the first n elements of the output buffer, the second in place. `live` runs before any step, so a call on a disposed wasm
  * context throws before writing anything.
  */
 export function withGeographic<T extends Projection>(p: T, g: Geographic | undefined, live?: () => void): T {
@@ -36,7 +40,9 @@ export function withGeographic<T extends Projection>(p: T, g: Geographic | undef
       check();
       const n = x.length;
       const r = p.toLonLat(x, y, lon, lat);
-      g.fromWgs84(r.lon.subarray(0, n), r.lat.subarray(0, n), r.lon, r.lat);
+      const lo = head(r.lon, n),
+        la = head(r.lat, n);
+      g.fromWgs84(lo, la, lo, la);
       return r;
     },
     fromLonLat(lon, lat, x, y) {
@@ -48,17 +54,24 @@ export function withGeographic<T extends Projection>(p: T, g: Geographic | undef
       if (y) checkOut(y, n, 'y');
       else y = new Float64Array(n);
       g.toWgs84(lon, lat, x, y);
-      return p.fromLonLat(x.subarray(0, n), y.subarray(0, n), x, y);
+      const xs = head(x, n),
+        ys = head(y, n);
+      p.fromLonLat(xs, ys, xs, ys);
+      return { x, y };
     },
     toLonLatInterleaved(xy, out) {
       check();
       out = p.toLonLatInterleaved(xy, out);
-      return g.fromWgs84Interleaved(out.subarray(0, xy.length), out);
+      const o = head(out, xy.length);
+      g.fromWgs84Interleaved(o, o);
+      return out;
     },
     fromLonLatInterleaved(lonlat, out) {
       check();
       out = g.toWgs84Interleaved(lonlat, out);
-      return p.fromLonLatInterleaved(out.subarray(0, lonlat.length), out);
+      const o = head(out, lonlat.length);
+      p.fromLonLatInterleaved(o, o);
+      return out;
     },
     toLonLatPoint(x, y) {
       check();

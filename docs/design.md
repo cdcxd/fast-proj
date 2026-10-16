@@ -224,6 +224,8 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
   about 0.17 ns/point. Zero-copy access to wasm memory is a possible later addition; it is not promised.
 - Accuracy contract: wasm results match the JS backend within 4e-9 m and 6e-14° (longitude differences scaled by
   cos(latitude)), not bit for bit; one ulp of the output (7.5e-9 m) above 2^25 m.
+  Composed with GCJ-02, 1e-12° within 1e-11° of longitude 105°, where the formula's √|x| cusp amplifies a one-ulp
+  longitude difference; see the API docs.
 
 ## Release
 

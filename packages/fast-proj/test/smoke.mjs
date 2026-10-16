@@ -29,7 +29,7 @@ const [el, ep] = GCJ02.fromWgs84Point(116.391, 39.907);
 assert.ok(Math.abs(al - el) < 1e-12 && Math.abs(ap - ep) < 1e-12);
 
 const ctx = await loadWasm();
-assert.match(ctx.backend, /^wasm/);
+assert.equal(ctx.backend, 'wasm');
 const [wl] = ctx.utm({ zone: 33 }).toLonLatPoint(500000, 5761038.212590415);
 assert.ok(Math.abs(wl - 15) < 1e-12);
 ctx.dispose();

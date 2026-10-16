@@ -11,7 +11,8 @@ import type { Ellipsoid } from './ellipsoid.js';
 export interface Projection {
   /**
    * The geographic system of this projection's longitude/latitude; unset means WGS84. x/y stay on the grid of the
-   * WGS84 longitude/latitude: x/y <-> WGS84 <-> `geographic`.
+   * WGS84 longitude/latitude: x/y <-> WGS84 <-> `geographic`. Borrowed, not owned: one from a wasm context works
+   * only while that context is live.
    */
   readonly geographic?: Geographic;
   /** x/y arrays in metres -> longitude/latitude arrays in degrees. */
@@ -73,6 +74,8 @@ export interface TransverseMercator extends Projection {
   readonly falseEasting: number;
   /** Metres. */
   readonly falseNorthing: number;
+  /** Degrees. Always 0 until other values are supported. */
+  readonly latitudeOfOrigin: number;
   readonly ellipsoid: Ellipsoid;
 }
 

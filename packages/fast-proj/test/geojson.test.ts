@@ -36,6 +36,12 @@ describe('geojson', () => {
     expect(() => latLngs([1, 2, 3])).toThrow(RangeError);
   });
 
+  it('rejects input that is not array-like with a TypeError', () => {
+    expect(() => positions(42 as never)).toThrow(TypeError);
+    expect(() => positions(42 as never, 43 as never)).toThrow(TypeError);
+    expect(() => lineString([1, 2], null as never)).toThrow(/lat must be an array-like, got null/);
+  });
+
   it('handles empty input', () => {
     expect(positions([])).toEqual([]);
     expect(lineString([]).coordinates).toEqual([]);

@@ -12,8 +12,16 @@ export interface LineString {
   coordinates: Position[];
 }
 
+function checkArrayLike(a: unknown, name: string): void {
+  if (typeof a !== 'object' || a === null || typeof (a as ArrayLike<number>).length !== 'number') {
+    throw new TypeError(`fast-proj: ${name} must be an array-like, got ${a === null ? 'null' : typeof a}`);
+  }
+}
+
 function pairs(a: ArrayLike<number>, b: ArrayLike<number> | undefined, latFirst: boolean): [number, number][] {
   const out: [number, number][] = [];
+  checkArrayLike(a, b === undefined ? 'lonlat' : 'lon');
+  if (b !== undefined) checkArrayLike(b, 'lat');
   if (b === undefined) {
     const n = a.length;
     checkEven(n);

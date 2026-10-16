@@ -2,11 +2,12 @@
  * Opt-in WebAssembly backend: one combined Rust module (f64x2 SIMD where supported) behind the same converter
  * interfaces as the JavaScript build. Batch results match the JavaScript backend within 4e-9 m and 6e-14 degrees
  * (longitude differences scaled by cos(latitude), so raw longitudes near the poles differ more), or one ulp of
- * outputs above 2^25 m; single-point methods run the JavaScript kernel.
+ * outputs above 2^25 m; single-point methods run the JavaScript kernel. Composed with GCJ-02, latitudes within
+ * 1e-11 degrees of longitude 105 (the formula's cusp) differ by up to 1e-12 degrees.
  */
 /// <reference lib="esnext.disposable" preserve="true" />
 import { checkEven, checkOptions, checkOut, checkSame } from './checks.js';
-import { type Gcj02Options, buildGcj02, gcj02Mode, gcj02 as jsGcj02 } from './gcj02.js';
+import { type Gcj02Options, buildGcj02, gcj02Mode } from './gcj02.js';
 import { withGeographic } from './geographic.js';
 import { type TransverseMercatorOptions, parseTmerc, tmerc as jsTmerc } from './tmerc.js';
 import type { Geographic, TransverseMercator, Utm } from './types.js';
@@ -150,7 +151,7 @@ function getModule(source: Loadable): [Promise<WebAssembly.Module>, () => void] 
 // Wraps a JavaScript converter so it throws once its context is disposed.
 function guarded<T extends object>(conv: T, disposed: () => boolean): T {
   const guard = () => {
-    if (disposed()) throw new Error('fast-proj: converter used after dispose()');
+    if (disposed()) throw new Error('fast-proj: converter used after its wasm context was disposed');
   };
   const out = {} as Record<string, unknown>;
   for (const [k, v] of Object.entries(conv)) {
@@ -165,11 +166,17 @@ function jsContext(): WasmContext {
   const open = () => {
     if (disposed) throw new Error('fast-proj: context used after dispose()');
   };
+  // One converter per mode, as for the root gcj02().
+  const gcj: Partial<Record<'passthrough' | 'transform', Geographic>> = {};
   const ctx: WasmContext = {
     backend: 'js',
     tmerc: (o) => (open(), live(jsTmerc(o))),
     utm: (o) => (open(), live(jsUtm(o))),
-    gcj02: (o) => (open(), live(jsGcj02(o))),
+    gcj02: (o) => {
+      open();
+      const mode = gcj02Mode(o);
+      return (gcj[mode] ??= live(buildGcj02(mode)));
+    },
     dispose() {
       disposed = true;
     },
@@ -241,7 +248,7 @@ function wasmContext(exports: Exports): WasmContext {
     pd = wd.byteOffset;
 
   function enter(): Exports {
-    if (!e) throw new Error('fast-proj: converter used after dispose()');
+    if (!e) throw new Error('fast-proj: converter used after its wasm context was disposed');
     if (busy) throw new Error('fast-proj: re-entrant call into the wasm backend');
     busy = true;
     return e;
@@ -292,7 +299,7 @@ function wasmContext(exports: Exports): WasmContext {
   }
 
   function live(): void {
-    if (!e) throw new Error('fast-proj: converter used after dispose()');
+    if (!e) throw new Error('fast-proj: converter used after its wasm context was disposed');
   }
 
   function buildTmerc<T extends TransverseMercator>(js: T): T {
@@ -390,6 +397,8 @@ function wasmContext(exports: Exports): WasmContext {
     } satisfies Geographic);
   }
 
+  // One converter per mode, as for the root gcj02().
+  const gcj: Partial<Record<'passthrough' | 'transform', Geographic>> = {};
   const dispose = () => {
     if (busy) throw new Error('fast-proj: dispose() during an active call');
     e = null;
@@ -416,8 +425,8 @@ function wasmContext(exports: Exports): WasmContext {
       const mode = gcj02Mode(o);
       const js = buildGcj02(mode);
       // 'transform' mode iterates to a tolerance per point, which the fixed-step kernel doesn't do.
-      if (mode === 'transform' || !ex.gcj_forward_batch || !ex.gcj_inverse_batch) return guarded(js, () => !e);
-      return buildGcj(js);
+      return (gcj[mode] ??=
+        mode === 'transform' || !ex.gcj_forward_batch || !ex.gcj_inverse_batch ? guarded(js, () => !e) : buildGcj(js));
     },
     dispose,
     [DISPOSE]: dispose,

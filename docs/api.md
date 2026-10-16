@@ -102,11 +102,13 @@ interface TransverseMercator extends Projection {
   readonly scaleFactor: number;
   readonly falseEasting: number;
   readonly falseNorthing: number;
+  readonly latitudeOfOrigin: number; // 0
   readonly ellipsoid: Ellipsoid;
 }
 ```
 
-Every projection also has `readonly geographic?: Geographic`, the system given as the `geographic` option.
+Every projection also has `readonly geographic?: Geographic`, the system given as the `geographic` option. The
+projection borrows it: a `geographic` from a wasm context works only while that context is live.
 
 Throws `RangeError` for a non-finite option, `scaleFactor <= 0` or an unsupported ellipsoid. A latitude of origin other
 than 0 (`+lat_0`, e.g. the British National Grid) is not supported yet and throws `RangeError`.
@@ -185,7 +187,7 @@ Longitude is wrapped, so 190 gives zone 2. `utmFor` adds `south: lat < 0`, and i
 `utm`; it stays exactly `{ zone, south }`. Both throw `TypeError` for non-number input, and `RangeError` for non-finite input and for latitudes outside [-80, 84] (the polar regions use UPS,
 which is not implemented).
 
-A zone's central meridian is `utm({ zone }).centralMeridian`.
+A zone's central meridian is `zone * 6 - 183` degrees (zone 33: 15°), also `.centralMeridian` of a `utm` converter.
 
 ## Ellipsoids
 
@@ -250,6 +252,8 @@ zone33.toLonLatInterleaved(xy, xy);
 wasm.dispose(); // or: using wasm = await loadWasm();
 ```
 
+`using` needs a runtime with `Symbol.dispose`, which early Node 20 releases lack; `dispose()` works everywhere.
+
 - **Loading.** By default the module is `fast-proj.wasm` next to `wasm.js`, resolved with `new URL('./fast-proj.wasm',
   import.meta.url)`. Vite and webpack 5 copy the asset; on Node and Bun it is read from disk. With a bundler that
   doesn't handle the pattern (esbuild), pass `source`: a URL you serve, the bytes, or a compiled `WebAssembly.Module`.
@@ -266,13 +270,16 @@ wasm.dispose(); // or: using wasm = await loadWasm();
 - **Copies.** Converters take and return caller-owned arrays, so each batch call copies the input into the workspace
   and the result back (about 0.17 ns per point). There is no zero-copy access to wasm memory.
 - **GCJ-02.** The context's `gcj02()` batch methods run the wasm kernel in `'passthrough'` mode (about 1.9–4×
-  the JavaScript kernel); `'transform'` mode runs the JavaScript kernel.
+  the JavaScript kernel); `'transform'` mode runs the JavaScript kernel. Each context returns one converter per mode.
 - **Single points.** `toLonLatPoint`/`fromLonLatPoint` and `toWgs84Point`/`fromWgs84Point` run the JavaScript kernel:
   passing one point into wasm costs more than computing it.
 - **Re-entrancy.** Calling the same context from inside an array-like getter during a batch call throws.
 - **Accuracy contract.** Batch results match the JavaScript backend within 4e-9 m and 6e-14° (longitude differences
   scaled by cos(latitude)), not bit for bit. Coordinates above 2^25 m (about 33,554 km, such as Gauss–Krüger eastings
-  with a zone prefix) can differ by one ulp of the output, 7.5e-9 m.
+  with a zone prefix) can differ by one ulp of the output, 7.5e-9 m. This holds for each converter on its own and
+  for a projection with a `geographic` system, except GCJ-02 longitude/latitude within 1e-11° of longitude 105°: at
+  the formula's √|x| cusp, one ulp of WGS84 longitude moves GCJ-02 latitude by up to 2e-13°, so differences there
+  stay within 1e-12° (0.1 µm).
 
 ## Domain and accuracy
 
@@ -313,23 +320,25 @@ intermediate values.
 
 ## Migrating from 0.2
 
-| 0.2                                                      | 0.3                                                                                |
-| -------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `tmerc({ lon0, k0 })`                                    | `tmerc({ centralMeridian, scaleFactor })`; the old names throw naming the new ones |
-| `t.lon0`, `t.k0`                                         | `t.centralMeridian`, `t.scaleFactor`                                               |
-| `GeographicTransform` type                               | `Geographic`                                                                       |
-| `gcj02()` then `fromWgs84Interleaved` after a projection | `utm({ zone, geographic: GCJ02 })`, or `GCJ02.fromWgs84Interleaved`                |
-| `zoneFor(lon, lat)`                                      | `utmZoneFor(lon, lat)`                                                             |
-| `centralMeridian(zone)`                                  | `utm({ zone }).centralMeridian` or `zone * 6 - 183`                                |
-| `MAX_FLATTENING`                                         | `0.01`                                                                             |
-| `positionsFromArrays(lon, lat)`                          | `positions(lon, lat)`; `lineString` and `latLngs` take `(lon, lat)` too            |
-| `wasm.utm(...).dispose()` (converters)                   | dispose the context; converters have no `dispose`                                  |
-| `WasmDisposable` type                                    | removed; `WasmContext` extends `Disposable`                                        |
-| `backend === 'wasm-simd'`                                | `'wasm'`; a non-SIMD custom build gives `'js'`                                     |
-| unknown option keys ignored                              | `TypeError`                                                                        |
-| `utm({ zone: '50' })` threw `RangeError`                 | `TypeError`: wrong types throw `TypeError`, bad values `RangeError`                |
-| error messages                                           | prefixed `fast-proj:`                                                              |
-| converters were mutable objects                          | frozen; a custom ellipsoid is copied                                               |
+| 0.2                                                      | 0.3                                                                                       |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `tmerc({ lon0, k0 })`                                    | `tmerc({ centralMeridian, scaleFactor })`; the old names throw naming the new ones        |
+| `t.lon0`, `t.k0`                                         | `t.centralMeridian`, `t.scaleFactor`                                                      |
+| `GeographicTransform` type                               | `Geographic`                                                                              |
+| `gcj02()` then `fromWgs84Interleaved` after a projection | `utm({ zone, geographic: GCJ02 })`, or `GCJ02.fromWgs84Interleaved`                       |
+| `gcj02()` returned a new object per call                 | one shared frozen converter per mode: `gcj02() === GCJ02`; per context for `wasm.gcj02()` |
+| `zoneFor(lon, lat)`                                      | `utmZoneFor(lon, lat)`                                                                    |
+| `centralMeridian(zone)`                                  | `zone * 6 - 183` (zone 33 → 15); `.centralMeridian` of a converter you already have       |
+| `MAX_FLATTENING`                                         | `0.01`                                                                                    |
+| `positionsFromArrays(lon, lat)`                          | `positions(lon, lat)`; `lineString` and `latLngs` take `(lon, lat)` too                   |
+| `wasm.utm(...).dispose()` (converters)                   | dispose the context; converters have no `dispose`                                         |
+| `WasmDisposable` type                                    | removed; `WasmContext` extends `Disposable`                                               |
+| `backend === 'wasm-simd'`                                | `'wasm'`; a non-SIMD custom build gives `'js'`                                            |
+| unknown option keys ignored, also by `loadWasm`          | `TypeError`                                                                               |
+| `loadWasm({ source: 123 })` failed inside the engine     | `TypeError`                                                                               |
+| `utm({ zone: '50' })` threw `RangeError`                 | `TypeError`: wrong types throw `TypeError`, bad values `RangeError`                       |
+| error messages                                           | prefixed `fast-proj:`                                                                     |
+| converters were mutable objects                          | frozen; a custom ellipsoid is copied                                                      |
 
 ## Examples
 

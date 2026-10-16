@@ -258,6 +258,7 @@ export function transverseMercator(
     scaleFactor: k0,
     falseEasting: fe,
     falseNorthing: fn,
+    latitudeOfOrigin: 0,
     ellipsoid,
     toLonLat(x, y, lon, lat) {
       const n = x.length;
