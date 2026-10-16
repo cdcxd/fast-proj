@@ -20,7 +20,7 @@ assert.ok(Math.abs(lon - 15) < 1e-12 && Math.abs(lat - 52) < 1e-9);
 assert.equal(tmerc({ lon0: 117, falseEasting: 500000 }).fromLonLatPoint(117, 0)[0], 500000);
 const buf = conv.toLonLatInterleaved([500000, 0]);
 assert.equal(lineString(buf).type, 'LineString');
-assert.ok(Math.abs(latLngs(buf)[0]![1] - 15) < 1e-12);
+assert.ok(Math.abs(latLngs(buf)[0][1] - 15) < 1e-12);
 const [gl, gp] = gcj02().toWgs84Point(...gcj02().fromWgs84Point(116.391, 39.907));
 assert.ok(Math.abs(gl - 116.391) < 1e-10 && Math.abs(gp - 39.907) < 1e-10);
 

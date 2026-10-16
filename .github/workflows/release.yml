@@ -36,7 +36,7 @@ jobs:
         with:
           node-version: 20
       - name: Check Node 20 package compatibility
-        run: node packages/fast-proj/test/smoke.mts
+        run: node packages/fast-proj/test/smoke.mjs
       - uses: actions/setup-node@v4
         with:
           node-version: 24.21.0
