@@ -4,7 +4,8 @@
 // file. Engines optimize a loop with the kernel written out in it much better than one calling a kernel that returns
 // through closure variables (Node and Chromium up to 2×), so the batch loops hold copies and the point methods call
 // the kernel. Options rename identifiers in the copy (`rx = out[i]`); `return = ...` replaces a bare `return;`
-// (default `continue;`). A kernel's own regions are expanded before it is copied. --check fails if a region is stale.
+// (default `continue;`); `scope = open` leaves out the enclosing block, so code after the region can read the copy's
+// locals. A kernel's own regions are expanded before it is copied. --check fails if a region is stale.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -91,7 +92,9 @@ function expand(k: Kernel, name: string, args: string[], opts: [string, string][
   const body = dedent(k.body.filter((l) => !/^\s*\/\//.test(l)));
   const text = body.join('\n');
   const declared = new Set([...text.matchAll(/\b(?:const|let)\s+(\w+)|,\s+(\w+) = /g)].map((m) => m[1] ?? m[2]));
-  const out = ['{'];
+  const open = opts.some(([key, v]) => key === 'scope' && v === 'open');
+  const pad = open ? '' : '  ';
+  const out = open ? [] : ['{'];
   k.params.forEach((p, i) => {
     const a = args[i]!;
     if (a === p) return;
@@ -100,10 +103,10 @@ function expand(k: Kernel, name: string, args: string[], opts: [string, string][
         throw new Error(`@inline ${name}: argument ${a} uses ${id}, a name the kernel binds`);
     }
     const mutated = new RegExp(`\\b${p}\\s*(?:[-+*/%]?=)(?!=)`).test(text);
-    out.push(`  ${mutated ? 'let' : 'const'} ${p} = ${a};`);
+    out.push(`${pad}${mutated ? 'let' : 'const'} ${p} = ${a};`);
   });
   const exit = opts.find(([key]) => key === 'return')?.[1] ?? 'continue;';
-  const renames = opts.filter(([key]) => key !== 'return');
+  const renames = opts.filter(([key]) => key !== 'return' && key !== 'scope');
   // Blocks opened by loops and functions: a `return;` inside one can't become `continue;`.
   const nested: boolean[] = [];
   for (let line of body) {
@@ -119,9 +122,9 @@ function expand(k: Kernel, name: string, args: string[], opts: [string, string][
     }
     line = line.replace(/\breturn;/g, exit);
     for (const [from, to] of renames) line = line.replace(new RegExp(`(?<![.\\w$])${from}\\b`, 'g'), to);
-    out.push(line ? `  ${line}` : '');
+    out.push(line ? pad + line : '');
   }
-  out.push('}');
+  if (!open) out.push('}');
   return out;
 }
 

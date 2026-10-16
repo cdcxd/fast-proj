@@ -3,8 +3,8 @@
 //!
 //! Out-of-box lanes compute garbage (wasm float ops don't trap) and select
 //! their (reduced) input at the end; pairs with both lanes out of the box skip
-//! the math. The inverse's extra steps near longitude 105 are masked per lane,
-//! so each lane takes exactly the steps the TS loop would.
+//! the math. The inverse's extra Newton steps near longitude 105 are masked
+//! per lane, so each lane takes exactly the steps the TS loop would.
 
 use crate::gcj::*;
 use crate::kernel::reduce_lon;
@@ -67,8 +67,11 @@ fn small_sincos(r: v128) -> (v128, v128) {
     (add(r, mul(t, mul(r, poly(t, &S)))), add(spl(1.0), mul(t, poly(t, &C))))
 }
 
+/// The offset and, with `J`, the Newton matrix I + J: (ox, oy, ja, jb, jc, jd), without the sqrt(|x|) term's
+/// derivative within `cut` of 0; without `J` the last four are zero.
 #[inline(never)]
-fn offset(x: v128, y: v128, s1: v128, c1: v128, u1: v128, v1: v128) -> (v128, v128) {
+#[allow(clippy::too_many_arguments)]
+fn offset<const J: bool>(x: v128, y: v128, s1: v128, c1: v128, u1: v128, v1: v128, cut: f64) -> [v128; 6] {
     let s2 = dbl(s1, c1);
     let c2 = one_m2(s1);
     let s4 = dbl(s2, c2);
@@ -126,10 +129,52 @@ fn offset(x: v128, y: v128, s1: v128, c1: v128, u1: v128, v1: v128) -> (v128, v1
     dlon = add(dlon, mul(spl(200.0), s2));
     let m = sub(spl(1.0), mul(mul(spl(EE), sp), sp));
     let sm = f64x2_sqrt(m);
-    (
-        f64x2_div(mul(mul(dlon, spl(KLON)), sm), cp),
-        mul(mul(mul(dlat, spl(KLAT)), m), sm),
-    )
+    let ox = f64x2_div(mul(mul(dlon, spl(KLON)), sm), cp);
+    let oy = mul(mul(mul(dlat, spl(KLAT)), m), sm);
+    if !J {
+        return [ox, oy, spl(0.0), spl(0.0), spl(0.0), spl(0.0)];
+    }
+    let c120 = one_m2(s60);
+    let c360 = triple_c(c120);
+    let v60 = one_m2(u30);
+    let v180 = triple_c(v60);
+    // 0.05 sign(x) / sqrt|x|, dropped within `cut` of 105 (singular there).
+    let dr = v128_bitselect(
+        f64x2_div(v128_bitselect(spl(0.05), spl(-0.05), f64x2_gt(x, spl(0.0))), r),
+        spl(0.0),
+        f64x2_gt(f64x2_abs(x), spl(cut)),
+    );
+    let dcommon = add(mul(spl(JS360), c360), mul(spl(JS120), c120));
+    // Summed left to right, as in the TS kernel.
+    let mut dlon_x = add(spl(1.0), mul(spl(0.2), x));
+    dlon_x = add(dlon_x, mul(spl(0.1), y));
+    dlon_x = add(dlon_x, dr);
+    dlon_x = add(dlon_x, dcommon);
+    dlon_x = add(dlon_x, mul(spl(JS60), c60));
+    dlon_x = add(dlon_x, mul(spl(JS20), c20));
+    dlon_x = add(dlon_x, mul(spl(JS5), c5));
+    dlon_x = add(dlon_x, mul(spl(JS2), c2));
+    let mut dlat_x = add(spl(2.0), mul(spl(0.1), y));
+    dlat_x = add(dlat_x, mul(spl(2.0), dr));
+    dlat_x = add(dlat_x, dcommon);
+    let mut dlat_y = add(spl(3.0), mul(spl(0.4), y));
+    dlat_y = add(dlat_y, mul(spl(0.1), x));
+    dlat_y = add(dlat_y, mul(spl(JU180), v180));
+    dlat_y = add(dlat_y, mul(spl(JU60), v60));
+    dlat_y = add(dlat_y, mul(spl(JU15), v15));
+    dlat_y = add(dlat_y, mul(spl(JU6), v6));
+    let flon = f64x2_div(mul(spl(KLON), sm), cp);
+    let flat = mul(mul(spl(KLAT), m), sm);
+    let t = mul(f64x2_div(sp, cp), spl(KY));
+    let em = f64x2_div(mul(mul(mul(spl(EE), sp), cp), spl(KY)), m);
+    [
+        ox,
+        oy,
+        add(spl(1.0), mul(dlon_x, flon)),
+        add(mul(add(spl(2.0), mul(spl(0.1), x)), flon), mul(ox, sub(t, em))),
+        mul(dlat_x, flat),
+        sub(add(spl(1.0), mul(dlat_y, flat)), mul(mul(spl(3.0), oy), em)),
+    ]
 }
 
 /// Loads a pair, reduces lanes outside [-180, 180] by the scalar fmod (rare), and returns the box mask.
@@ -164,14 +209,14 @@ pub fn forward_batch(lon: &[f64], lat: &[f64], olon: &mut [f64], olat: &mut [f64
         let y = sub(p, spl(35.0));
         let (s, c) = vsincos(mul(x, spl(KX)));
         let (u, v) = small_sincos(mul(y, spl(KY)));
-        let (ox, oy) = offset(x, y, s, c, u, v);
+        let [ox, oy, ..] = offset::<false>(x, y, s, c, u, v, CUSP);
         store_pair(v128_bitselect(add(l, ox), l, inbox), olon, i);
         store_pair(v128_bitselect(add(p, oy), p, inbox), olat, i);
         i += 2;
     }
 }
 
-/// Fixed-point state: iterate (wx, wy), its sin/cos pairs, and the offset at it.
+/// Newton state: iterate (wx, wy), the sin/cos pairs at the iterate before the last step, and that step.
 #[derive(Clone, Copy)]
 struct W {
     wx: v128,
@@ -180,38 +225,48 @@ struct W {
     c: v128,
     u: v128,
     v: v128,
-    ox: v128,
-    oy: v128,
+    dx: v128,
+    dy: v128,
 }
 
-/// One step w = g - offset(w), rotating the sin/cos pairs by the step (series terms scaled by reciprocals, not
-/// divided: the difference is far below an ulp of the result).
+/// One Newton step on w + offset(w) = (lon, lat), dropping the sqrt(|x|) derivative within `cut` of 105; the sin/cos
+/// pairs must be at (wx, wy).
 #[inline]
-fn step(lon: v128, lat: v128, w: W) -> W {
-    let nx = sub(lon, w.ox);
-    let ny = sub(lat, w.oy);
-    let d = mul(sub(nx, w.wx), spl(KX));
-    let e = mul(sub(ny, w.wy), spl(KY));
+fn step(lon: v128, lat: v128, w: W, cut: f64) -> W {
+    let [ox, oy, ja, jb, jc, jd] =
+        offset::<true>(sub(w.wx, spl(105.0)), sub(w.wy, spl(35.0)), w.s, w.c, w.u, w.v, cut);
+    let gx = sub(sub(lon, ox), w.wx);
+    let gy = sub(sub(lat, oy), w.wy);
+    let idet = f64x2_div(spl(1.0), sub(mul(ja, jd), mul(jb, jc)));
+    let dx = mul(sub(mul(jd, gx), mul(jb, gy)), idet);
+    let dy = mul(sub(mul(ja, gy), mul(jc, gx)), idet);
+    W {
+        wx: add(w.wx, dx),
+        wy: add(w.wy, dy),
+        dx,
+        dy,
+        ..w
+    }
+}
+
+/// Rotates the sin/cos pairs by the last step, to the iterate (series terms scaled by reciprocals, not divided: the
+/// difference is far below an ulp of the result).
+#[inline]
+fn rotate(w: W) -> W {
+    let d = mul(w.dx, spl(KX));
+    let e = mul(w.dy, spl(KY));
     let d2 = mul(d, d);
     let e2 = mul(e, e);
     let sd = mul(d, sub(spl(1.0), mul(d2, spl(1.0 / 6.0))));
     let cd = sub(spl(1.0), mul(d2, sub(spl(0.5), mul(d2, spl(1.0 / 24.0)))));
     let se = mul(e, sub(spl(1.0), mul(e2, spl(1.0 / 6.0))));
     let ce = sub(spl(1.0), mul(e2, sub(spl(0.5), mul(e2, spl(1.0 / 24.0)))));
-    let s = add(mul(w.s, cd), mul(w.c, sd));
-    let c = sub(mul(w.c, cd), mul(w.s, sd));
-    let u = add(mul(w.u, ce), mul(w.v, se));
-    let v = sub(mul(w.v, ce), mul(w.u, se));
-    let (ox, oy) = offset(sub(nx, spl(105.0)), sub(ny, spl(35.0)), s, c, u, v);
     W {
-        wx: nx,
-        wy: ny,
-        s,
-        c,
-        u,
-        v,
-        ox,
-        oy,
+        s: add(mul(w.s, cd), mul(w.c, sd)),
+        c: sub(mul(w.c, cd), mul(w.s, sd)),
+        u: add(mul(w.u, ce), mul(w.v, se)),
+        v: sub(mul(w.v, ce), mul(w.u, se)),
+        ..w
     }
 }
 
@@ -230,40 +285,29 @@ pub fn inverse_batch(lon: &[f64], lat: &[f64], olon: &mut [f64], olat: &mut [f64
             i += 2;
             continue;
         }
-        let x = sub(l, spl(105.0));
-        let y = sub(p, spl(35.0));
-        let (s, c) = vsincos(mul(x, spl(KX)));
-        let (u, v) = small_sincos(mul(y, spl(KY)));
-        let (ox, oy) = offset(x, y, s, c, u, v);
-        let mut w = W {
-            wx: l,
-            wy: p,
-            s,
-            c,
-            u,
-            v,
-            ox,
-            oy,
-        };
+        let (s, c) = vsincos(mul(sub(l, spl(105.0)), spl(KX)));
+        let (u, v) = small_sincos(mul(sub(p, spl(35.0)), spl(KY)));
+        let zero = spl(0.0);
+        let mut w = step(l, p, W { wx: l, wy: p, s, c, u, v, dx: zero, dy: zero }, CUSP);
         for _ in 1..STEPS {
-            w = step(l, p, w);
+            w = step(l, p, rotate(w), DERIV_CUT);
         }
         let mut active = v128_and(inbox, near_cusp(&w));
         for _ in STEPS..CUSP_STEPS {
             if !v128_any_true(active) {
                 break;
             }
-            let n = step(l, p, w);
-            // Inactive lanes never reactivate, so only their offsets need freezing.
+            let n = step(l, p, rotate(w), DERIV_CUT);
+            // Inactive lanes never reactivate, so only their result needs freezing.
             w = W {
-                ox: v128_bitselect(n.ox, w.ox, active),
-                oy: v128_bitselect(n.oy, w.oy, active),
+                wx: v128_bitselect(n.wx, w.wx, active),
+                wy: v128_bitselect(n.wy, w.wy, active),
                 ..n
             };
             active = v128_and(active, near_cusp(&w));
         }
-        store_pair(v128_bitselect(sub(l, w.ox), l, inbox), olon, i);
-        store_pair(v128_bitselect(sub(p, w.oy), p, inbox), olat, i);
+        store_pair(v128_bitselect(w.wx, l, inbox), olon, i);
+        store_pair(v128_bitselect(w.wy, p, inbox), olat, i);
         i += 2;
     }
 }

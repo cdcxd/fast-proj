@@ -265,8 +265,11 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
 - Re-entrant calls into a context (from array-like getters) throw; `dispose()` during a call throws.
 - `gcj02` (0.2) has a wasm kernel since 0.2.1, for `'passthrough'` mode (`gcj_forward_batch` / `gcj_inverse_batch`, SIMD
   build only, so other modules fall back to JavaScript). Its 11 sines come from two sin/cos pairs by multiple-angle
-  identities; the inverse takes four fixed-point steps (2e-11°), six near longitude 105°, where the √|x| term slows
-  convergence. Two Newton steps measured no faster and need that term's derivative, which is singular there.
+  identities; the inverse takes two Newton steps (3e-12°), up to six within 1e-4° of longitude 105°. The Jacobian comes
+  from the offset's multiple-angle values; the √|x| term's derivative is singular at 105°, so it is dropped within 1e-10°
+  of it, and on the first step, which starts at the input and may be across 105° from the solution, within 1e-4°. Since
+  0.3.1 this replaces four fixed-point steps (six near 105°, 2e-11°): 25–46% faster in both backends and 3–20× more
+  accurate (fixture 8.7e-12° -> 2.5e-12°, round trip 7e-12° -> 4e-13°).
   `'transform'` mode iterates until converged instead and gives `NaN` where it doesn't. That per-point step count
   doesn't fit the fixed-step f64x2 kernel, so it stays JavaScript; the kernel masks the extra steps near 105° per lane,
   so each point takes the steps the JavaScript loop would.

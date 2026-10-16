@@ -22,7 +22,7 @@ describe('gcj02', () => {
   it('matches the 40-digit reference', () => {
     // Against the references rounded to doubles: fromWgs84 is correctly rounded at all but one coordinate.
     expect(maxError(fixture.fromWgs84, g.fromWgs84Point)).toBeLessThan(3e-16);
-    expect(maxError(fixture.toWgs84, g.toWgs84Point)).toBeLessThan(2e-11);
+    expect(maxError(fixture.toWgs84, g.toWgs84Point)).toBeLessThan(3e-12);
   });
 
   it('matches gcoord and coordtransform forward', () => {
@@ -50,7 +50,27 @@ describe('gcj02', () => {
         max = Math.max(max, Math.abs(l - lon) * cosd(lat), Math.abs(p - lat));
       }
     }
-    expect(max).toBeLessThan(2e-11);
+    expect(max).toBeLessThan(1e-12);
+  });
+
+  it('round-trips near the cusp at longitude 105', () => {
+    // WGS84 longitudes 1e-12 to 1e-1 degrees either side of 105, and GCJ-02 inputs that close to 105, whose solutions
+    // lie across it.
+    let wgs = 0;
+    let gcj = 0;
+    for (let e = -12; e <= -1; e += 0.25) {
+      for (const side of [-1, 1]) {
+        for (const lat of [1, 12.3, 22.5, 35, 47.1, 54.4, 55.8255]) {
+          const lon = 105 + side * 10 ** e;
+          const [l, p] = g.toWgs84Point(...g.fromWgs84Point(lon, lat));
+          wgs = Math.max(wgs, Math.abs(l - lon) * cosd(lat), Math.abs(p - lat));
+          const [fl, fp] = g.fromWgs84Point(...g.toWgs84Point(lon, lat));
+          gcj = Math.max(gcj, Math.abs(fl - lon) * cosd(lat), Math.abs(fp - lat));
+        }
+      }
+    }
+    expect(wgs).toBeLessThan(2e-12);
+    expect(gcj).toBeLessThan(1e-13);
   });
 
   it('batch and interleaved forms agree with the point form', () => {
