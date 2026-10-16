@@ -845,7 +845,7 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
         return;
       }
       if (wl === -180) wl = 180;
-      // sin, cos of the latitude: the conformal latitude chi plus phi - chi, below 0.004 rad.
+      // sin, cos of the latitude: the conformal latitude chi plus phi - chi, below 0.01 rad.
       const ir = 1 / Math.sqrt(r2);
       const sChi = sx * ir;
       const cChi = h * ir;

@@ -98,6 +98,15 @@ function expand(k: Kernel, name: string, args: string[], opts: [string, string][
   const out = open ? [] : ['{'];
   const exit = opts.find(([key]) => key === 'return')?.[1] ?? 'continue;';
   const renames = opts.filter(([key]) => key !== 'return' && key !== 'scope');
+  for (const [from] of renames)
+    if (!k.params.includes(from) && !new RegExp(`(?<![.\\w$])${from}\\b`).test(text))
+      throw new Error(`@inline ${name}: rename ${from} matches nothing`);
+  // One pass, so a rename's target is never renamed again (s1 = s2; s2 = s3).
+  const renamed = new Map(renames);
+  if (renamed.size < renames.length) throw new Error(`@inline ${name}: a name renamed twice`);
+  const renameRe = renames.length
+    ? new RegExp(`(?<![.\\w$])(?:${renames.map(([from]) => from).join('|')})\\b`, 'g')
+    : null;
   // The name each parameter is bound to in the copy.
   const bounds = k.params.map((p) => renames.find(([from]) => from === p)?.[1] ?? p);
   k.params.forEach((p, i) => {
@@ -125,7 +134,7 @@ function expand(k: Kernel, name: string, args: string[], opts: [string, string][
       if (ch === '}') nested.pop();
     }
     line = line.replace(/\breturn;/g, exit);
-    for (const [from, to] of renames) line = line.replace(new RegExp(`(?<![.\\w$])${from}\\b`, 'g'), to);
+    if (renameRe) line = line.replace(renameRe, (from) => renamed.get(from)!);
     out.push(line ? pad + line : '');
   }
   if (!open) out.push('}');

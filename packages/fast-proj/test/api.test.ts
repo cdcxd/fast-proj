@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { GCJ02, GRS80, WGS84, gcj02, utm as jsUtm, utmFor, utmZoneFor } from '../src/index.js';
+import { fusers, tmInverses } from '../src/geographic.js';
+import { GCJ02, GRS80, WGS84, gcj02, tmerc as jsTmerc, utm as jsUtm, utmFor, utmZoneFor } from '../src/index.js';
 import type { Geographic, Projection } from '../src/index.js';
 import { loadWasm } from '../src/wasm.js';
 import { backends } from './backends.js';
@@ -383,5 +384,67 @@ describe('root rules', () => {
 
   it('loadWasm rejects unknown options', async () => {
     await expect(loadWasm({ sorce: 'x' } as never)).rejects.toThrow(/unknown loadWasm\(\) option/);
+  });
+});
+
+describe('fused x/y -> GCJ-02', () => {
+  it('registers both halves and runs the fused builder', () => {
+    const a = jsUtm({ zone: 1 });
+    const b = jsUtm({ zone: 2 });
+    expect(tmInverses.get(a.toLonLat)?.lon0Deg).toBe(-177);
+    expect(tmInverses.get(b.toLonLat)?.lon0Deg).toBe(-171);
+    expect(fusers.has(GCJ02)).toBe(true);
+    expect(fusers.has(gcj02({ outsideChina: 'transform' }))).toBe(true);
+    // A copy is another object: correct, but two passes.
+    expect(fusers.has({ ...GCJ02 })).toBe(false);
+    // gcj02() hands out the shared GCJ02: restore its builder afterwards.
+    const g = gcj02();
+    const own = fusers.get(g)!;
+    const seen: number[] = [];
+    fusers.set(g, (t) => ({
+      batch(_a, _b, outA, outB, o1, step, end) {
+        seen.push(t.lon0Deg);
+        for (let j = 0; j < end; j += step) {
+          outA[j] = 1;
+          outB[j + o1] = 2;
+        }
+      },
+      point: (x, y) => [x + t.lon0Deg, y],
+    }));
+    try {
+      const p = jsUtm({ zone: 50, geographic: g });
+      expect(p.toLonLatPoint(0, 5)).toEqual([117, 5]);
+      expect(Array.from(p.toLonLat([0], [0]).lat)).toEqual([2]);
+      expect(Array.from(p.toLonLatInterleaved([0, 0]))).toEqual([1, 2]);
+      expect(seen).toEqual([117, 117]);
+    } finally {
+      fusers.set(g, own);
+    }
+  });
+
+  it('matches the two steps for other tmerc parameters', () => {
+    const geo = gcj02();
+    for (const opts of [
+      { centralMeridian: 117.5 },
+      { centralMeridian: 104.25, scaleFactor: 0.9999, falseEasting: 250000, falseNorthing: -1e6 },
+      { centralMeridian: 110.3, ellipsoid: { a: 6371000, f: 0 } },
+      { centralMeridian: 108, ellipsoid: { a: 6378245, f: 0.0099 } },
+    ]) {
+      const base = jsTmerc(opts);
+      const composed = jsTmerc({ ...opts, geographic: geo });
+      const xs: number[] = [];
+      const ys: number[] = [];
+      for (let i = 0; i < 500; i++) {
+        const [x, y] = base.fromLonLatPoint(74 + ((i * 0.618034) % 1) * 61, 18 + ((i * 0.754878) % 1) * 36);
+        xs.push(x);
+        ys.push(y);
+      }
+      const w = base.toLonLat(xs, ys);
+      const ref = geo.fromWgs84(w.lon, w.lat);
+      const r = composed.toLonLat(xs, ys);
+      expect(r.lon.length).toBe(500);
+      sameOrUlp(r.lon, ref.lon, ref.lat);
+      sameOrUlp(r.lat, ref.lat);
+    }
   });
 });

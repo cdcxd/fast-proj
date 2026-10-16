@@ -460,6 +460,7 @@ export function transverseMercator(
       return [rx, ry];
     },
   };
+  // Keyed by the method: each converter needs its own toLonLat closure, or the last one registered wins.
   tmInverses.set(converter.toLonLat, {
     lon0Deg,
     lon0,

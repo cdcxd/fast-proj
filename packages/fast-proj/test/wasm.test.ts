@@ -138,6 +138,19 @@ describe('loadWasm', () => {
     expect(() => root.toLonLatPoint(x[0]!, y[0]!)).toThrow(/disposed/);
   });
 
+  it('a root projection with a wasm geographic throws once disposed, outputs untouched', async () => {
+    const ctx = await loadWasm({ source: url });
+    const root = utm({ zone: 50, geographic: ctx.gcj02({ outsideChina: 'transform' }) });
+    expect(root.toLonLatPoint(440000, 4420000)).toEqual(
+      utm({ zone: 50, geographic: gcj02({ outsideChina: 'transform' }) }).toLonLatPoint(440000, 4420000),
+    );
+    ctx.dispose();
+    const lon = new Float64Array(1);
+    const lat = new Float64Array(1);
+    expect(() => root.toLonLat([440000], [4420000], lon, lat)).toThrow(/disposed/);
+    expect([lon[0], lat[0]]).toEqual([0, 0]);
+  });
+
   it('runs the JavaScript gcj02 kernel for modules without the wasm one', async () => {
     const module = await WebAssembly.compile(readFileSync(url));
     const instantiate = WebAssembly.instantiate;
