@@ -3,7 +3,8 @@
  * interfaces as the JavaScript build. Batch results match the JavaScript backend within 4e-9 m and 6e-14 degrees
  * (longitude differences scaled by cos(latitude), so raw longitudes near the poles differ more), or one ulp of
  * outputs above 2^25 m; single-point methods run the JavaScript kernel. Composed with GCJ-02, results near
- * longitude 105 (the formula's cusp) and the China box edge can differ more; see docs/api.md.
+ * longitude 105 (the formula's cusp), the China box edge, and the poles in 'transform' mode can differ more; see
+ * docs/api.md.
  */
 /// <reference lib="esnext.disposable" preserve="true" />
 import { checkEven, checkOptions, checkOut, checkSame } from './checks.js';

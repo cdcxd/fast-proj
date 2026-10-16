@@ -225,8 +225,9 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
 - Accuracy contract: wasm results match the JS backend within 4e-9 m and 6e-14° (longitude differences scaled by
   cos(latitude)), not bit for bit; one ulp of the output (7.5e-9 m) above 2^25 m.
   Composed with GCJ-02 the bound has exceptions where a one-ulp difference in the projection's WGS84 result is
-  amplified: the √|x| cusp at longitude 105° and, in `'passthrough'` mode, the China box edge (a point on one side
-  per backend). Both are inherent to two-pass composition across backends; see the API docs.
+  amplified: the √|x| cusp at longitude 105°, latitudes beyond ±89.9° in `'transform'` mode, and, in `'passthrough'`
+  mode, the China box edge (a point on one side per backend). All are inherent to two-pass composition across
+  backends; see the API docs.
 
 ## Release
 

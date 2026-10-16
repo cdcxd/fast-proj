@@ -283,6 +283,9 @@ wasm.dispose(); // or: using wasm = await loadWasm();
   - WGS84 longitude within 1e-11° of 105°, the formula's √|x| cusp: one ulp there moves GCJ-02 latitude by about
     2.2e-13°, so differences are up to 1e-12° below latitude 85° and grow toward the poles in `'transform'` mode
     (about 5e-12° at 89.9°).
+  - In `'transform'` mode, WGS84 latitudes beyond ±89.9°, at any longitude: the offset is no longer one-to-one there
+    (see [`gcj02`](#gcj02-and-gcj02options)), and differences grow toward the poles, measured at 2e-12° at 89.99° and
+    2e-6° at 89.99999°.
   - In `'passthrough'` mode, WGS84 positions within one ulp of the China box edge: one backend may apply the offset and
     the other pass the point through, a difference of up to the offset itself (several hundred metres).
 
