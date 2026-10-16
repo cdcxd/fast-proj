@@ -4,6 +4,16 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+declare global {
+  // Only defined when the script runs under Bun; the `typeof` guards keep Node honest.
+  const Bun:
+    | { version: string; Transpiler: new (options: { loader: 'ts' }) => { transformSync(code: string): string } }
+    | undefined;
+  interface Window {
+    gcoord: { readonly WGS84: unknown; readonly GCJ02: unknown; transform(...args: unknown[]): unknown };
+  }
+}
+
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const runs = Number(args.find((a) => a.startsWith('--runs='))?.slice(7) ?? 31);
@@ -26,11 +36,19 @@ async function inProcess() {
   };
 }
 
+// Chromium has no TypeScript stripping; Bun does not export node:module's, so each runtime uses its own.
+async function toJavaScript(path: string): Promise<string> {
+  const code = await readFile(path, 'utf8');
+  if (typeof Bun !== 'undefined') return new Bun.Transpiler({ loader: 'ts' }).transformSync(code);
+  const { stripTypeScriptTypes } = await import('node:module');
+  return stripTypeScriptTypes(code);
+}
+
 async function inBrowser() {
   const { chromium } = await import('playwright');
   const browser = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : {});
   const page = await browser.newPage();
-  const files = {
+  const files: Record<string, [string, string]> = {
     '/': ['text/html', '<!doctype html><title>bench</title>'],
     '/proj4.js': ['text/javascript', join(root, '../../node_modules/proj4/dist/proj4.js')],
     '/gcoord.js': ['text/javascript', join(root, '../../node_modules/gcoord/dist/gcoord.global.prod.js')],
@@ -44,7 +62,8 @@ async function inBrowser() {
     }
     const f = files[path];
     if (!f) return route.fulfill({ status: 404 });
-    const body = path === '/' ? f[1] : await readFile(f[1]);
+    // Chromium does not strip types: cases.mts is transpiled on the fly.
+    const body = path === '/' ? f[1] : path === '/cases.mjs' ? await toJavaScript(f[1]) : await readFile(f[1]);
     return route.fulfill({ contentType: f[0], body });
   });
   await page.goto('http://bench.local/');
@@ -52,10 +71,13 @@ async function inBrowser() {
   await page.addScriptTag({ url: '/gcoord.js' });
   const { rows, gcjRows } = await page.evaluate(
     async (opts) => {
-      const { gcj02, utm } = await import('/dist/index.js');
-      const { lineString } = await import('/dist/geojson.js');
-      const { loadWasm } = await import('/dist/wasm.js');
-      const { runCases, runGcjCases } = await import('/cases.mjs');
+      // Variables keep tsc from resolving browser-only URLs (Chromium cannot parse TS casts).
+      const dist = '/dist/';
+      const cases = '/cases.mjs';
+      const { gcj02, utm } = await import(dist + 'index.js');
+      const { lineString } = await import(dist + 'geojson.js');
+      const { loadWasm } = await import(dist + 'wasm.js');
+      const { runCases, runGcjCases } = await import(cases);
       const ctx = await loadWasm();
       return {
         rows: runCases(window.proj4, { js: utm, [ctx.backend]: ctx.utm }, lineString, opts),

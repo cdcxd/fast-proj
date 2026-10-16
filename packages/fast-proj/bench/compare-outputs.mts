@@ -5,25 +5,26 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import type { Projection } from '../dist/index.js';
 
-const flags = new Map();
+const flags = new Map<string, string>();
 for (const arg of process.argv.slice(2)) {
   const match = /^--(base|candidate|reference|json|markdown|csv|summary)=(.+)$/.exec(arg);
   if (!match) throw new Error(`Unknown argument: ${arg}`);
-  flags.set(match[1], match[2]);
+  flags.set(match[1]!, match[2]!);
 }
 if (!flags.has('base') || !flags.has('candidate')) {
   throw new Error('Provide --base=/path/dist/utm.js and --candidate=/path/dist/utm.js');
 }
-const basePath = resolve(flags.get('base'));
-const candidatePath = resolve(flags.get('candidate'));
+const basePath = resolve(flags.get('base')!);
+const candidatePath = resolve(flags.get('candidate')!);
 const { utm: baseline } = await import(pathToFileURL(basePath).href);
 const { utm: candidate } = await import(pathToFileURL(candidatePath).href);
 const referencePath = flags.has('reference')
-  ? resolve(flags.get('reference'))
+  ? resolve(flags.get('reference')!)
   : new URL('../test/fixtures/reference.json', import.meta.url);
 const reference = JSON.parse(await readFile(referencePath, 'utf8'));
-const ellipsoids = [
+const ellipsoids: [string, number][] = [
   ['sphere', 0],
   ['WGS84', 1 / 298.257223563],
   ['GRS80', 1 / 298.257222101],
@@ -40,7 +41,7 @@ const latitudes = [
   89.999999999,
   89.99999999999999,
 ];
-const classify = (n) =>
+const classify = (n: number): string =>
   Number.isFinite(n)
     ? 'finite'
     : Number.isNaN(n)
@@ -50,49 +51,113 @@ const classify = (n) =>
         : n === -Infinity
           ? '-Infinity'
           : 'non-number';
-const encode = (n) => (Object.is(n, -0) ? '-0' : Number.isFinite(n) ? n : classify(n));
-const wrappedDelta = (a, b) => {
+const encode = (n: number): string | number => (Object.is(n, -0) ? '-0' : Number.isFinite(n) ? n : classify(n));
+const wrappedDelta = (a: number, b: number): number => {
   let delta = a - b;
   if (delta > 180) delta -= 360;
   else if (delta < -180) delta += 360;
   return Math.abs(delta);
 };
 
-function metrics(direction) {
+/** Ordinate-keyed counters; `pairs` only exists at runtime on the first two fields. */
+type Ordinates = { x: number; y: number; lon: number; lat: number; pairs: number };
+/** Worst absolute deltas seen; the longitude variants stay 0 (absent) on forward rows. */
+type MaxDeltas = { x: number; y: number; lon: number; lat: number; lonWrapped: number; lonWeighted: number };
+/** Identity statistics accumulated per direction. */
+type Metrics = {
+  points: number;
+  identical: Ordinates;
+  classificationDiscrepancies: Ordinates;
+  signedZeroDiscrepancies: Ordinates;
+  commonFinitePairs: number;
+  maxAbsoluteDelta: MaxDeltas;
+};
+/** One ellipsoid/zone/hemisphere cell of the half-width comparison grid. */
+type MatrixRow = {
+  halfWidth: number;
+  ellipsoid: string;
+  flattening: number;
+  zone: number;
+  south: boolean;
+  forward: Metrics;
+  inverse: Metrics;
+};
+/** Encoded ordinate snapshots shared by the exceptional and raw-equator suites. */
+type EncodedRow = {
+  input: (string | number)[];
+  baseline: (string | number)[];
+  candidate: (string | number)[];
+  identical: boolean;
+  classificationDiscrepancies: number;
+  signedZeroDiscrepancies: number;
+  absoluteDeltas: (number | null)[];
+};
+type ExceptionalRow = { zone: number; direction: string } & EncodedRow;
+type RawEquatorRow = {
+  ellipsoid: string;
+  zone: number;
+  south: boolean;
+  requestedNorthingOffset: string | number;
+} & EncodedRow;
+/** One out-of-domain stress case reported independently of the success criteria. */
+type DiagnosticRow = {
+  label: string;
+  options: { zone: number; ellipsoid: { a: number; f: number } };
+  input: number[];
+  baseline: (string | number)[];
+  candidate: (string | number)[];
+  identical: boolean;
+  classificationDiscrepancies: number;
+  absoluteDeltas: (number | null)[];
+};
+/** API-form cross-check counters with up to eight example mismatches. */
+type ApiReport = {
+  comparisons: number;
+  mismatches: number;
+  outputIdentityFailures: number;
+  examples: { [key: string]: unknown; index: number; expected: string | number; actual: string | number }[];
+};
+/** Aggregated statistics for one half-width/ellipsoid group. */
+type GroupRow = { halfWidth: number; ellipsoid: string; forward: Metrics; inverse: Metrics };
+
+function metrics(direction: 'forward' | 'inverse'): Metrics {
   const [first, second] = direction === 'forward' ? ['x', 'y'] : ['lon', 'lat'];
   return {
     points: 0,
-    identical: { [first]: 0, [second]: 0, pairs: 0 },
-    classificationDiscrepancies: { [first]: 0, [second]: 0, pairs: 0 },
-    signedZeroDiscrepancies: { [first]: 0, [second]: 0 },
+    identical: { [first]: 0, [second]: 0, pairs: 0 } as Ordinates,
+    classificationDiscrepancies: { [first]: 0, [second]: 0, pairs: 0 } as Ordinates,
+    signedZeroDiscrepancies: { [first]: 0, [second]: 0 } as Ordinates,
     commonFinitePairs: 0,
-    maxAbsoluteDelta: direction === 'forward' ? { x: 0, y: 0 } : { lon: 0, lonWrapped: 0, lonWeighted: 0, lat: 0 },
+    maxAbsoluteDelta:
+      direction === 'forward'
+        ? ({ x: 0, y: 0 } as MaxDeltas)
+        : ({ lon: 0, lonWrapped: 0, lonWeighted: 0, lat: 0 } as MaxDeltas),
   };
 }
 
-function compare(m, direction, a, b, latitude) {
-  const names = direction === 'forward' ? ['x', 'y'] : ['lon', 'lat'];
+function compare(m: Metrics, direction: 'forward' | 'inverse', a: number[], b: number[], latitude: number): void {
+  const names: ['x', 'y'] | ['lon', 'lat'] = direction === 'forward' ? ['x', 'y'] : ['lon', 'lat'];
   m.points++;
   let identical = true;
   let discrepancy = false;
   for (let i = 0; i < 2; i++) {
-    const key = names[i];
+    const key = names[i]!;
     if (Object.is(a[i], b[i])) m.identical[key]++;
     else identical = false;
-    if (classify(a[i]) !== classify(b[i])) {
+    if (classify(a[i]!) !== classify(b[i]!)) {
       m.classificationDiscrepancies[key]++;
       discrepancy = true;
     }
     if (a[i] === 0 && b[i] === 0 && !Object.is(a[i], b[i])) m.signedZeroDiscrepancies[key]++;
     if (Number.isFinite(a[i]) && Number.isFinite(b[i])) {
-      m.maxAbsoluteDelta[key] = Math.max(m.maxAbsoluteDelta[key], Math.abs(a[i] - b[i]));
+      m.maxAbsoluteDelta[key] = Math.max(m.maxAbsoluteDelta[key], Math.abs(a[i]! - b[i]!));
     }
   }
   if (identical) m.identical.pairs++;
   if (discrepancy) m.classificationDiscrepancies.pairs++;
   if ([...a, ...b].every(Number.isFinite)) m.commonFinitePairs++;
   if (direction === 'inverse' && Number.isFinite(a[0]) && Number.isFinite(b[0])) {
-    const delta = wrappedDelta(a[0], b[0]);
+    const delta = wrappedDelta(a[0]!, b[0]!);
     m.maxAbsoluteDelta.lonWrapped = Math.max(m.maxAbsoluteDelta.lonWrapped, delta);
     m.maxAbsoluteDelta.lonWeighted = Math.max(
       m.maxAbsoluteDelta.lonWeighted,
@@ -101,7 +166,7 @@ function compare(m, direction, a, b, latitude) {
   }
 }
 
-const matrix = [];
+const matrix: MatrixRow[] = [];
 for (const halfWidth of [30, 45]) {
   for (const [ellipsoid, flattening] of ellipsoids) {
     for (const zone of [1, 31, 33, 60]) {
@@ -133,7 +198,7 @@ for (const halfWidth of [30, 45]) {
   }
 }
 
-function referenceAccuracy(utm) {
+function referenceAccuracy(utm: (options: { zone: number }) => Projection) {
   const conv = utm({ zone: 31 });
   const max = { xMetres: 0, yMetres: 0, latitudeDegrees: 0, longitudeWeightedDegrees: 0 };
   let nonFinite = 0;
@@ -162,7 +227,7 @@ function referenceAccuracy(utm) {
   };
 }
 
-const exceptional = [];
+const exceptional: ExceptionalRow[] = [];
 for (const zone of [1, 31, 33, 60]) {
   const base = baseline({ zone });
   const changed = candidate({ zone });
@@ -203,15 +268,17 @@ for (const zone of [1, 31, 33, 60]) {
       input: input.map(encode),
       baseline: a.map(encode),
       candidate: b.map(encode),
-      identical: a.every((v, i) => Object.is(v, b[i])),
-      classificationDiscrepancies: a.filter((v, i) => classify(v) !== classify(b[i])).length,
-      signedZeroDiscrepancies: a.filter((v, i) => v === 0 && b[i] === 0 && !Object.is(v, b[i])).length,
-      absoluteDeltas: a.map((v, i) => (Number.isFinite(v) && Number.isFinite(b[i]) ? Math.abs(v - b[i]) : null)),
+      identical: a.every((v: number, i: number) => Object.is(v, b[i])),
+      classificationDiscrepancies: a.filter((v: number, i: number) => classify(v) !== classify(b[i])).length,
+      signedZeroDiscrepancies: a.filter((v: number, i: number) => v === 0 && b[i] === 0 && !Object.is(v, b[i])).length,
+      absoluteDeltas: a.map((v: number, i: number) =>
+        Number.isFinite(v) && Number.isFinite(b[i]) ? Math.abs(v - b[i]) : null,
+      ),
     });
   }
 }
 
-const rawEquator = [];
+const rawEquator: RawEquatorRow[] = [];
 for (const [ellipsoid, f] of ellipsoids)
   for (const zone of [1, 31, 33, 60])
     for (const south of [false, true]) {
@@ -232,17 +299,20 @@ for (const [ellipsoid, f] of ellipsoids)
             input: input.map(encode),
             baseline: a.map(encode),
             candidate: b.map(encode),
-            identical: a.every((v, i) => Object.is(v, b[i])),
-            classificationDiscrepancies: a.filter((v, i) => classify(v) !== classify(b[i])).length,
-            signedZeroDiscrepancies: a.filter((v, i) => v === 0 && b[i] === 0 && !Object.is(v, b[i])).length,
-            absoluteDeltas: a.map((v, i) => (Number.isFinite(v) && Number.isFinite(b[i]) ? Math.abs(v - b[i]) : null)),
+            identical: a.every((v: number, i: number) => Object.is(v, b[i])),
+            classificationDiscrepancies: a.filter((v: number, i: number) => classify(v) !== classify(b[i])).length,
+            signedZeroDiscrepancies: a.filter((v: number, i: number) => v === 0 && b[i] === 0 && !Object.is(v, b[i]))
+              .length,
+            absoluteDeltas: a.map((v: number, i: number) =>
+              Number.isFinite(v) && Number.isFinite(b[i]) ? Math.abs(v - b[i]) : null,
+            ),
           });
         }
     }
 
 // These stress cases are outside the geographic grids. Report them separately; they do not
 // define the supported-domain success criteria or assert accuracy of either implementation.
-const diagnostics = [];
+const diagnostics: DiagnosticRow[] = [];
 for (const [label, options, input] of [
   ['high-flattening extreme easting', { zone: 33, ellipsoid: { a: 6378137, f: 0.0099999 } }, [100000000, 0]],
   [
@@ -252,7 +322,7 @@ for (const [label, options, input] of [
   ],
   ['sphere extreme easting', { zone: 33, ellipsoid: { a: 6378137, f: 0 } }, [1200000000, 0]],
   ['sphere negative extreme easting', { zone: 33, ellipsoid: { a: 6378137, f: 0 } }, [-1200000000, 0]],
-]) {
+] as [string, { zone: number; ellipsoid: { a: number; f: number } }, number[]][]) {
   const a = baseline(options).toLonLatPoint(...input);
   const b = candidate(options).toLonLatPoint(...input);
   diagnostics.push({
@@ -261,14 +331,16 @@ for (const [label, options, input] of [
     input,
     baseline: a.map(encode),
     candidate: b.map(encode),
-    identical: a.every((v, i) => Object.is(v, b[i])),
-    classificationDiscrepancies: a.filter((v, i) => classify(v) !== classify(b[i])).length,
-    absoluteDeltas: a.map((v, i) => (Number.isFinite(v) && Number.isFinite(b[i]) ? Math.abs(v - b[i]) : null)),
+    identical: a.every((v: number, i: number) => Object.is(v, b[i])),
+    classificationDiscrepancies: a.filter((v: number, i: number) => classify(v) !== classify(b[i])).length,
+    absoluteDeltas: a.map((v: number, i: number) =>
+      Number.isFinite(v) && Number.isFinite(b[i]) ? Math.abs(v - b[i]) : null,
+    ),
   });
 }
 
-const api = { comparisons: 0, mismatches: 0, outputIdentityFailures: 0, examples: [] };
-function apiCompare(expected, actual, context) {
+const api: ApiReport = { comparisons: 0, mismatches: 0, outputIdentityFailures: 0, examples: [] };
+function apiCompare(expected: ArrayLike<number>, actual: ArrayLike<number>, context: object): void {
   api.comparisons += expected.length;
   for (let i = 0; i < expected.length; i++) {
     if (Object.is(expected[i], actual[i])) continue;
@@ -277,8 +349,8 @@ function apiCompare(expected, actual, context) {
       api.examples.push({
         ...context,
         index: i,
-        expected: encode(expected[i]),
-        actual: encode(actual[i]),
+        expected: encode(expected[i]!),
+        actual: encode(actual[i]!),
       });
   }
 }
@@ -288,7 +360,7 @@ for (const [ellipsoid, f] of ellipsoids)
       const conv = candidate({ zone, south, ellipsoid: { a: 6378137, f } });
       const samples = [-90, -89.999999999, -80, -45, -0, 0, 45, 84, 89.999999999, 90];
       const geographic = Float64Array.from(
-        samples.flatMap((lat, i) => [zone * 6 - 183 + [-30, -3, 0, 3, 30][i % 5], lat]),
+        samples.flatMap((lat, i) => [zone * 6 - 183 + [-30, -3, 0, 3, 30][i % 5]!, lat]),
       );
       const projected = Float64Array.from(samples.flatMap((lat, i) => conv.fromLonLatPoint(geographic[2 * i], lat)));
       for (const direction of ['forward', 'inverse']) {
@@ -296,8 +368,8 @@ for (const [ellipsoid, f] of ellipsoids)
         const method = direction === 'forward' ? 'fromLonLat' : 'toLonLat';
         const pointMethod = `${method}Point`;
         const interleavedMethod = `${method}Interleaved`;
-        const first = Float64Array.from(samples, (_, i) => input[2 * i]);
-        const second = Float64Array.from(samples, (_, i) => input[2 * i + 1]);
+        const first = Float64Array.from(samples, (_, i) => input[2 * i]!);
+        const second = Float64Array.from(samples, (_, i) => input[2 * i + 1]!);
         const expected = samples.flatMap((_, i) => conv[pointMethod](first[i], second[i]));
         const split = conv[method](first, second);
         const values = direction === 'forward' ? [split.x, split.y] : [split.lon, split.lat];
@@ -328,13 +400,13 @@ for (const [ellipsoid, f] of ellipsoids)
         if (outputs[0] !== first || outputs[1] !== second) api.outputIdentityFailures++;
         apiCompare(
           expected,
-          samples.flatMap((_, i) => [first[i], second[i]]),
+          samples.flatMap((_, i) => [first[i]!, second[i]!]),
           { direction, ellipsoid, zone, south, form: 'split in-place' },
         );
       }
     }
 
-const groups = [];
+const groups: GroupRow[] = [];
 for (const halfWidth of [30, 45])
   for (const [ellipsoid] of ellipsoids) {
     const rows = matrix.filter((r) => r.halfWidth === halfWidth && r.ellipsoid === ellipsoid);
@@ -345,15 +417,15 @@ for (const halfWidth of [30, 45])
       inverse: metrics('inverse'),
     };
     for (const row of rows)
-      for (const direction of ['forward', 'inverse']) {
+      for (const direction of ['forward', 'inverse'] as const) {
         const target = group[direction];
         const source = row[direction];
         target.points += source.points;
         target.commonFinitePairs += source.commonFinitePairs;
-        for (const field of ['identical', 'classificationDiscrepancies', 'signedZeroDiscrepancies']) {
-          for (const key of Object.keys(target[field])) target[field][key] += source[field][key];
+        for (const field of ['identical', 'classificationDiscrepancies', 'signedZeroDiscrepancies'] as const) {
+          for (const key of Object.keys(target[field]) as (keyof Ordinates)[]) target[field][key] += source[field][key];
         }
-        for (const key of Object.keys(target.maxAbsoluteDelta))
+        for (const key of Object.keys(target.maxAbsoluteDelta) as (keyof MaxDeltas)[])
           target.maxAbsoluteDelta[key] = Math.max(target.maxAbsoluteDelta[key], source.maxAbsoluteDelta[key]);
       }
     groups.push(group);
@@ -421,7 +493,7 @@ const columns = [
   'maxLongitudeCircularDelta',
   'maxLongitudeWeightedDelta',
 ];
-const csvCell = (value) => {
+const csvCell = (value: unknown): string => {
   const cell = String(value);
   return /[",\n]/.test(cell) ? `"${cell.replaceAll('"', '""')}"` : cell;
 };
@@ -429,9 +501,9 @@ const csv =
   [
     columns.join(','),
     ...matrix.flatMap((row) =>
-      ['forward', 'inverse'].map((direction) => {
+      (['forward', 'inverse'] as const).map((direction) => {
         const m = row[direction],
-          [first, second] = direction === 'forward' ? ['x', 'y'] : ['lon', 'lat'];
+          [first, second] = direction === 'forward' ? (['x', 'y'] as const) : (['lon', 'lat'] as const);
         return [
           row.halfWidth,
           row.ellipsoid,
@@ -461,8 +533,9 @@ const csv =
       }),
     ),
   ].join('\n') + '\n';
-const sci = (n) => n.toExponential(3);
-const percent = (m, key) => `${m.identical[key]}/${m.points} (${((100 * m.identical[key]) / m.points).toFixed(2)}%)`;
+const sci = (n: number): string => n.toExponential(3);
+const percent = (m: Metrics, key: 'pairs'): string =>
+  `${m.identical[key]}/${m.points} (${((100 * m.identical[key]) / m.points).toFixed(2)}%)`;
 const markdown = [
   '# Output comparison',
   '',
@@ -508,10 +581,10 @@ const markdown = [
   'Object.is identity applies only to these samples. Numerical differences are reported rather than treated as universal bit identity. The ±30° and ±45° grids overlap. The fixture checks independent accuracy; baseline agreement alone does not establish accuracy.',
   '',
 ].join('\n');
-if (flags.has('json')) await writeFile(flags.get('json'), `${JSON.stringify(result, null, 2)}\n`);
-if (flags.has('markdown')) await writeFile(flags.get('markdown'), markdown);
-if (flags.has('summary')) await writeFile(flags.get('summary'), `${JSON.stringify(summary, null, 2)}\n`);
-if (flags.has('csv')) await writeFile(flags.get('csv'), csv);
+if (flags.has('json')) await writeFile(flags.get('json')!, `${JSON.stringify(result, null, 2)}\n`);
+if (flags.has('markdown')) await writeFile(flags.get('markdown')!, markdown);
+if (flags.has('summary')) await writeFile(flags.get('summary')!, `${JSON.stringify(summary, null, 2)}\n`);
+if (flags.has('csv')) await writeFile(flags.get('csv')!, csv);
 console.log(markdown);
 const classifications =
   matrix.some((r) => r.forward.classificationDiscrepancies.pairs || r.inverse.classificationDiscrepancies.pairs) ||
