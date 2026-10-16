@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1
+
+### Patch Changes
+
+- abbbe52: `gcj02` inverse (`toWgs84`): two Newton steps replace four fixed-point steps, in JavaScript and WebAssembly. 25–46% faster and 3–20× more accurate: within 3e-12° of the exact inverse (was 2e-11°). Results move by up to 2e-11°.
+- 709257f: Faster JavaScript batch methods, with identical results: `utm`/`tmerc` 23–37% and `gcj02` 28–89% (Node, Bun, Chromium).
+
 ## 0.3.0
 
 ### Minor Changes
