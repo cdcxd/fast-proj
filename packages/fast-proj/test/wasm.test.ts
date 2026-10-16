@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import vm from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
-import { gcj02, utm } from '../src/index.js';
+import { GCJ02, gcj02, utm } from '../src/index.js';
 import { loadWasm } from '../src/wasm.js';
 
 const url = new URL('../dist/fast-proj.wasm', import.meta.url);
@@ -122,8 +122,20 @@ describe('loadWasm', () => {
     const ctx = await loadWasm({ source: module }).finally(() => spy.mockRestore());
     expect(ctx.backend).toBe('js');
     expect(ctx.utm({ zone: 33 }).fromLonLatPoint(15, 0)[0]).toBeCloseTo(500000, 6);
+    // Its gcj02() fuses with JavaScript projections like the root one.
+    const x = [440000, 449000.5, 600000];
+    const y = [4420000, 4430000, 3500000];
+    const fused = utm({ zone: 50, geographic: GCJ02 }).toLonLat(x, y);
+    const own = ctx.utm({ zone: 50, geographic: ctx.gcj02() });
+    const root = utm({ zone: 50, geographic: ctx.gcj02() });
+    expect(own.toLonLat(x, y)).toEqual(fused);
+    expect(root.toLonLat(x, y)).toEqual(fused);
+    expect(root.toLonLatPoint(x[0]!, y[0]!)).toEqual([fused.lon[0], fused.lat[0]]);
     ctx.dispose();
     expect(() => ctx.utm({ zone: 33 })).toThrow(/dispose/);
+    expect(() => root.toLonLat(x, y)).toThrow(/disposed/);
+    expect(() => root.toLonLatInterleaved([x[0]!, y[0]!])).toThrow(/disposed/);
+    expect(() => root.toLonLatPoint(x[0]!, y[0]!)).toThrow(/disposed/);
   });
 
   it('runs the JavaScript gcj02 kernel for modules without the wasm one', async () => {

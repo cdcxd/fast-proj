@@ -320,7 +320,9 @@ gk.fromLonLatInterleaved(buf, buf); // lon/lat -> CGCS2000 3° zone, CM 117E
 ```
 
 A projection's `geographic` option is the same two passes, for GCJ-02 lon/lat. In the JavaScript backend, x/y -> GCJ-02
-on a `tmerc`/`utm` runs as one loop instead, within an ulp (3e-14°) of the two passes and 9-37% faster:
+on a `tmerc`/`utm` runs as one loop instead, 9-37% faster and within an ulp (3e-14°) of the two passes, except in
+`'transform'` mode within a few kilometres of the poles, where the two passes are as unstable (one ulp of WGS84 latitude
+moves the longitude by up to tens of degrees):
 
 ```ts
 utm({ zone: 50, geographic: GCJ02 }).toLonLatInterleaved(buf, buf); // UTM 50N -> GCJ-02, for an AMap basemap

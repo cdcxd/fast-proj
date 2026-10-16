@@ -98,12 +98,14 @@ function expand(k: Kernel, name: string, args: string[], opts: [string, string][
   const out = open ? [] : ['{'];
   const exit = opts.find(([key]) => key === 'return')?.[1] ?? 'continue;';
   const renames = opts.filter(([key]) => key !== 'return' && key !== 'scope');
+  // The name each parameter is bound to in the copy.
+  const bounds = k.params.map((p) => renames.find(([from]) => from === p)?.[1] ?? p);
   k.params.forEach((p, i) => {
     const a = args[i]!;
-    const bound = renames.find(([from]) => from === p)?.[1] ?? p;
+    const bound = bounds[i]!;
     if (a === bound) return;
     for (const id of a.match(/\b[A-Za-z_]\w*\b/g) ?? []) {
-      if (declared.has(id) || k.params.some((q, j) => q === id && args[j] !== q))
+      if (declared.has(id) || bounds.some((q, j) => q === id && args[j] !== q))
         throw new Error(`@inline ${name}: argument ${a} uses ${id}, a name the kernel binds`);
     }
     const mutated = new RegExp(`\\b${p}\\s*(?:[-+*/%]?=)(?!=)`).test(text);
