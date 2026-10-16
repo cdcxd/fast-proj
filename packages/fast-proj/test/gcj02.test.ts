@@ -160,13 +160,9 @@ describe('gcj02', () => {
     expect(t.toWgs84Point(116, NaN)).toEqual([NaN, NaN]);
   });
 
-  it('validates arguments', () => {
+  it('validates options', () => {
     // @ts-expect-error invalid option
     expect(() => gcj02({ outsideChina: 'clip' })).toThrow(RangeError);
-    expect(() => g.fromWgs84([1, 2], [1])).toThrow(RangeError);
-    expect(() => g.toWgs84Interleaved([1, 2, 3])).toThrow(RangeError);
-    expect(() => g.fromWgs84Interleaved([1, 2], new Float64Array(1))).toThrow(RangeError);
-    expect(() => g.toWgs84([1], [2], new Float64Array(0))).toThrow(RangeError);
   });
 });
 
@@ -175,6 +171,13 @@ describe('gcj02', () => {
 describe.each(backends)('$name backend gcj02 batch', ({ gcj02: make }) => {
   const g = make();
   const ref = gcj02();
+
+  it('validates arguments', () => {
+    expect(() => g.fromWgs84([1, 2], [1])).toThrow(RangeError);
+    expect(() => g.toWgs84Interleaved([1, 2, 3])).toThrow(RangeError);
+    expect(() => g.fromWgs84Interleaved([1, 2], new Float64Array(1))).toThrow(RangeError);
+    expect(() => g.toWgs84([1], [2], new Float64Array(0))).toThrow(RangeError);
+  });
 
   function batchError(lon: number[], lat: number[]) {
     const ll = new Float64Array(lon.flatMap((v, i) => [v, lat[i]!]));

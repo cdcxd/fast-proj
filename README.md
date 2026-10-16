@@ -23,21 +23,21 @@ reused **proj4 2.22** converter:
 
 | Operation                | Backend     |   Node 24 |  Bun 1.4 | Chromium 156 |
 | ------------------------ | ----------- | --------: | -------: | -----------: |
-| WGS84 → UTM              | JavaScript  |  **5.5×** | **3.3×** |     **4.0×** |
-|                          | WebAssembly | **11.0×** | **4.7×** |    **10.9×** |
-| UTM → WGS84              | JavaScript  |  **5.2×** | **2.9×** |     **3.4×** |
-|                          | WebAssembly |  **9.4×** | **4.9×** |     **9.6×** |
-| UTM → GeoJSON LineString | JavaScript  |  **5.3×** | **2.7×** |     **3.4×** |
-|                          | WebAssembly |  **8.4×** | **4.3×** |     **8.6×** |
+| WGS84 → UTM              | JavaScript  |  **5.2×** | **3.3×** |     **3.8×** |
+|                          | WebAssembly | **10.3×** | **4.6×** |    **10.4×** |
+| UTM → WGS84              | JavaScript  |  **4.9×** | **2.7×** |     **3.3×** |
+|                          | WebAssembly |  **8.7×** | **4.5×** |     **9.1×** |
+| UTM → GeoJSON LineString | JavaScript  |  **4.9×** | **2.8×** |     **3.3×** |
+|                          | WebAssembly |  **8.1×** | **4.4×** |     **8.4×** |
 
 GCJ-02 against **gcoord 1.0.7**:
 
 | Operation      | Backend     |   Node 24 |   Bun 1.4 | Chromium 156 |
 | -------------- | ----------- | --------: | --------: | -----------: |
-| WGS84 → GCJ-02 | JavaScript  | **12.0×** | **13.0×** |     **5.3×** |
-|                | WebAssembly | **26.0×** | **23.7×** |    **18.8×** |
-| GCJ-02 → WGS84 | JavaScript  |  **5.6×** |  **6.9×** |     **3.7×** |
-|                | WebAssembly | **13.1×** | **13.2×** |    **11.5×** |
+| WGS84 → GCJ-02 | JavaScript  | **12.1×** | **12.1×** |     **5.2×** |
+|                | WebAssembly | **28.1×** | **23.0×** |    **20.8×** |
+| GCJ-02 → WGS84 | JavaScript  |  **5.5×** |  **6.5×** |     **3.7×** |
+|                | WebAssembly | **14.7×** | **12.9×** |    **12.4×** |
 
 Timings vary with hardware, runtime and dataset. See the [full benchmark and reproduction commands](packages/fast-proj/README.md#benchmark).
 
