@@ -104,6 +104,40 @@ describe('loadWasm', () => {
     }
     expect(max).toBeLessThan(5e-9);
   });
+
+  it('ships the wasm gcj02 kernel', async () => {
+    const names = WebAssembly.Module.exports(await WebAssembly.compile(readFileSync(url))).map((e) => e.name);
+    expect(names).toEqual(expect.arrayContaining(['gcj_forward_batch', 'gcj_inverse_batch']));
+  });
+
+  it('runs the JavaScript gcj02 kernel for modules without the wasm one', async () => {
+    const module = await WebAssembly.compile(readFileSync(url));
+    const instantiate = WebAssembly.instantiate;
+    const spy = vi.spyOn(WebAssembly, 'instantiate').mockImplementation((async (m: WebAssembly.Module) => {
+      const { gcj_forward_batch: _f, gcj_inverse_batch: _i, ...exports } = (await instantiate(m, {})).exports;
+      return { exports };
+    }) as typeof WebAssembly.instantiate);
+    const ctx = await loadWasm({ source: module }).finally(() => spy.mockRestore());
+    expect(ctx.backend).toBe('wasm-simd');
+    const lon = [116.391, 105.004];
+    const lat = [39.907, 30];
+    expect(ctx.gcj02().toWgs84(lon, lat)).toEqual(gcj02().toWgs84(lon, lat));
+  });
+
+  it('handles gcj02 inputs larger than the 64 Ki-point workspace', async () => {
+    const ctx = await loadWasm({ source: url });
+    const n = 150001;
+    const ll = new Float64Array(2 * n);
+    for (let i = 0; i < n; i++) {
+      ll[2 * i] = 70 + ((i * 7919) % n) * (70 / n);
+      ll[2 * i + 1] = ((i * 104729) % n) * (58 / n);
+    }
+    const js = gcj02().toWgs84Interleaved(ll);
+    const res = ctx.gcj02().toWgs84Interleaved(ll, ll);
+    let max = 0;
+    for (let i = 0; i < 2 * n; i++) max = Math.max(max, Math.abs(res[i]! - js[i]!));
+    expect(max).toBeLessThan(6e-14);
+  });
 });
 
 describe('dispose', () => {
@@ -131,17 +165,36 @@ describe('dispose', () => {
     expect(() => ctx.tmerc({ lon0: 0 })).toThrow(/dispose/);
   });
 
-  it('gcj02 runs the JavaScript kernel and follows the disposal rules', async () => {
+  it('gcj02 follows the disposal rules', async () => {
     const ctx = await loadWasm({ source: url });
     const g = ctx.gcj02();
     const h = ctx.gcj02({ outsideChina: 'transform' });
-    expect(g.fromWgs84Interleaved([116.391, 39.907])).toEqual(gcj02().fromWgs84Interleaved([116.391, 39.907]));
-    expect(h.fromWgs84Point(0, 0)).toEqual(gcj02({ outsideChina: 'transform' }).fromWgs84Point(0, 0));
+    const [l, p] = g.fromWgs84Interleaved([116.391, 39.907]);
+    const [rl, rp] = gcj02().fromWgs84Interleaved([116.391, 39.907]);
+    expect(Math.abs(l! - rl!) + Math.abs(p! - rp!)).toBeLessThan(6e-14);
+    // 'transform' mode runs the JavaScript kernel.
+    expect(h.fromWgs84([0, 116.391], [0, 39.907])).toEqual(
+      gcj02({ outsideChina: 'transform' }).fromWgs84([0, 116.391], [0, 39.907]),
+    );
+    // The option is read once, so point and batch methods agree.
+    let reads = 0;
+    const m = ctx.gcj02({
+      get outsideChina() {
+        return ++reads === 1 ? 'transform' : 'passthrough';
+      },
+    });
+    expect(m.fromWgs84([13.4], [52.5]).lon[0]).toBe(m.fromWgs84Point(13.4, 52.5)[0]);
+    expect(reads).toBe(1);
+    const k = ctx.gcj02();
     g.dispose();
     expect(() => g.toWgs84Point(116, 39)).toThrow(/dispose/);
+    expect(() => g.toWgs84([116], [39])).toThrow(/dispose/);
+    expect(() => g.fromWgs84Interleaved([116, 39])).toThrow(/dispose/);
+    expect(k.toWgs84([116], [39]).lon[0]).toBeCloseTo(116, 1);
     expect(h.toWgs84Point(116, 39)[0]).toBeCloseTo(116, 1);
     ctx.dispose();
     expect(() => h.toWgs84([116], [39])).toThrow(/dispose/);
+    expect(() => k.toWgs84([116], [39])).toThrow(/dispose/);
     expect(() => ctx.gcj02()).toThrow(/dispose/);
   });
 

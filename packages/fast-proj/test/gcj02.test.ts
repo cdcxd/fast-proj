@@ -2,6 +2,7 @@ import coordtransform from 'coordtransform';
 import gcoord from 'gcoord';
 import { describe, expect, it } from 'vitest';
 import { gcj02 } from '../src/index.js';
+import { backends } from './backends.js';
 import fixture from './fixtures/gcj02.json';
 
 const cosd = (deg: number) => Math.cos((deg * Math.PI) / 180);
@@ -159,12 +160,119 @@ describe('gcj02', () => {
     expect(t.toWgs84Point(116, NaN)).toEqual([NaN, NaN]);
   });
 
-  it('validates arguments', () => {
+  it('validates options', () => {
     // @ts-expect-error invalid option
     expect(() => gcj02({ outsideChina: 'clip' })).toThrow(RangeError);
+  });
+});
+
+// Batch methods, so the wasm kernel is covered (point methods run JS). Against the JavaScript point form: 6e-14 degrees
+// in the China box, exact for passed-through points (and NaN where it gives NaN).
+describe.each(backends)('$name backend gcj02 batch', ({ gcj02: make }) => {
+  const g = make();
+  const ref = gcj02();
+
+  it('validates arguments', () => {
     expect(() => g.fromWgs84([1, 2], [1])).toThrow(RangeError);
     expect(() => g.toWgs84Interleaved([1, 2, 3])).toThrow(RangeError);
     expect(() => g.fromWgs84Interleaved([1, 2], new Float64Array(1))).toThrow(RangeError);
     expect(() => g.toWgs84([1], [2], new Float64Array(0))).toThrow(RangeError);
+  });
+
+  function batchError(lon: number[], lat: number[]) {
+    const ll = new Float64Array(lon.flatMap((v, i) => [v, lat[i]!]));
+    let max = 0;
+    for (const [batch, inter, point] of [
+      [g.fromWgs84, g.fromWgs84Interleaved, ref.fromWgs84Point],
+      [g.toWgs84, g.toWgs84Interleaved, ref.toWgs84Point],
+    ] as const) {
+      const r = batch(lon, lat);
+      const i = inter(ll);
+      lon.forEach((v, k) => {
+        const [pl, pp] = point(v, lat[k]!);
+        const got: [number, number][] = [
+          [r.lon[k]!, r.lat[k]!],
+          [i[2 * k]!, i[2 * k + 1]!],
+        ];
+        for (const [l, p] of got) {
+          if (Object.is(l, pl) && Object.is(p, pp)) continue;
+          // Passed-through points must match exactly.
+          expect(pl === v || pp === lat[k]).toBe(false);
+          max = Math.max(max, Math.abs(l - pl) * cosd(pp), Math.abs(p - pp));
+        }
+      });
+    }
+    return max;
+  }
+
+  it('matches the point form on the fixture and a grid around the box', () => {
+    const rows = [...fixture.fromWgs84, ...fixture.toWgs84] as [number, number][];
+    expect(
+      batchError(
+        rows.map((r) => r[0]),
+        rows.map((r) => r[1]),
+      ),
+    ).toBeLessThan(6e-14);
+    const lon: number[] = [];
+    const lat: number[] = [];
+    for (let l = 71.3; l <= 138.5; l += 0.53) {
+      for (let p = 0.1; p <= 56.5; p += 0.47) {
+        lon.push(l);
+        lat.push(p);
+      }
+    }
+    expect(batchError(lon, lat)).toBeLessThan(6e-14);
+  });
+
+  it('takes the extra inverse steps near longitude 105 per point', () => {
+    // Cusp points next to far ones, at even and odd indices, with an odd length.
+    const lon: number[] = [];
+    const lat: number[] = [];
+    for (let k = 0; k < 41; k++) {
+      lon.push(105.002 + k * 0.0000875, 116.391 - k * 0.3);
+      lat.push(20 + k * 0.5, 39.907 - k * 0.2);
+    }
+    lon.push(105.0035);
+    lat.push(30);
+    expect(batchError(lon, lat)).toBeLessThan(6e-14);
+    expect(batchError(lon.slice(1), lat.slice(1))).toBeLessThan(6e-14);
+  });
+
+  it('decides the extra inverse steps like the point form at the edge of the 105 band', () => {
+    // GCJ-02 longitudes whose third iterate lands about 1e-4 from 105, finely spaced across that edge.
+    const lon: number[] = [];
+    const lat: number[] = [];
+    for (const p of [5, 25, 45]) {
+      for (const side of [-1e-4, 1e-4]) {
+        const c = ref.fromWgs84Point(105 + side, p)[0];
+        for (let k = -200; k <= 200; k++) {
+          lon.push(c + k * 2e-13);
+          lat.push(p);
+        }
+      }
+    }
+    expect(batchError(lon, lat)).toBeLessThan(6e-14);
+  });
+
+  it('passes through, reduces and propagates like the point form', () => {
+    expect(
+      batchError(
+        [NaN, 116, Infinity, -Infinity, 116.375 + 360, 116.375 - 720, 72.004, 72.003, 137.8347, -0, 105, 13.4, 116.391],
+        [30, NaN, 30, 30, 39.875, 39.875, 30, 30, 55.8271, 0, 35, 52.5, 39.907],
+      ),
+    ).toBeLessThan(6e-14);
+  });
+
+  it('converts in place', () => {
+    const ll = new Float64Array([116.391, 39.907, 121.4737, 31.2304, 13.4, 52.5]);
+    const expected = g.fromWgs84Interleaved(ll);
+    expect(g.fromWgs84Interleaved(ll, ll)).toBe(ll);
+    expect(Array.from(ll)).toEqual(Array.from(expected));
+    const lon = new Float64Array([116.391, 13.4]);
+    const lat = new Float64Array([39.907, 52.5]);
+    const r = g.toWgs84(lon, lat, lon, lat);
+    expect(r.lon).toBe(lon);
+    expect(r.lat).toBe(lat);
+    expect(Array.from(lon)).toEqual(Array.from(g.toWgs84([116.391, 13.4], [39.907, 52.5]).lon));
   });
 });

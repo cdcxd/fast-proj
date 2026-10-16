@@ -40,16 +40,25 @@ export interface WasmContext extends WasmDisposable {
   readonly backend: WasmBackend;
   tmerc(options: TransverseMercatorOptions): TransverseMercator & WasmDisposable;
   utm(options: UtmOptions): Utm & WasmDisposable;
-  /** Runs the JavaScript kernel on every backend. */
+  /**
+   * Batch methods run the wasm kernel in `'passthrough'` mode; `'transform'` mode, single points, and the `js`
+   * backend run the JavaScript kernel.
+   */
   gcj02(options?: Gcj02Options): GeographicTransform & WasmDisposable;
 }
+
+// lon0, k0, falseEasting, falseNorthing, a, f
+type TmParams = [number, number, number, number, number, number];
 
 interface Exports {
   memory: WebAssembly.Memory;
   alloc(n: number): number;
   simd_enabled(): number;
-  tm_forward_batch(...args: number[]): void;
-  tm_inverse_batch(...args: number[]): void;
+  tm_forward_batch(lon: number, lat: number, x: number, y: number, n: number, ...params: TmParams): void;
+  tm_inverse_batch(x: number, y: number, lon: number, lat: number, n: number, ...params: TmParams): void;
+  // Absent from builds without simd128 and from modules older than 0.2.1.
+  gcj_forward_batch?(lon: number, lat: number, outLon: number, outLat: number, n: number): void;
+  gcj_inverse_batch?(lon: number, lat: number, outLon: number, outLat: number, n: number): void;
 }
 
 const CAP = 1 << 16;
@@ -231,54 +240,63 @@ function wasmContext(exports: Exports, backend: WasmBackend): WasmContext {
     return e;
   }
 
-  function build<T extends TransverseMercator>(js: T): T & WasmDisposable {
+  type Kernel = (ex: Exports, m: number) => void;
+
+  function run(
+    closed: boolean,
+    kernel: Kernel,
+    sa: ArrayLike<number>,
+    sb: ArrayLike<number>,
+    oa: Float64Array,
+    ob: Float64Array,
+  ) {
+    const ex = enter(closed);
+    try {
+      const n = sa.length;
+      for (let i0 = 0; i0 < n; i0 += CAP) {
+        const m = Math.min(CAP, n - i0);
+        copyIn(wa!, sa, i0, m);
+        copyIn(wb!, sb, i0, m);
+        kernel(ex, m);
+        copyOut(oa, wc!, i0, m);
+        copyOut(ob, wd!, i0, m);
+      }
+    } finally {
+      busy = false;
+    }
+  }
+
+  function runInterleaved(closed: boolean, kernel: Kernel, src: ArrayLike<number>, out: Float64Array) {
+    const ex = enter(closed);
+    try {
+      const half = src.length / 2;
+      const A = wa!,
+        B = wb!,
+        C = wc!,
+        D = wd!;
+      for (let i0 = 0; i0 < half; i0 += CAP) {
+        const m = Math.min(CAP, half - i0);
+        for (let j = 0, k = 2 * i0; j < m; j++, k += 2) {
+          A[j] = src[k]!;
+          B[j] = src[k + 1]!;
+        }
+        kernel(ex, m);
+        for (let j = 0, k = 2 * i0; j < m; j++, k += 2) {
+          out[k] = C[j]!;
+          out[k + 1] = D[j]!;
+        }
+      }
+    } finally {
+      busy = false;
+    }
+  }
+
+  function buildTmerc<T extends TransverseMercator>(js: T): T & WasmDisposable {
     const { lon0, k0, falseEasting, falseNorthing } = js;
     const { a, f } = js.ellipsoid;
     let closed = false;
-
-    function run(forward: boolean, sa: ArrayLike<number>, sb: ArrayLike<number>, oa: Float64Array, ob: Float64Array) {
-      const ex = enter(closed);
-      try {
-        const kernel = forward ? ex.tm_forward_batch : ex.tm_inverse_batch;
-        const n = sa.length;
-        for (let i0 = 0; i0 < n; i0 += CAP) {
-          const m = Math.min(CAP, n - i0);
-          copyIn(wa!, sa, i0, m);
-          copyIn(wb!, sb, i0, m);
-          kernel(pa, pb, pc, pd, m, lon0, k0, falseEasting, falseNorthing, a, f);
-          copyOut(oa, wc!, i0, m);
-          copyOut(ob, wd!, i0, m);
-        }
-      } finally {
-        busy = false;
-      }
-    }
-
-    function runInterleaved(forward: boolean, src: ArrayLike<number>, out: Float64Array) {
-      const ex = enter(closed);
-      try {
-        const kernel = forward ? ex.tm_forward_batch : ex.tm_inverse_batch;
-        const half = src.length / 2;
-        const A = wa!,
-          B = wb!,
-          C = wc!,
-          D = wd!;
-        for (let i0 = 0; i0 < half; i0 += CAP) {
-          const m = Math.min(CAP, half - i0);
-          for (let j = 0, k = 2 * i0; j < m; j++, k += 2) {
-            A[j] = src[k]!;
-            B[j] = src[k + 1]!;
-          }
-          kernel(pa, pb, pc, pd, m, lon0, k0, falseEasting, falseNorthing, a, f);
-          for (let j = 0, k = 2 * i0; j < m; j++, k += 2) {
-            out[k] = C[j]!;
-            out[k + 1] = D[j]!;
-          }
-        }
-      } finally {
-        busy = false;
-      }
-    }
+    const fwd: Kernel = (ex, m) => ex.tm_forward_batch(pa, pb, pc, pd, m, lon0, k0, falseEasting, falseNorthing, a, f);
+    const inv: Kernel = (ex, m) => ex.tm_inverse_batch(pa, pb, pc, pd, m, lon0, k0, falseEasting, falseNorthing, a, f);
 
     function live(): void {
       if (closed || !e) throw new Error('fast-proj: converter used after dispose()');
@@ -296,7 +314,7 @@ function wasmContext(exports: Exports, backend: WasmBackend): WasmContext {
         else lon = new Float64Array(n);
         if (lat) checkOut(lat, n, 'lat');
         else lat = new Float64Array(n);
-        run(false, x, y, lon, lat);
+        run(closed, inv, x, y, lon, lat);
         return { lon, lat };
       },
       fromLonLat(lon, lat, x, y) {
@@ -306,7 +324,7 @@ function wasmContext(exports: Exports, backend: WasmBackend): WasmContext {
         else x = new Float64Array(n);
         if (y) checkOut(y, n, 'y');
         else y = new Float64Array(n);
-        run(true, lon, lat, x, y);
+        run(closed, fwd, lon, lat, x, y);
         return { x, y };
       },
       toLonLatInterleaved(xy, out) {
@@ -314,7 +332,7 @@ function wasmContext(exports: Exports, backend: WasmBackend): WasmContext {
         checkEven(n);
         if (out) checkOut(out, n, 'out');
         else out = new Float64Array(n);
-        runInterleaved(false, xy, out);
+        runInterleaved(closed, inv, xy, out);
         return out;
       },
       fromLonLatInterleaved(lonlat, out) {
@@ -322,12 +340,69 @@ function wasmContext(exports: Exports, backend: WasmBackend): WasmContext {
         checkEven(n);
         if (out) checkOut(out, n, 'out');
         else out = new Float64Array(n);
-        runInterleaved(true, lonlat, out);
+        runInterleaved(closed, fwd, lonlat, out);
         return out;
       },
       // A single point costs more to pass into wasm than to compute; the JavaScript kernel handles it.
       toLonLatPoint: (x, y) => (live(), js.toLonLatPoint(x, y)),
       fromLonLatPoint: (lon, lat) => (live(), js.fromLonLatPoint(lon, lat)),
+      dispose,
+      [DISPOSE]: dispose,
+    };
+  }
+
+  const gcjFwd: Kernel = (ex, m) => ex.gcj_forward_batch!(pa, pb, pc, pd, m);
+  const gcjInv: Kernel = (ex, m) => ex.gcj_inverse_batch!(pa, pb, pc, pd, m);
+
+  function buildGcj(js: GeographicTransform): GeographicTransform & WasmDisposable {
+    let closed = false;
+
+    function live(): void {
+      if (closed || !e) throw new Error('fast-proj: converter used after dispose()');
+    }
+
+    const dispose = () => {
+      closed = true;
+    };
+    return {
+      toWgs84(lon, lat, outLon, outLat) {
+        const n = lon.length;
+        if (lat.length !== n) throw new RangeError('lon and lat must have the same length');
+        if (outLon) checkOut(outLon, n, 'outLon');
+        else outLon = new Float64Array(n);
+        if (outLat) checkOut(outLat, n, 'outLat');
+        else outLat = new Float64Array(n);
+        run(closed, gcjInv, lon, lat, outLon, outLat);
+        return { lon: outLon, lat: outLat };
+      },
+      fromWgs84(lon, lat, outLon, outLat) {
+        const n = lon.length;
+        if (lat.length !== n) throw new RangeError('lon and lat must have the same length');
+        if (outLon) checkOut(outLon, n, 'outLon');
+        else outLon = new Float64Array(n);
+        if (outLat) checkOut(outLat, n, 'outLat');
+        else outLat = new Float64Array(n);
+        run(closed, gcjFwd, lon, lat, outLon, outLat);
+        return { lon: outLon, lat: outLat };
+      },
+      toWgs84Interleaved(lonlat, out) {
+        const n = lonlat.length;
+        checkEven(n);
+        if (out) checkOut(out, n, 'out');
+        else out = new Float64Array(n);
+        runInterleaved(closed, gcjInv, lonlat, out);
+        return out;
+      },
+      fromWgs84Interleaved(lonlat, out) {
+        const n = lonlat.length;
+        checkEven(n);
+        if (out) checkOut(out, n, 'out');
+        else out = new Float64Array(n);
+        runInterleaved(closed, gcjFwd, lonlat, out);
+        return out;
+      },
+      toWgs84Point: (lon, lat) => (live(), js.toWgs84Point(lon, lat)),
+      fromWgs84Point: (lon, lat) => (live(), js.fromWgs84Point(lon, lat)),
       dispose,
       [DISPOSE]: dispose,
     };
@@ -342,15 +417,21 @@ function wasmContext(exports: Exports, backend: WasmBackend): WasmContext {
     backend,
     tmerc: (o) => {
       if (!e) throw new Error('fast-proj: context used after dispose()');
-      return build(jsTmerc(o));
+      return buildTmerc(jsTmerc(o));
     },
     utm: (o) => {
       if (!e) throw new Error('fast-proj: context used after dispose()');
-      return build(jsUtm(o));
+      return buildTmerc(jsUtm(o));
     },
     gcj02: (o) => {
       if (!e) throw new Error('fast-proj: context used after dispose()');
-      return guarded(jsGcj02(o), () => !e);
+      const outsideChina = o?.outsideChina;
+      const js = jsGcj02({ outsideChina });
+      // 'transform' mode iterates to a tolerance per point, which the fixed-step kernel doesn't do.
+      if (outsideChina === 'transform' || !e.gcj_forward_batch || !e.gcj_inverse_batch) {
+        return guarded(js, () => !e);
+      }
+      return buildGcj(js);
     },
     dispose,
     [DISPOSE]: dispose,

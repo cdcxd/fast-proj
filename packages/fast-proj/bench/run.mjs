@@ -22,7 +22,7 @@ async function inProcess() {
   return {
     runtime,
     rows: runCases(proj4, backends, lineString, { n, runs }),
-    gcjRows: runGcjCases(gcoord, gcj02, { n, runs }),
+    gcjRows: runGcjCases(gcoord, { js: gcj02, [ctx.backend]: ctx.gcj02 }, { n, runs }),
   };
 }
 
@@ -59,7 +59,7 @@ async function inBrowser() {
       const ctx = await loadWasm();
       return {
         rows: runCases(window.proj4, { js: utm, [ctx.backend]: ctx.utm }, lineString, opts),
-        gcjRows: runGcjCases(window.gcoord, gcj02, opts),
+        gcjRows: runGcjCases(window.gcoord, { js: gcj02, [ctx.backend]: ctx.gcj02 }, opts),
       };
     },
     { n, runs },

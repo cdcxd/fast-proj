@@ -3,17 +3,23 @@
 //!
 //! Layout: `math` (coefficients/constants + libm scalar wrappers), `simd`
 //! (f64x2 vector math, +simd128 only), `kernel` (UTM series + scalar
-//! kernel), `vkernel` (f64x2 kernel, +simd128 only), `alloc` (bump arena).
+//! kernel), `vkernel` (f64x2 kernel, +simd128 only), `gcj` (GCJ-02 constants
+//! and scalar reference), `vgcj` (f64x2 GCJ-02 kernel, +simd128 only),
+//! `alloc` (bump arena).
 #![cfg_attr(not(test), no_std)]
 #![allow(static_mut_refs)]
 
 mod alloc;
+#[cfg_attr(not(target_feature = "simd128"), allow(dead_code))]
+mod gcj;
 mod kernel;
 // The constants serve the SIMD math (and the host tests that pin them); unused in the scalar build.
 #[cfg_attr(not(target_feature = "simd128"), allow(dead_code))]
 mod math;
 #[cfg(target_feature = "simd128")]
 mod simd;
+#[cfg(target_feature = "simd128")]
+mod vgcj;
 #[cfg(target_feature = "simd128")]
 mod vkernel;
 
@@ -265,6 +271,41 @@ pub unsafe extern "C" fn tm_inverse_batch(
     unsafe { run_inverse(r(xp, n), r(yp, n), w(lonp, n), w(latp, n), &k) }
 }
 
+// ---------------------------------------------------------------------------
+// GCJ-02 batch exports (passthrough mode; simd128 only, so a scalar build
+// falls back to the JavaScript kernel)
+// ---------------------------------------------------------------------------
+
+/// # Safety
+/// Each pointer must be non-null and aligned, even when `n` is 0, and address `n` valid f64s; outputs must not
+/// overlap any other buffer.
+#[cfg(target_feature = "simd128")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gcj_forward_batch(
+    lonp: *const f64,
+    latp: *const f64,
+    olonp: *mut f64,
+    olatp: *mut f64,
+    n: usize,
+) {
+    unsafe { vgcj::forward_batch(r(lonp, n), r(latp, n), w(olonp, n), w(olatp, n)) }
+}
+
+/// # Safety
+/// Each pointer must be non-null and aligned, even when `n` is 0, and address `n` valid f64s; outputs must not
+/// overlap any other buffer.
+#[cfg(target_feature = "simd128")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gcj_inverse_batch(
+    lonp: *const f64,
+    latp: *const f64,
+    olonp: *mut f64,
+    olatp: *mut f64,
+    n: usize,
+) {
+    unsafe { vgcj::inverse_batch(r(lonp, n), r(latp, n), w(olonp, n), w(olatp, n)) }
+}
+
 #[cfg(not(test))]
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
@@ -407,5 +448,68 @@ mod tests {
             assert!((lat - 60.0).abs() < 1e-11, "f {f}: lat {lat}");
         }
     }
-}
 
+    fn gcj_fixture(key: &str) -> Vec<(f64, f64, f64, f64)> {
+        let raw = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../test/fixtures/gcj02.json"
+        ))
+        .expect("fixture file");
+        let v: serde_json::Value = serde_json::from_str(&raw).expect("fixture json");
+        v[key]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| {
+                let f = |i: usize| {
+                    p[i].as_f64()
+                        .or_else(|| p[i].as_str().and_then(|s| s.parse().ok()))
+                        .unwrap()
+                };
+                (f(0), f(1), f(2), f(3))
+            })
+            .collect()
+    }
+
+    fn gcj_max_error(rows: &[(f64, f64, f64, f64)], g: impl Fn(f64, f64) -> (f64, f64)) -> f64 {
+        rows.iter().fold(0.0, |m, &(lon, lat, rlon, rlat)| {
+            let (l, p) = g(lon, lat);
+            assert!(l.is_finite() && p.is_finite(), "non-finite result at {lon}, {lat}");
+            m.max((l - rlon).abs() * lat.to_radians().cos())
+                .max((p - rlat).abs())
+        })
+    }
+
+    #[test]
+    fn gcj_constants_match_libm() {
+        use crate::gcj::*;
+        let ulp = |a: f64, b: f64| (a.to_bits() as i64 - b.to_bits() as i64).abs();
+        assert!(ulp(S35, (35.0 * KY).sin()) <= 1);
+        assert!(ulp(C35, (35.0 * KY).cos()) <= 1);
+        assert_eq!(KLAT.to_bits(), 0x3EE2F735B2FADDE1);
+        assert_eq!(KLON.to_bits(), 0x3EE2D6B638479C2D);
+        assert_eq!(KX.to_bits(), 0x3FAACEE9F37BEBD5);
+    }
+
+    #[test]
+    fn gcj_scalar_matches_reference_fixture() {
+        use crate::gcj::sgcj;
+        let f = gcj_max_error(&gcj_fixture("fromWgs84"), sgcj::forward);
+        let i = gcj_max_error(&gcj_fixture("toWgs84"), sgcj::inverse);
+        assert!(f < 2e-14, "forward {f:e}");
+        assert!(i < 2e-11, "inverse {i:e}");
+    }
+
+    #[test]
+    fn gcj_scalar_passthrough() {
+        use crate::gcj::sgcj;
+        assert_eq!(sgcj::forward(10.0, 50.0), (10.0, 50.0));
+        assert_eq!(
+            sgcj::inverse(476.391, 39.907).0.to_bits(),
+            sgcj::inverse(476.391 - 360.0, 39.907).0.to_bits()
+        );
+        assert_eq!(sgcj::forward(400.0, 10.0), (40.0, 10.0));
+        let (l, p) = sgcj::forward(f64::NAN, 30.0);
+        assert!(l.is_nan() && p == 30.0);
+    }
+}

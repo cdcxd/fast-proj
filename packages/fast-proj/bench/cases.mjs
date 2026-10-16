@@ -73,8 +73,9 @@ export function runCases(proj4, backends, lineString, { n = 10000, runs = 31, re
   return rows;
 }
 
-// Points spread over eastern China; the baseline is gcoord's per-point `transform`.
-export function runGcjCases(gcoord, gcj02, { n = 10000, runs = 31, reps = 5 } = {}) {
+// Points spread over eastern China; the baseline is gcoord's per-point `transform`. `backends` maps a column name to a
+// `gcj02` factory.
+export function runGcjCases(gcoord, backends, { n = 10000, runs = 31, reps = 5 } = {}) {
   const lon = new Float64Array(n);
   const lat = new Float64Array(n);
   const ll = new Float64Array(2 * n);
@@ -85,40 +86,33 @@ export function runGcjCases(gcoord, gcj02, { n = 10000, runs = 31, reps = 5 } = 
   const a = new Float64Array(n);
   const b = new Float64Array(n);
   const out = new Float64Array(2 * n);
-  const g = gcj02();
-  const rows = [
+  const directions = [
+    ['WGS84 → GCJ-02', gcoord.WGS84, gcoord.GCJ02],
+    ['GCJ-02 → WGS84', gcoord.GCJ02, gcoord.WGS84],
+  ];
+  const cases = (g) => [
     [
-      'WGS84 → GCJ-02',
-      gcoord.WGS84,
-      gcoord.GCJ02,
       [
-        [
-          'fromWgs84Point',
-          () => {
-            for (let i = 0; i < n; i++) g.fromWgs84Point(lon[i], lat[i]);
-          },
-        ],
-        ['fromWgs84 (output buffers)', () => g.fromWgs84(lon, lat, a, b)],
-        ['fromWgs84Interleaved (output buffer)', () => g.fromWgs84Interleaved(ll, out)],
+        'fromWgs84Point',
+        () => {
+          for (let i = 0; i < n; i++) g.fromWgs84Point(lon[i], lat[i]);
+        },
       ],
+      ['fromWgs84 (output buffers)', () => g.fromWgs84(lon, lat, a, b)],
+      ['fromWgs84Interleaved (output buffer)', () => g.fromWgs84Interleaved(ll, out)],
     ],
     [
-      'GCJ-02 → WGS84',
-      gcoord.GCJ02,
-      gcoord.WGS84,
       [
-        [
-          'toWgs84Point',
-          () => {
-            for (let i = 0; i < n; i++) g.toWgs84Point(lon[i], lat[i]);
-          },
-        ],
-        ['toWgs84 (output buffers)', () => g.toWgs84(lon, lat, a, b)],
-        ['toWgs84Interleaved (output buffer)', () => g.toWgs84Interleaved(ll, out)],
+        'toWgs84Point',
+        () => {
+          for (let i = 0; i < n; i++) g.toWgs84Point(lon[i], lat[i]);
+        },
       ],
+      ['toWgs84 (output buffers)', () => g.toWgs84(lon, lat, a, b)],
+      ['toWgs84Interleaved (output buffer)', () => g.toWgs84Interleaved(ll, out)],
     ],
   ];
-  return rows.flatMap(([direction, from, to, cases]) => {
+  const rows = directions.flatMap(([direction, from, to], d) => {
     const base = time(
       () => {
         for (let i = 0; i < n; i++) gcoord.transform([lon[i], lat[i]], from, to);
@@ -126,6 +120,14 @@ export function runGcjCases(gcoord, gcj02, { n = 10000, runs = 31, reps = 5 } = 
       runs,
       reps,
     );
-    return cases.map(([method, fn]) => ({ direction, method, base, ms: { js: time(fn, runs, reps) } }));
+    return cases(null)[d].map(([method]) => ({ direction, method, base, ms: {} }));
   });
+  for (const [name, gcj02] of Object.entries(backends)) {
+    cases(gcj02())
+      .flat()
+      .forEach(([, fn], i) => {
+        rows[i].ms[name] = time(fn, runs, reps);
+      });
+  }
+  return rows;
 }

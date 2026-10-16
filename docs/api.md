@@ -208,10 +208,11 @@ function loadWasm(options?: {
   source?: URL | string | ArrayBuffer | ArrayBufferView | WebAssembly.Module;
 }): Promise<WasmContext>;
 
-interface WasmContext extends Disposable {
+interface WasmContext extends WasmDisposable {
   readonly backend: 'wasm-simd' | 'wasm' | 'js'; // 'wasm' only for a custom non-SIMD source
   tmerc(options: TransverseMercatorOptions): TransverseMercator & WasmDisposable;
   utm(options: UtmOptions): Utm & WasmDisposable;
+  gcj02(options?: Gcj02Options): GeographicTransform & WasmDisposable;
   dispose(): void;
 }
 
@@ -240,9 +241,10 @@ wasm.dispose(); // or: using wasm = await loadWasm();
   invalidates its converters. Output arrays already returned are caller-owned and stay valid.
 - **Copies.** Converters take and return caller-owned arrays, so each batch call copies the input into the workspace
   and the result back (about 0.17 ns per point). There is no zero-copy access to wasm memory.
-- **GCJ-02.** The context's `gcj02()` runs the JavaScript kernel on every backend; there is no wasm kernel yet.
-- **Single points.** `toLonLatPoint`/`fromLonLatPoint` run the JavaScript kernel: passing one point into wasm costs
-  more than computing it.
+- **GCJ-02.** The context's `gcj02()` batch methods run the wasm kernel in `'passthrough'` mode (about 1.9–4×
+  the JavaScript kernel); `'transform'` mode runs the JavaScript kernel.
+- **Single points.** `toLonLatPoint`/`fromLonLatPoint` and `toWgs84Point`/`fromWgs84Point` run the JavaScript kernel:
+  passing one point into wasm costs more than computing it.
 - **Re-entrancy.** Calling the same context from inside an array-like getter during a batch call throws.
 - **Accuracy contract.** Batch results match the JavaScript backend within 4e-9 m and 6e-14° (longitude differences
   scaled by cos(latitude)), not bit for bit. Coordinates above 2^25 m (about 33,554 km, such as Gauss–Krüger eastings
