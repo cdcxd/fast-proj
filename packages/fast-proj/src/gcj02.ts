@@ -25,10 +25,22 @@ const S35 = Math.sin(35 * KY);
 const C35 = Math.cos(35 * KY);
 const KLAT = 180 / (A * (1 - EE) * Math.PI);
 const KLON = 180 / (A * Math.PI);
-const STEPS = 4;
-// Near longitude 105 the sqrt(|x|) term slows the fixed-point iteration down; take extra steps there.
+const STEPS = 2;
+// Within CUSP of longitude 105 the Newton steps drop the singular derivative of the sqrt(|x|) term and converge
+// linearly: take up to CUSP_STEPS there.
 const CUSP = 1e-4;
-const CUSP_STEPS = 6;
+const CUSP_STEPS = 4;
+// Derivatives of the offset's sine terms, per degree: (term weight) * (multiple) * (radians per degree of the angle).
+const JS360 = (40 / 3) * 360 * KX;
+const JS120 = (40 / 3) * 120 * KX;
+const JS60 = (40 / 3) * 60 * KX;
+const JS20 = (80 / 3) * 20 * KX;
+const JS5 = 100 * 5 * KX;
+const JS2 = 200 * 2 * KX;
+const JU180 = (40 / 3) * 180 * KY;
+const JU60 = (80 / 3) * 60 * KY;
+const JU15 = (320 / 3) * 15 * KY;
+const JU6 = (640 / 3) * 6 * KY;
 // 'transform' mode iterates until a step is below TOL degrees, and gives NaN if none is below LOOSE.
 const MAX_STEPS = 20;
 const TOL = 1e-10;
@@ -354,8 +366,9 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
     let v = Math.cos((lat - 35) * KY);
     let wx = lon;
     let wy = lat;
-    // @inline offset(wx - 105, wy - 35, s, c, u, v); ox = offLon; oy = offLat
-    {
+    // Newton steps on w + offset(w) = (lon, lat), from w = (lon, lat).
+    for (let k = 1; ; k++) {
+      // @inline offset(wx - 105, wy - 35, s, c, u, v); ox = offLon; oy = offLat; scope = open
       const x = wx - 105;
       const y = wy - 35;
       const s1 = s;
@@ -423,14 +436,38 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
       const sm = Math.sqrt(m);
       offLon = (dLon * KLON * sm) / cp;
       offLat = dLat * KLAT * m * sm;
-    }
-    // @end
-    for (let k = 1; k < STEPS || (k < CUSP_STEPS && Math.abs(wx - 105) < CUSP); k++) {
-      const nx = lon - offLon;
-      const ny = lat - offLat;
+      // @end
+      // Jacobian of the offset in degrees per degree, from the copy's multiple-angle values. sm / cp and m * sm vary
+      // with latitude too: d(sm / cp) = (sm / cp) (t - em), d(m * sm) = -3 m * sm * em, per degree.
+      const c120 = 1 - 2 * s60 * s60;
+      const c360 = c120 * (4 * c120 * c120 - 3);
+      const v60 = 1 - 2 * u30 * u30;
+      const v180 = v60 * (4 * v60 * v60 - 3);
+      const dr = Math.abs(x) > CUSP ? (x > 0 ? 0.05 : -0.05) / r : 0;
+      const dCommon = JS360 * c360 + JS120 * c120;
+      const dLonX = 1 + 0.2 * x + 0.1 * y + dr + dCommon + JS60 * c60 + JS20 * c20 + JS5 * c5 + JS2 * c2;
+      const dLatX = 2 + 0.1 * y + 2 * dr + dCommon;
+      const dLatY = 3 + 0.4 * y + 0.1 * x + JU180 * v180 + JU60 * v60 + JU15 * v15 + JU6 * v6;
+      const fLon = (KLON * sm) / cp;
+      const fLat = KLAT * m * sm;
+      const t = (sp / cp) * KY;
+      const em = (EE * sp * cp * KY) / m;
+      // Solve (I + J) step = (lon, lat) - w - offset(w).
+      const ja = 1 + dLonX * fLon;
+      const jb = (2 + 0.1 * x) * fLon + offLon * (t - em);
+      const jc = dLatX * fLat;
+      const jd = 1 + dLatY * fLat - 3 * offLat * em;
+      const gx = lon - offLon - wx;
+      const gy = lat - offLat - wy;
+      const idet = 1 / (ja * jd - jb * jc);
+      const dx = (jd * gx - jb * gy) * idet;
+      const dy = (ja * gy - jc * gx) * idet;
+      wx += dx;
+      wy += dy;
+      if (k >= STEPS && (k === CUSP_STEPS || !(Math.abs(wx - 105) < CUSP))) break;
       // Rotate the sines by the step instead of recomputing them; inside the China box a step is below 6e-4 rad.
-      const d = (nx - wx) * KX;
-      const e = (ny - wy) * KY;
+      const d = dx * KX;
+      const e = dy * KY;
       const d2 = d * d;
       const e2 = e * e;
       const sd = d * (1 - d2 / 6);
@@ -443,82 +480,9 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
       c = c * cd - s0 * sd;
       u = u0 * ce + v * se;
       v = v * ce - u0 * se;
-      wx = nx;
-      wy = ny;
-      // @inline offset(wx - 105, wy - 35, s, c, u, v); ox = offLon; oy = offLat
-      {
-        const x = wx - 105;
-        const y = wy - 35;
-        const s1 = s;
-        const c1 = c;
-        const u1 = u;
-        const v1 = v;
-        const s2 = 2 * s1 * c1;
-        const c2 = 1 - 2 * s1 * s1;
-        const s4 = 2 * s2 * c2;
-        const c4 = 1 - 2 * s2 * s2;
-        const s5 = s4 * c1 + c4 * s1;
-        const c5 = c4 * c1 - s4 * s1;
-        const s10 = 2 * s5 * c5;
-        const c10 = 1 - 2 * s5 * s5;
-        const s20 = 2 * s10 * c10;
-        const c20 = 1 - 2 * s10 * s10;
-        const s60 = s20 * (3 - 4 * s20 * s20);
-        const c60 = c20 * (4 * c20 * c20 - 3);
-        const s120 = 2 * s60 * c60;
-        const s360 = s120 * (3 - 4 * s120 * s120);
-
-        const u3 = u1 * (3 - 4 * u1 * u1);
-        const v3 = v1 * (4 * v1 * v1 - 3);
-        const u6 = 2 * u3 * v3;
-        const v6 = 1 - 2 * u3 * u3;
-        const u12 = 2 * u6 * v6;
-        const v12 = 1 - 2 * u6 * u6;
-        const u15 = u12 * v3 + v12 * u3;
-        const v15 = v12 * v3 - u12 * u3;
-        const u30 = 2 * u15 * v15;
-        const v30 = 1 - 2 * u15 * u15;
-        const u60 = 2 * u30 * v30;
-        const u180 = u60 * (3 - 4 * u60 * u60);
-
-        const sp = u1 * C35 + v1 * S35;
-        const cp = v1 * C35 - u1 * S35;
-
-        const r = Math.sqrt(Math.abs(x));
-        const common = (40 / 3) * (s360 + s120);
-        const dLat =
-          -100 +
-          2 * x +
-          3 * y +
-          0.2 * y * y +
-          0.1 * x * y +
-          0.2 * r +
-          common +
-          (40 / 3) * u180 +
-          (80 / 3) * u60 +
-          (320 / 3) * u15 +
-          (640 / 3) * u6;
-        const dLon =
-          300 +
-          x +
-          2 * y +
-          0.1 * x * x +
-          0.1 * x * y +
-          0.1 * r +
-          common +
-          (40 / 3) * s60 +
-          (80 / 3) * s20 +
-          100 * s5 +
-          200 * s2;
-        const m = 1 - EE * sp * sp;
-        const sm = Math.sqrt(m);
-        offLon = (dLon * KLON * sm) / cp;
-        offLat = dLat * KLAT * m * sm;
-      }
-      // @end
     }
-    rx = lon - offLon;
-    ry = lat - offLat;
+    rx = wx;
+    ry = wy;
   }
 
   // Batch loops over element j of a and b[j + o1], every `step` up to `end`, written to the same places in outA and
@@ -557,7 +521,7 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
         let v = Math.cos((lat - 35) * KY);
         let wx = lon;
         let wy = lat;
-        {
+        for (let k = 1; ; k++) {
           const x = wx - 105;
           const y = wy - 35;
           const s1 = s;
@@ -625,12 +589,33 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
           const sm = Math.sqrt(m);
           offLon = (dLon * KLON * sm) / cp;
           offLat = dLat * KLAT * m * sm;
-        }
-        for (let k = 1; k < STEPS || (k < CUSP_STEPS && Math.abs(wx - 105) < CUSP); k++) {
-          const nx = lon - offLon;
-          const ny = lat - offLat;
-          const d = (nx - wx) * KX;
-          const e = (ny - wy) * KY;
+          const c120 = 1 - 2 * s60 * s60;
+          const c360 = c120 * (4 * c120 * c120 - 3);
+          const v60 = 1 - 2 * u30 * u30;
+          const v180 = v60 * (4 * v60 * v60 - 3);
+          const dr = Math.abs(x) > CUSP ? (x > 0 ? 0.05 : -0.05) / r : 0;
+          const dCommon = JS360 * c360 + JS120 * c120;
+          const dLonX = 1 + 0.2 * x + 0.1 * y + dr + dCommon + JS60 * c60 + JS20 * c20 + JS5 * c5 + JS2 * c2;
+          const dLatX = 2 + 0.1 * y + 2 * dr + dCommon;
+          const dLatY = 3 + 0.4 * y + 0.1 * x + JU180 * v180 + JU60 * v60 + JU15 * v15 + JU6 * v6;
+          const fLon = (KLON * sm) / cp;
+          const fLat = KLAT * m * sm;
+          const t = (sp / cp) * KY;
+          const em = (EE * sp * cp * KY) / m;
+          const ja = 1 + dLonX * fLon;
+          const jb = (2 + 0.1 * x) * fLon + offLon * (t - em);
+          const jc = dLatX * fLat;
+          const jd = 1 + dLatY * fLat - 3 * offLat * em;
+          const gx = lon - offLon - wx;
+          const gy = lat - offLat - wy;
+          const idet = 1 / (ja * jd - jb * jc);
+          const dx = (jd * gx - jb * gy) * idet;
+          const dy = (ja * gy - jc * gx) * idet;
+          wx += dx;
+          wy += dy;
+          if (k >= STEPS && (k === CUSP_STEPS || !(Math.abs(wx - 105) < CUSP))) break;
+          const d = dx * KX;
+          const e = dy * KY;
           const d2 = d * d;
           const e2 = e * e;
           const sd = d * (1 - d2 / 6);
@@ -643,80 +628,9 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
           c = c * cd - s0 * sd;
           u = u0 * ce + v * se;
           v = v * ce - u0 * se;
-          wx = nx;
-          wy = ny;
-          {
-            const x = wx - 105;
-            const y = wy - 35;
-            const s1 = s;
-            const c1 = c;
-            const u1 = u;
-            const v1 = v;
-            const s2 = 2 * s1 * c1;
-            const c2 = 1 - 2 * s1 * s1;
-            const s4 = 2 * s2 * c2;
-            const c4 = 1 - 2 * s2 * s2;
-            const s5 = s4 * c1 + c4 * s1;
-            const c5 = c4 * c1 - s4 * s1;
-            const s10 = 2 * s5 * c5;
-            const c10 = 1 - 2 * s5 * s5;
-            const s20 = 2 * s10 * c10;
-            const c20 = 1 - 2 * s10 * s10;
-            const s60 = s20 * (3 - 4 * s20 * s20);
-            const c60 = c20 * (4 * c20 * c20 - 3);
-            const s120 = 2 * s60 * c60;
-            const s360 = s120 * (3 - 4 * s120 * s120);
-
-            const u3 = u1 * (3 - 4 * u1 * u1);
-            const v3 = v1 * (4 * v1 * v1 - 3);
-            const u6 = 2 * u3 * v3;
-            const v6 = 1 - 2 * u3 * u3;
-            const u12 = 2 * u6 * v6;
-            const v12 = 1 - 2 * u6 * u6;
-            const u15 = u12 * v3 + v12 * u3;
-            const v15 = v12 * v3 - u12 * u3;
-            const u30 = 2 * u15 * v15;
-            const v30 = 1 - 2 * u15 * u15;
-            const u60 = 2 * u30 * v30;
-            const u180 = u60 * (3 - 4 * u60 * u60);
-
-            const sp = u1 * C35 + v1 * S35;
-            const cp = v1 * C35 - u1 * S35;
-
-            const r = Math.sqrt(Math.abs(x));
-            const common = (40 / 3) * (s360 + s120);
-            const dLat =
-              -100 +
-              2 * x +
-              3 * y +
-              0.2 * y * y +
-              0.1 * x * y +
-              0.2 * r +
-              common +
-              (40 / 3) * u180 +
-              (80 / 3) * u60 +
-              (320 / 3) * u15 +
-              (640 / 3) * u6;
-            const dLon =
-              300 +
-              x +
-              2 * y +
-              0.1 * x * x +
-              0.1 * x * y +
-              0.1 * r +
-              common +
-              (40 / 3) * s60 +
-              (80 / 3) * s20 +
-              100 * s5 +
-              200 * s2;
-            const m = 1 - EE * sp * sp;
-            const sm = Math.sqrt(m);
-            offLon = (dLon * KLON * sm) / cp;
-            offLat = dLat * KLAT * m * sm;
-          }
         }
-        outA[j] = lon - offLon;
-        outB[j + o1] = lat - offLat;
+        outA[j] = wx;
+        outB[j + o1] = wy;
       }
       // @end
     }
