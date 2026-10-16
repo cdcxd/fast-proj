@@ -3,8 +3,9 @@
  * formula on the Krasovsky ellipsoid, as in gcoord and coordtransform.
  *
  * The 11 sines of the formula come from two sin/cos pairs, sin(x pi/60) and sin(y pi/180), by multiple-angle
- * identities. The inverse has no closed form; four fixed-point steps w = g - offset(w) (six near longitude 105)
- * converge to ~1e-11 degrees, and after the first step the two pairs are rotated by the step rather than recomputed.
+ * identities. The inverse has no closed form; two Newton steps on w + offset(w) = g (up to six near longitude 105),
+ * with the Jacobian from the same multiple-angle values, converge to ~1e-12 degrees, and after the first step the two
+ * pairs are rotated by the step rather than recomputed.
  */
 import { checkEven, checkOptions, checkOut, checkSame } from './checks.js';
 import type { Geographic } from './types.js';
@@ -26,10 +27,12 @@ const C35 = Math.cos(35 * KY);
 const KLAT = 180 / (A * (1 - EE) * Math.PI);
 const KLON = 180 / (A * Math.PI);
 const STEPS = 2;
-// Within CUSP of longitude 105 the Newton steps drop the singular derivative of the sqrt(|x|) term and converge
-// linearly: take up to CUSP_STEPS there.
+// The sqrt(|x|) term's derivative is singular at longitude 105. The Newton steps drop it within DERIV_CUT of 105, or
+// within CUSP on the first step, which starts at the input and may be across 105 from the solution; they converge
+// more slowly near 105, so take up to CUSP_STEPS within CUSP of it.
 const CUSP = 1e-4;
-const CUSP_STEPS = 4;
+const DERIV_CUT = 1e-10;
+const CUSP_STEPS = 6;
 // Derivatives of the offset's sine terms, per degree: (term weight) * (multiple) * (radians per degree of the angle).
 const JS360 = (40 / 3) * 360 * KX;
 const JS120 = (40 / 3) * 120 * KX;
@@ -443,7 +446,7 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
       const c360 = c120 * (4 * c120 * c120 - 3);
       const v60 = 1 - 2 * u30 * u30;
       const v180 = v60 * (4 * v60 * v60 - 3);
-      const dr = Math.abs(x) > CUSP ? (x > 0 ? 0.05 : -0.05) / r : 0;
+      const dr = Math.abs(x) > (k === 1 ? CUSP : DERIV_CUT) ? (x > 0 ? 0.05 : -0.05) / r : 0;
       const dCommon = JS360 * c360 + JS120 * c120;
       const dLonX = 1 + 0.2 * x + 0.1 * y + dr + dCommon + JS60 * c60 + JS20 * c20 + JS5 * c5 + JS2 * c2;
       const dLatX = 2 + 0.1 * y + 2 * dr + dCommon;
@@ -593,7 +596,7 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
           const c360 = c120 * (4 * c120 * c120 - 3);
           const v60 = 1 - 2 * u30 * u30;
           const v180 = v60 * (4 * v60 * v60 - 3);
-          const dr = Math.abs(x) > CUSP ? (x > 0 ? 0.05 : -0.05) / r : 0;
+          const dr = Math.abs(x) > (k === 1 ? CUSP : DERIV_CUT) ? (x > 0 ? 0.05 : -0.05) / r : 0;
           const dCommon = JS360 * c360 + JS120 * c120;
           const dLonX = 1 + 0.2 * x + 0.1 * y + dr + dCommon + JS60 * c60 + JS20 * c20 + JS5 * c5 + JS2 * c2;
           const dLatX = 2 + 0.1 * y + 2 * dr + dCommon;

@@ -67,9 +67,11 @@ fn small_sincos(r: v128) -> (v128, v128) {
     (add(r, mul(t, mul(r, poly(t, &S)))), add(spl(1.0), mul(t, poly(t, &C))))
 }
 
-/// The offset and, with `J`, the Newton matrix I + J: (ox, oy, ja, jb, jc, jd); without `J` the last four are zero.
+/// The offset and, with `J`, the Newton matrix I + J: (ox, oy, ja, jb, jc, jd), without the sqrt(|x|) term's
+/// derivative within `cut` of 0; without `J` the last four are zero.
 #[inline(never)]
-fn offset<const J: bool>(x: v128, y: v128, s1: v128, c1: v128, u1: v128, v1: v128) -> [v128; 6] {
+#[allow(clippy::too_many_arguments)]
+fn offset<const J: bool>(x: v128, y: v128, s1: v128, c1: v128, u1: v128, v1: v128, cut: f64) -> [v128; 6] {
     let s2 = dbl(s1, c1);
     let c2 = one_m2(s1);
     let s4 = dbl(s2, c2);
@@ -136,11 +138,11 @@ fn offset<const J: bool>(x: v128, y: v128, s1: v128, c1: v128, u1: v128, v1: v12
     let c360 = triple_c(c120);
     let v60 = one_m2(u30);
     let v180 = triple_c(v60);
-    // 0.05 sign(x) / sqrt|x|, dropped within CUSP of 105 (singular there).
+    // 0.05 sign(x) / sqrt|x|, dropped within `cut` of 105 (singular there).
     let dr = v128_bitselect(
         f64x2_div(v128_bitselect(spl(0.05), spl(-0.05), f64x2_gt(x, spl(0.0))), r),
         spl(0.0),
-        f64x2_gt(f64x2_abs(x), spl(CUSP)),
+        f64x2_gt(f64x2_abs(x), spl(cut)),
     );
     let dcommon = add(mul(spl(JS360), c360), mul(spl(JS120), c120));
     // Summed left to right, as in the TS kernel.
@@ -207,7 +209,7 @@ pub fn forward_batch(lon: &[f64], lat: &[f64], olon: &mut [f64], olat: &mut [f64
         let y = sub(p, spl(35.0));
         let (s, c) = vsincos(mul(x, spl(KX)));
         let (u, v) = small_sincos(mul(y, spl(KY)));
-        let [ox, oy, ..] = offset::<false>(x, y, s, c, u, v);
+        let [ox, oy, ..] = offset::<false>(x, y, s, c, u, v, CUSP);
         store_pair(v128_bitselect(add(l, ox), l, inbox), olon, i);
         store_pair(v128_bitselect(add(p, oy), p, inbox), olat, i);
         i += 2;
@@ -227,10 +229,12 @@ struct W {
     dy: v128,
 }
 
-/// One Newton step on w + offset(w) = (lon, lat); the sin/cos pairs must be at (wx, wy).
+/// One Newton step on w + offset(w) = (lon, lat), dropping the sqrt(|x|) derivative within `cut` of 105; the sin/cos
+/// pairs must be at (wx, wy).
 #[inline]
-fn step(lon: v128, lat: v128, w: W) -> W {
-    let [ox, oy, ja, jb, jc, jd] = offset::<true>(sub(w.wx, spl(105.0)), sub(w.wy, spl(35.0)), w.s, w.c, w.u, w.v);
+fn step(lon: v128, lat: v128, w: W, cut: f64) -> W {
+    let [ox, oy, ja, jb, jc, jd] =
+        offset::<true>(sub(w.wx, spl(105.0)), sub(w.wy, spl(35.0)), w.s, w.c, w.u, w.v, cut);
     let gx = sub(sub(lon, ox), w.wx);
     let gy = sub(sub(lat, oy), w.wy);
     let idet = f64x2_div(spl(1.0), sub(mul(ja, jd), mul(jb, jc)));
@@ -284,16 +288,16 @@ pub fn inverse_batch(lon: &[f64], lat: &[f64], olon: &mut [f64], olat: &mut [f64
         let (s, c) = vsincos(mul(sub(l, spl(105.0)), spl(KX)));
         let (u, v) = small_sincos(mul(sub(p, spl(35.0)), spl(KY)));
         let zero = spl(0.0);
-        let mut w = step(l, p, W { wx: l, wy: p, s, c, u, v, dx: zero, dy: zero });
+        let mut w = step(l, p, W { wx: l, wy: p, s, c, u, v, dx: zero, dy: zero }, CUSP);
         for _ in 1..STEPS {
-            w = step(l, p, rotate(w));
+            w = step(l, p, rotate(w), DERIV_CUT);
         }
         let mut active = v128_and(inbox, near_cusp(&w));
         for _ in STEPS..CUSP_STEPS {
             if !v128_any_true(active) {
                 break;
             }
-            let n = step(l, p, rotate(w));
+            let n = step(l, p, rotate(w), DERIV_CUT);
             // Inactive lanes never reactivate, so only their result needs freezing.
             w = W {
                 wx: v128_bitselect(n.wx, w.wx, active),

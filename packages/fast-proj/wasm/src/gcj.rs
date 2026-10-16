@@ -12,7 +12,8 @@ pub(crate) const KLAT: f64 = 180.0 / (6378245.0 * (1.0 - EE) * core::f64::consts
 pub(crate) const KLON: f64 = 180.0 / (6378245.0 * core::f64::consts::PI);
 pub(crate) const STEPS: usize = 2;
 pub(crate) const CUSP: f64 = 1e-4;
-pub(crate) const CUSP_STEPS: usize = 4;
+pub(crate) const DERIV_CUT: f64 = 1e-10;
+pub(crate) const CUSP_STEPS: usize = 6;
 // Derivatives of the offset's sine terms, per degree (see src/gcj02.ts).
 pub(crate) const JS360: f64 = (40.0 / 3.0) * 360.0 * KX;
 pub(crate) const JS120: f64 = (40.0 / 3.0) * 120.0 * KX;
@@ -34,8 +35,10 @@ pub(crate) mod sgcj {
     use super::*;
     use crate::kernel::reduce_lon;
 
-    /// The offset and the Newton matrix I + J at (x, y): (ox, oy, ja, jb, jc, jd).
-    pub fn offset(x: f64, y: f64, s1: f64, c1: f64, u1: f64, v1: f64) -> (f64, f64, f64, f64, f64, f64) {
+    /// The offset and the Newton matrix I + J at (x, y): (ox, oy, ja, jb, jc, jd), without the sqrt(|x|) term's
+    /// derivative within `cut` of 0.
+    #[allow(clippy::too_many_arguments)]
+    pub fn offset(x: f64, y: f64, s1: f64, c1: f64, u1: f64, v1: f64, cut: f64) -> (f64, f64, f64, f64, f64, f64) {
         let s2 = 2.0 * s1 * c1;
         let c2 = 1.0 - 2.0 * s1 * s1;
         let s4 = 2.0 * s2 * c2;
@@ -99,7 +102,7 @@ pub(crate) mod sgcj {
         let c360 = c120 * (4.0 * c120 * c120 - 3.0);
         let v60 = 1.0 - 2.0 * u30 * u30;
         let v180 = v60 * (4.0 * v60 * v60 - 3.0);
-        let dr = if x.abs() > CUSP { (if x > 0.0 { 0.05 } else { -0.05 }) / r } else { 0.0 };
+        let dr = if x.abs() > cut { (if x > 0.0 { 0.05 } else { -0.05 }) / r } else { 0.0 };
         let dcommon = JS360 * c360 + JS120 * c120;
         let dlon_x = 1.0 + 0.2 * x + 0.1 * y + dr + dcommon + JS60 * c60 + JS20 * c20 + JS5 * c5 + JS2 * c2;
         let dlat_x = 2.0 + 0.1 * y + 2.0 * dr + dcommon;
@@ -138,6 +141,7 @@ pub(crate) mod sgcj {
             libm::cos(x * KX),
             libm::sin(y * KY),
             libm::cos(y * KY),
+            CUSP,
         );
         (lon + ox, lat + oy)
     }
@@ -157,7 +161,8 @@ pub(crate) mod sgcj {
         let mut wy = lat;
         let mut k = 1;
         loop {
-            let (ox, oy, ja, jb, jc, jd) = offset(wx - 105.0, wy - 35.0, s, c, u, v);
+            let cut = if k == 1 { CUSP } else { DERIV_CUT };
+            let (ox, oy, ja, jb, jc, jd) = offset(wx - 105.0, wy - 35.0, s, c, u, v, cut);
             let gx = lon - ox - wx;
             let gy = lat - oy - wy;
             let idet = 1.0 / (ja * jd - jb * jc);
