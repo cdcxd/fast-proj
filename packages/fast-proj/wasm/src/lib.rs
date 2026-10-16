@@ -474,6 +474,7 @@ mod tests {
     fn gcj_max_error(rows: &[(f64, f64, f64, f64)], g: impl Fn(f64, f64) -> (f64, f64)) -> f64 {
         rows.iter().fold(0.0, |m, &(lon, lat, rlon, rlat)| {
             let (l, p) = g(lon, lat);
+            assert!(l.is_finite() && p.is_finite(), "non-finite result at {lon}, {lat}");
             m.max((l - rlon).abs() * lat.to_radians().cos())
                 .max((p - rlat).abs())
         })

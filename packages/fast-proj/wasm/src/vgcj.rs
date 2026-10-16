@@ -13,7 +13,8 @@ use core::arch::wasm32::{
     f64x2_splat, f64x2_sqrt, f64x2_sub, v128, v128_and, v128_any_true, v128_bitselect, v128_or,
 };
 
-use crate::simd::{load_pair, store_pair, vsincos};
+use crate::math::{C, S};
+use crate::simd::{load_pair, poly, store_pair, vsincos};
 
 #[inline]
 fn spl(x: f64) -> v128 {
@@ -57,6 +58,13 @@ fn triple_s(a: v128) -> v128 {
 #[inline]
 fn triple_c(a: v128) -> v128 {
     mul(a, sub(mul(spl(4.0), mul(a, a)), spl(3.0)))
+}
+
+/// `vsincos` without the reduction, for |r| <= pi/4: in-box latitudes give |r| <= 0.6 (out-of-box lanes are discarded).
+#[inline]
+fn small_sincos(r: v128) -> (v128, v128) {
+    let t = mul(r, r);
+    (add(r, mul(t, mul(r, poly(t, &S)))), add(spl(1.0), mul(t, poly(t, &C))))
 }
 
 #[inline(never)]
@@ -155,7 +163,7 @@ pub fn forward_batch(lon: &[f64], lat: &[f64], olon: &mut [f64], olat: &mut [f64
         let x = sub(l, spl(105.0));
         let y = sub(p, spl(35.0));
         let (s, c) = vsincos(mul(x, spl(KX)));
-        let (u, v) = vsincos(mul(y, spl(KY)));
+        let (u, v) = small_sincos(mul(y, spl(KY)));
         let (ox, oy) = offset(x, y, s, c, u, v);
         store_pair(v128_bitselect(add(l, ox), l, inbox), olon, i);
         store_pair(v128_bitselect(add(p, oy), p, inbox), olat, i);
@@ -225,7 +233,7 @@ pub fn inverse_batch(lon: &[f64], lat: &[f64], olon: &mut [f64], olat: &mut [f64
         let x = sub(l, spl(105.0));
         let y = sub(p, spl(35.0));
         let (s, c) = vsincos(mul(x, spl(KX)));
-        let (u, v) = vsincos(mul(y, spl(KY)));
+        let (u, v) = small_sincos(mul(y, spl(KY)));
         let (ox, oy) = offset(x, y, s, c, u, v);
         let mut w = W {
             wx: l,
@@ -246,16 +254,11 @@ pub fn inverse_batch(lon: &[f64], lat: &[f64], olon: &mut [f64], olat: &mut [f64
                 break;
             }
             let n = step(l, p, w);
-            let sel = |a: v128, b: v128| v128_bitselect(a, b, active);
+            // Inactive lanes never reactivate, so only their offsets need freezing.
             w = W {
-                wx: sel(n.wx, w.wx),
-                wy: sel(n.wy, w.wy),
-                s: sel(n.s, w.s),
-                c: sel(n.c, w.c),
-                u: sel(n.u, w.u),
-                v: sel(n.v, w.v),
-                ox: sel(n.ox, w.ox),
-                oy: sel(n.oy, w.oy),
+                ox: v128_bitselect(n.ox, w.ox, active),
+                oy: v128_bitselect(n.oy, w.oy, active),
+                ..n
             };
             active = v128_and(active, near_cusp(&w));
         }

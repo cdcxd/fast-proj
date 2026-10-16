@@ -176,6 +176,15 @@ describe('dispose', () => {
     expect(h.fromWgs84([0, 116.391], [0, 39.907])).toEqual(
       gcj02({ outsideChina: 'transform' }).fromWgs84([0, 116.391], [0, 39.907]),
     );
+    // The option is read once, so point and batch methods agree.
+    let reads = 0;
+    const m = ctx.gcj02({
+      get outsideChina() {
+        return ++reads === 1 ? 'transform' : 'passthrough';
+      },
+    });
+    expect(m.fromWgs84([13.4], [52.5]).lon[0]).toBe(m.fromWgs84Point(13.4, 52.5)[0]);
+    expect(reads).toBe(1);
     const k = ctx.gcj02();
     g.dispose();
     expect(() => g.toWgs84Point(116, 39)).toThrow(/dispose/);

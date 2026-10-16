@@ -425,9 +425,10 @@ function wasmContext(exports: Exports, backend: WasmBackend): WasmContext {
     },
     gcj02: (o) => {
       if (!e) throw new Error('fast-proj: context used after dispose()');
-      const js = jsGcj02(o);
+      const outsideChina = o?.outsideChina;
+      const js = jsGcj02({ outsideChina });
       // 'transform' mode iterates to a tolerance per point, which the fixed-step kernel doesn't do.
-      if (o?.outsideChina === 'transform' || !e.gcj_forward_batch || !e.gcj_inverse_batch) {
+      if (outsideChina === 'transform' || !e.gcj_forward_batch || !e.gcj_inverse_batch) {
         return guarded(js, () => !e);
       }
       return buildGcj(js);
