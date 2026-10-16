@@ -258,6 +258,11 @@ describe.each(backends)('$name backend gcj02 batch', ({ gcj02: make }) => {
     expect(batchError(lon.slice(1), lat.slice(1))).toBeLessThan(6e-14);
   });
 
+  it('stops the extra inverse steps like the point form', () => {
+    // Under JavaScriptCore, a step here fell just below CUSP_TOL in one backend only, at the old 1e-12.
+    expect(batchError([105.00524758238542], [54.59666703153891])).toBeLessThan(6e-14);
+  });
+
   it('decides the extra inverse steps like the point form at the edge of the 105 band', () => {
     // GCJ-02 longitudes whose third iterate lands about 1e-4 from 105, finely spaced across that edge.
     const lon: number[] = [];

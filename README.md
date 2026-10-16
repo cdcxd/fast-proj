@@ -21,23 +21,32 @@ npm install fast-proj
 Batch speedups for 10,000 points (median of 31 samples, mean of three runs; higher is faster). UTM zone 33N against a
 reused **proj4 2.22** converter:
 
-| Operation                | Backend     |   Node 24 |  Bun 1.4 | Chromium 156 |
-| ------------------------ | ----------- | --------: | -------: | -----------: |
-| WGS84 → UTM              | JavaScript  |  **5.2×** | **3.3×** |     **3.8×** |
-|                          | WebAssembly | **10.3×** | **4.6×** |    **10.4×** |
-| UTM → WGS84              | JavaScript  |  **4.9×** | **2.7×** |     **3.3×** |
-|                          | WebAssembly |  **8.7×** | **4.5×** |     **9.1×** |
-| UTM → GeoJSON LineString | JavaScript  |  **4.9×** | **2.8×** |     **3.3×** |
-|                          | WebAssembly |  **8.1×** | **4.4×** |     **8.4×** |
+| Operation                | Backend     |  Node 24 |  Bun 1.4 | Chromium 156 |
+| ------------------------ | ----------- | -------: | -------: | -----------: |
+| WGS84 → UTM              | JavaScript  | **5.7×** | **3.6×** |     **4.6×** |
+|                          | WebAssembly | **9.7×** | **4.4×** |    **10.4×** |
+| UTM → WGS84              | JavaScript  | **5.3×** | **3.2×** |     **3.9×** |
+|                          | WebAssembly | **8.3×** | **4.5×** |     **9.0×** |
+| UTM → GeoJSON LineString | JavaScript  | **5.3×** | **3.1×** |     **3.9×** |
+|                          | WebAssembly | **7.5×** | **4.2×** |     **8.2×** |
 
 GCJ-02 against **gcoord 1.0.7**:
 
 | Operation      | Backend     |   Node 24 |   Bun 1.4 | Chromium 156 |
 | -------------- | ----------- | --------: | --------: | -----------: |
-| WGS84 → GCJ-02 | JavaScript  | **12.1×** | **12.1×** |     **5.2×** |
-|                | WebAssembly | **28.1×** | **23.0×** |    **20.8×** |
-| GCJ-02 → WGS84 | JavaScript  |  **5.5×** |  **6.5×** |     **3.7×** |
-|                | WebAssembly | **14.7×** | **12.9×** |    **12.4×** |
+| WGS84 → GCJ-02 | JavaScript  | **20.7×** | **15.9×** |     **7.7×** |
+|                | WebAssembly | **28.2×** | **23.0×** |    **19.5×** |
+| GCJ-02 → WGS84 | JavaScript  | **12.0×** | **11.8×** |     **7.3×** |
+|                | WebAssembly | **19.4×** | **15.9×** |    **16.1×** |
+
+UTM zone 50 with `geographic: GCJ02` against proj4 + gcoord:
+
+| Operation    | Backend     |   Node 24 |   Bun 1.4 | Chromium 156 |
+| ------------ | ----------- | --------: | --------: | -----------: |
+| UTM → GCJ-02 | JavaScript  | **12.9×** |  **9.0×** |     **5.5×** |
+|              | WebAssembly | **17.3×** | **12.1×** |    **13.2×** |
+| GCJ-02 → UTM | JavaScript  | **10.7×** |  **9.3×** |     **6.6×** |
+|              | WebAssembly | **16.4×** | **11.9×** |    **14.5×** |
 
 Timings vary with hardware, runtime and dataset. See the [full benchmark and reproduction commands](packages/fast-proj/README.md#benchmark).
 

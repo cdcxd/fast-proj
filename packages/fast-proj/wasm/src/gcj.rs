@@ -14,6 +14,7 @@ pub(crate) const STEPS: usize = 2;
 pub(crate) const CUSP: f64 = 1e-4;
 pub(crate) const DERIV_CUT: f64 = 1e-10;
 pub(crate) const CUSP_STEPS: usize = 6;
+pub(crate) const CUSP_TOL: f64 = 1e-13;
 // Derivatives of the offset's sine terms, per degree (see src/gcj02.ts).
 pub(crate) const JS360: f64 = (40.0 / 3.0) * 360.0 * KX;
 pub(crate) const JS120: f64 = (40.0 / 3.0) * 120.0 * KX;
@@ -172,7 +173,10 @@ pub(crate) mod sgcj {
             wy += dy;
             // Negated, as in the TS kernel, so a NaN iterate stops too.
             #[allow(clippy::neg_cmp_op_on_partial_ord)]
-            let stop = k >= STEPS && (k == CUSP_STEPS || !((wx - 105.0).abs() < CUSP));
+            let stop = k >= STEPS
+                && (k == CUSP_STEPS
+                    || !((wx - 105.0).abs() < CUSP)
+                    || ((wx - 105.0).abs() > DERIV_CUT && dx.abs() < CUSP_TOL && dy.abs() < CUSP_TOL));
             if stop {
                 break;
             }
