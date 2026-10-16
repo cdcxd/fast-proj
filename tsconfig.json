@@ -11,5 +11,5 @@
     "types": ["node"],
     "lib": ["es2022", "esnext.disposable", "dom"]
   },
-  "include": ["packages/*/src", "packages/*/test", "packages/*/bench"]
+  "include": ["packages/*/src", "packages/*/test", "packages/*/bench", "packages/*/scripts"]
 }

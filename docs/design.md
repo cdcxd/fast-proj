@@ -254,6 +254,12 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
   workspace once.
 - One wasm file ships, `fast-proj.wasm` (SIMD). 0.1.0 also shipped a scalar build for engines without SIMD; it measured
   no faster than the JavaScript kernel, so since 0.1.1 those engines get the JavaScript backend (`backend: 'js'`).
+- The JavaScript kernels are written once, as per-point functions returning through closure variables; the point methods
+  call them. Each batch method runs one loop per direction with a copy of the kernel in it, shared by separate and
+  interleaved arrays (element `j` of `a` and `b[j + o1]` every `step`), expanded by `scripts/inline.ts` from `// @inline`
+  markers; `build` fails if a copy is stale. The copies are bit-identical to the kernels and measured 23-37% faster for
+  `utm` and 28-89% for `gcj02` (Node, Bun, Chromium): engines don't keep a called kernel's closure results in registers.
+  A per-point function writing to the output array or a `Float64Array(2)` scratch gained 0-4% on JavaScriptCore.
 - The wasm converters' single-point methods run the JavaScript kernel: one point costs more to pass into wasm than to
   compute.
 - Re-entrant calls into a context (from array-like getters) throw; `dispose()` during a call throws.
