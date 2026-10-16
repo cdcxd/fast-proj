@@ -118,7 +118,7 @@ describe('loadWasm', () => {
     const spy = vi.spyOn(WebAssembly, 'instantiate').mockImplementation((async (m: WebAssembly.Module) => {
       const { exports } = await instantiate(m, {});
       return { exports: { ...exports, simd_enabled: () => 0 } };
-    }) as typeof WebAssembly.instantiate);
+    }) as unknown as typeof WebAssembly.instantiate);
     const ctx = await loadWasm({ source: module }).finally(() => spy.mockRestore());
     expect(ctx.backend).toBe('js');
     expect(ctx.utm({ zone: 33 }).fromLonLatPoint(15, 0)[0]).toBeCloseTo(500000, 6);
