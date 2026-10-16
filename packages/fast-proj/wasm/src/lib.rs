@@ -1,5 +1,5 @@
 //! Crate root: module wiring and the C-ABI surface (math smoke exports and
-//! the UTM batch exports with scalar/simd dispatch).
+//! the transverse Mercator batch exports with scalar/simd dispatch).
 //!
 //! Layout: `math` (coefficients/constants + libm scalar wrappers), `simd`
 //! (f64x2 vector math, +simd128 only), `kernel` (UTM series + scalar
@@ -166,7 +166,7 @@ pub unsafe extern "C" fn log1p_batch(inp: *const f64, out: *mut f64, n: usize) {
 }
 
 // ---------------------------------------------------------------------------
-// UTM batch exports
+// Transverse Mercator batch exports (lon0 in degrees)
 // ---------------------------------------------------------------------------
 
 fn run_forward(lon: &[f64], lat: &[f64], x: &mut [f64], y: &mut [f64], k: &kernel::K) {
@@ -186,48 +186,6 @@ fn run_inverse(x: &[f64], y: &[f64], lon: &mut [f64], lat: &mut [f64], k: &kerne
         (lon[i], lat[i]) = kernel::skernel::inverse(x[i], y[i], k);
     }
 }
-
-/// # Safety
-/// Each pointer must be non-null and aligned, even when `n` is 0, and address `n` valid f64s; outputs must not
-/// overlap any other buffer.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn forward_batch(
-    lonp: *const f64,
-    latp: *const f64,
-    xp: *mut f64,
-    yp: *mut f64,
-    n: usize,
-    zone: u32,
-    south: u32,
-    a: f64,
-    f: f64,
-) {
-    let k = kernel::make_k(a, f, zone, south != 0);
-    unsafe { run_forward(r(lonp, n), r(latp, n), w(xp, n), w(yp, n), &k) }
-}
-
-/// # Safety
-/// Each pointer must be non-null and aligned, even when `n` is 0, and address `n` valid f64s; outputs must not
-/// overlap any other buffer.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn inverse_batch(
-    xp: *const f64,
-    yp: *const f64,
-    lonp: *mut f64,
-    latp: *mut f64,
-    n: usize,
-    zone: u32,
-    south: u32,
-    a: f64,
-    f: f64,
-) {
-    let k = kernel::make_k(a, f, zone, south != 0);
-    unsafe { run_inverse(r(xp, n), r(yp, n), w(lonp, n), w(latp, n), &k) }
-}
-
-// ---------------------------------------------------------------------------
-// General transverse Mercator batch exports (lon0 in degrees)
-// ---------------------------------------------------------------------------
 
 /// # Safety
 /// Each pointer must be non-null and aligned, even when `n` is 0, and address `n` valid f64s; outputs must not

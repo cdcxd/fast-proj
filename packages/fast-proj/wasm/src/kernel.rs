@@ -7,7 +7,7 @@
 //! - forward: conformal latitude, then xi'/eta' (Eq. 10), Krüger series
 //!   (Eq. 11), scaling (Eq. 13) — easting ~ eta', northing ~ xi';
 //! - inverse: Eqs. (15)-(16), then geodetic latitude from the conformal one;
-//! - `make_k` builds A, alpha, beta from Eqs. (29)/(35)/(36) to order n^6;
+//! - `make_k_tm` builds A, alpha, beta from Eqs. (29)/(35)/(36) to order n^6;
 //!   the fixed trig series are precomputed there as polynomials equivalent
 //!   to Clenshaw summation (see `poly6` and the K fields).
 //! As in the TS kernel: conformal latitude via its Fourier series in n (no
@@ -26,8 +26,7 @@
 
 pub(crate) const D2R: f64 = core::f64::consts::PI / 180.0;
 pub(crate) const R2D: f64 = 180.0 / core::f64::consts::PI;
-pub(crate) const K0: f64 = 0.9996;
-pub(crate) const FALSE_EASTING: f64 = 500000.0;
+#[cfg(test)]
 pub(crate) const FALSE_NORTHING_SOUTH: f64 = 10000000.0;
 
 /// Series coefficients and derived polynomial forms for one zone/ellipsoid.
@@ -58,9 +57,11 @@ pub(crate) fn reduce_lon(lon: f64) -> f64 {
     }
 }
 
+/// UTM zone, for the host tests.
+#[cfg(test)]
 pub(crate) fn make_k(a: f64, f: f64, zone: u32, south: bool) -> K {
     let fnorth = if south { FALSE_NORTHING_SOUTH } else { 0.0 };
-    make_k_tm(a, f, (zone as i32 * 6 - 183) as f64, K0, FALSE_EASTING, fnorth)
+    make_k_tm(a, f, (zone as i32 * 6 - 183) as f64, 0.9996, 500000.0, fnorth)
 }
 
 /// General transverse Mercator: central meridian in degrees, scale k0, false easting/northing in metres.

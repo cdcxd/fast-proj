@@ -3,16 +3,17 @@
 fast-proj intentionally does not parse proj4 strings or look up EPSG codes: you construct the converter for the
 projection you have. A small `fromEpsg()` for the supported codes may be added later.
 
-| proj4 / EPSG                                                                                                               | fast-proj                                                                 |
-| -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `+proj=utm +zone=33 +datum=WGS84`, EPSG:32633                                                                              | `utm({ zone: 33 })`                                                       |
-| `+proj=utm +zone=33 +south +datum=WGS84`, EPSG:32733                                                                       | `utm({ zone: 33, south: true })`                                          |
-| EPSG:326NN / 327NN                                                                                                         | `utm({ zone: NN })` / `utm({ zone: NN, south: true })`                    |
-| `+proj=utm +zone=32 +ellps=GRS80` (ETRS89 / UTM 32N, EPSG:25832)                                                           | `utm({ zone: 32, ellipsoid: GRS80 })`                                     |
-| `+proj=tmerc +lat_0=0 +lon_0=117 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80` (CGCS2000 3° Gauss-Krüger CM 117E, EPSG:4548)       | `tmerc({ lon0: 117, falseEasting: 500000, ellipsoid: GRS80 })`            |
-| `+proj=tmerc +lat_0=0 +lon_0=117 +k=1 +x_0=39500000 +y_0=0 +ellps=GRS80` (CGCS2000 3° zone 39 with zone prefix, EPSG:4527) | `tmerc({ lon0: 117, falseEasting: 39500000, ellipsoid: GRS80 })`          |
-| `+proj=tmerc +lat_0=0 +lon_0=L +k=K +x_0=E +y_0=N +ellps=…`                                                                | `tmerc({ lon0: L, k0: K, falseEasting: E, falseNorthing: N, ellipsoid })` |
-| `+proj=longlat +datum=WGS84`, EPSG:4326                                                                                    | the hub: what `toLonLat` returns and `fromLonLat` takes                   |
+| proj4 / EPSG                                                                                                               | fast-proj                                                                                     |
+| -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `+proj=utm +zone=33 +datum=WGS84`, EPSG:32633                                                                              | `utm({ zone: 33 })`                                                                           |
+| `+proj=utm +zone=33 +south +datum=WGS84`, EPSG:32733                                                                       | `utm({ zone: 33, south: true })`                                                              |
+| EPSG:326NN / 327NN                                                                                                         | `utm({ zone: NN })` / `utm({ zone: NN, south: true })`                                        |
+| `+proj=utm +zone=32 +ellps=GRS80` (ETRS89 / UTM 32N, EPSG:25832)                                                           | `utm({ zone: 32, ellipsoid: GRS80 })`                                                         |
+| `+proj=tmerc +lat_0=0 +lon_0=117 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80` (CGCS2000 3° Gauss-Krüger CM 117E, EPSG:4548)       | `tmerc({ centralMeridian: 117, falseEasting: 500000, ellipsoid: GRS80 })`                     |
+| `+proj=tmerc +lat_0=0 +lon_0=117 +k=1 +x_0=39500000 +y_0=0 +ellps=GRS80` (CGCS2000 3° zone 39 with zone prefix, EPSG:4527) | `tmerc({ centralMeridian: 117, falseEasting: 39500000, ellipsoid: GRS80 })`                   |
+| `+proj=tmerc +lat_0=0 +lon_0=L +k=K +x_0=E +y_0=N +ellps=…`                                                                | `tmerc({ centralMeridian: L, scaleFactor: K, falseEasting: E, falseNorthing: N, ellipsoid })` |
+| `+proj=longlat +datum=WGS84`, EPSG:4326                                                                                    | the hub: what `toLonLat` returns and `fromLonLat` takes                                       |
+| GCJ-02 (not in proj4; gcoord `GCJ02`, coordtransform `wgs84togcj02`)                                                       | `GCJ02.fromWgs84` / `toWgs84`; a projection's `geographic: GCJ02`                             |
 
 How calls map:
 

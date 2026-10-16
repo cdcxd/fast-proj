@@ -1,4 +1,4 @@
-import type { GeographicTransform, Projection, UtmOptions } from '../dist/index.js';
+import type { Geographic, Projection, UtmOptions } from '../dist/index.js';
 import type { LineString } from '../dist/geojson.js';
 
 /** One row per direction/method: baseline median plus one column per backend. */
@@ -94,7 +94,7 @@ export function runCases(
 // `gcj02` factory.
 export function runGcjCases(
   gcoord: { readonly WGS84: unknown; readonly GCJ02: unknown; transform(...args: unknown[]): unknown },
-  backends: Record<string, () => GeographicTransform>,
+  backends: Record<string, () => Geographic>,
   { n = 10000, runs = 31, reps = 5 }: BenchOptions = {},
 ): BenchRow[] {
   const lon = new Float64Array(n);
@@ -111,7 +111,7 @@ export function runGcjCases(
     ['WGS84 → GCJ-02', gcoord.WGS84, gcoord.GCJ02],
     ['GCJ-02 → WGS84', gcoord.GCJ02, gcoord.WGS84],
   ];
-  const cases = (g: GeographicTransform | null): [string, () => void][][] => [
+  const cases = (g: Geographic | null): [string, () => void][][] => [
     [
       [
         'fromWgs84Point',

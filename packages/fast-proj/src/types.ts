@@ -1,13 +1,20 @@
 import type { Ellipsoid } from './ellipsoid.js';
 
 /**
- * Projected x/y in metres <-> WGS84 longitude/latitude in degrees (the hub). Output longitude is in [-180, 180].
+ * Projected x/y in metres <-> longitude/latitude in degrees on {@link Projection.geographic}, WGS84 (the hub) when
+ * unset. Output longitude is in [-180, 180].
  *
  * Batch methods accept any array-like input and write into the optional output buffers, which must be at least as
  * long as the input. An output buffer may be the corresponding input itself (in place), but must not otherwise
  * overlap an input. Interleaved input must have an even length. Points outside the valid domain give `NaN`.
  */
 export interface Projection {
+  /**
+   * The geographic system of this projection's longitude/latitude; unset means WGS84. x/y stay on the grid of the
+   * WGS84 longitude/latitude: x/y <-> WGS84 <-> `geographic`. Borrowed, not owned: one from a wasm context works
+   * only while that context is live.
+   */
+  readonly geographic?: Geographic;
   /** x/y arrays in metres -> longitude/latitude arrays in degrees. */
   toLonLat(
     x: ArrayLike<number>,
@@ -31,10 +38,10 @@ export interface Projection {
 }
 
 /**
- * Another geographic system's longitude/latitude <-> WGS84 longitude/latitude, both in degrees. Same buffer rules as
- * {@link Projection}.
+ * A geographic coordinate system defined by its conversion to WGS84: this system's longitude/latitude <-> WGS84
+ * longitude/latitude, both in degrees. Same buffer rules as {@link Projection}.
  */
-export interface GeographicTransform {
+export interface Geographic {
   /** This system's longitude/latitude arrays -> WGS84 longitude/latitude arrays. */
   toWgs84(
     lon: ArrayLike<number>,
@@ -59,14 +66,16 @@ export interface GeographicTransform {
 
 /** A transverse Mercator projection. */
 export interface TransverseMercator extends Projection {
-  /** Central meridian in degrees. */
-  readonly lon0: number;
-  /** Scale factor on the central meridian. */
-  readonly k0: number;
+  /** Degrees. */
+  readonly centralMeridian: number;
+  /** On the central meridian. */
+  readonly scaleFactor: number;
   /** Metres. */
   readonly falseEasting: number;
   /** Metres. */
   readonly falseNorthing: number;
+  /** Degrees. Always 0 until other values are supported. */
+  readonly latitudeOfOrigin: number;
   readonly ellipsoid: Ellipsoid;
 }
 

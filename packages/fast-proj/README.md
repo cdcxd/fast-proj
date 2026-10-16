@@ -15,7 +15,7 @@ npm install fast-proj
 ```
 
 ```ts
-import { gcj02, tmerc, utm, utmFor } from 'fast-proj';
+import { GCJ02, tmerc, utm, utmFor } from 'fast-proj';
 import { lineString } from 'fast-proj/geojson';
 
 const zone33 = utm({ zone: 33 }); // or utm(utmFor(lon, lat))
@@ -24,8 +24,9 @@ zone33.toLonLatInterleaved(xy, xy); // [x0, y0, x1, y1, ...] -> [lon0, lat0, ...
 const [x, y] = zone33.fromLonLatPoint(15, 52);
 map.getSource('track').setData(lineString(xy)); // MapLibre
 
-const gk = tmerc({ lon0: 117, falseEasting: 500000 }); // Gauss-Krüger, CM 117E
-gcj02().fromWgs84Interleaved(lonlat, lonlat); // WGS84 -> GCJ-02 for AMap/Tencent basemaps, in place
+const gk = tmerc({ centralMeridian: 117, falseEasting: 500000 }); // Gauss-Krüger, CM 117E
+utm({ zone: 50, geographic: GCJ02 }).toLonLatInterleaved(xy, xy); // UTM -> GCJ-02 for AMap/Tencent basemaps
+GCJ02.fromWgs84Interleaved(lonlat, lonlat); // WGS84 -> GCJ-02, in place
 
 import { loadWasm } from 'fast-proj/wasm'; // opt-in, ~31 kB
 const wasm = await loadWasm();

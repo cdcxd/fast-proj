@@ -1,7 +1,10 @@
 /**
  * Formatting of longitude/latitude buffers (the output of any converter or chain) for map libraries. No
- * conversion happens here.
+ * conversion happens here. Each helper takes interleaved `[lon0, lat0, lon1, lat1, ...]` or separate `lon`, `lat`
+ * arrays (the `{ lon, lat }` result of `toLonLat`).
  */
+import { checkEven, checkSame } from './checks.js';
+
 export type Position = [lon: number, lat: number];
 
 export interface LineString {
@@ -9,38 +12,46 @@ export interface LineString {
   coordinates: Position[];
 }
 
-function check(lonlat: ArrayLike<number>): number {
-  const n = lonlat.length;
-  if (n % 2 !== 0) throw new RangeError(`interleaved input must have an even length, got ${n}`);
-  return n >> 1;
+function checkArrayLike(a: unknown, name: string): void {
+  if (typeof a !== 'object' || a === null || typeof (a as ArrayLike<number>).length !== 'number') {
+    throw new TypeError(`fast-proj: ${name} must be an array-like, got ${a === null ? 'null' : typeof a}`);
+  }
 }
 
-/** Interleaved [lon0, lat0, lon1, lat1, ...] -> GeoJSON positions `[lon, lat][]`. */
-export function positions(lonlat: ArrayLike<number>): Position[] {
-  const n = check(lonlat);
-  const out: Position[] = [];
-  for (let i = 0; i < n; i++) out.push([lonlat[2 * i]!, lonlat[2 * i + 1]!]);
-  return out;
-}
-
-/** Separate longitude/latitude arrays -> GeoJSON positions `[lon, lat][]`. */
-export function positionsFromArrays(lon: ArrayLike<number>, lat: ArrayLike<number>): Position[] {
-  const n = lon.length;
-  if (lat.length !== n) throw new RangeError('lon and lat must have the same length');
-  const out: Position[] = [];
-  for (let i = 0; i < n; i++) out.push([lon[i]!, lat[i]!]);
-  return out;
-}
-
-/** Interleaved [lon0, lat0, ...] -> GeoJSON LineString geometry. */
-export function lineString(lonlat: ArrayLike<number>): LineString {
-  return { type: 'LineString', coordinates: positions(lonlat) };
-}
-
-/** Interleaved [lon0, lat0, ...] -> Leaflet-style `[lat, lng][]` pairs. */
-export function latLngs(lonlat: ArrayLike<number>): [lat: number, lng: number][] {
-  const n = check(lonlat);
+function pairs(a: ArrayLike<number>, b: ArrayLike<number> | undefined, latFirst: boolean): [number, number][] {
   const out: [number, number][] = [];
-  for (let i = 0; i < n; i++) out.push([lonlat[2 * i + 1]!, lonlat[2 * i]!]);
+  checkArrayLike(a, b === undefined ? 'lonlat' : 'lon');
+  if (b !== undefined) checkArrayLike(b, 'lat');
+  if (b === undefined) {
+    const n = a.length;
+    checkEven(n);
+    const p = latFirst ? 1 : 0;
+    for (let i = 0; i < n; i += 2) out.push([a[i + p]!, a[i + 1 - p]!]);
+  } else {
+    const n = a.length;
+    checkSame(n, b.length, 'lon and lat');
+    for (let i = 0; i < n; i++) out.push(latFirst ? [b[i]!, a[i]!] : [a[i]!, b[i]!]);
+  }
   return out;
+}
+
+/** GeoJSON positions `[lon, lat][]`. */
+export function positions(lonlat: ArrayLike<number>): Position[];
+export function positions(lon: ArrayLike<number>, lat: ArrayLike<number>): Position[];
+export function positions(a: ArrayLike<number>, b?: ArrayLike<number>): Position[] {
+  return pairs(a, b, false);
+}
+
+/** GeoJSON LineString geometry. */
+export function lineString(lonlat: ArrayLike<number>): LineString;
+export function lineString(lon: ArrayLike<number>, lat: ArrayLike<number>): LineString;
+export function lineString(a: ArrayLike<number>, b?: ArrayLike<number>): LineString {
+  return { type: 'LineString', coordinates: pairs(a, b, false) };
+}
+
+/** Leaflet-style `[lat, lng][]` pairs. */
+export function latLngs(lonlat: ArrayLike<number>): [lat: number, lng: number][];
+export function latLngs(lon: ArrayLike<number>, lat: ArrayLike<number>): [lat: number, lng: number][];
+export function latLngs(a: ArrayLike<number>, b?: ArrayLike<number>): [lat: number, lng: number][] {
+  return pairs(a, b, true);
 }

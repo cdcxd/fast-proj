@@ -13,40 +13,72 @@
  * replace most transcendental calls.
  */
 import { type Ellipsoid, WGS84, checkEllipsoid, tmSeries } from './ellipsoid.js';
-import { checkEven, checkNumber, checkOut } from './checks.js';
-import type { TransverseMercator } from './types.js';
+import { checkEven, checkNumber, checkOptions, checkOut, checkSame } from './checks.js';
+import { checkGeographic, withGeographic } from './geographic.js';
+import type { Geographic, TransverseMercator } from './types.js';
 
 export interface TransverseMercatorOptions {
-  /** Central meridian in degrees, in [-180, 180]. */
-  lon0: number;
-  /** Scale factor on the central meridian. Default 1. */
-  k0?: number;
+  /** Degrees, in [-180, 180]. */
+  centralMeridian: number;
+  /** On the central meridian. Default 1. */
+  scaleFactor?: number;
   /** Metres. Default 0. */
   falseEasting?: number;
   /** Metres. Default 0. */
   falseNorthing?: number;
+  /** Degrees. Only 0 (the default) is supported yet. */
+  latitudeOfOrigin?: number;
   /** Default {@link WGS84}. Flattening must be below 0.01. */
   ellipsoid?: Ellipsoid;
+  /** Geographic system of `toLonLat`/`fromLonLat`. Default WGS84. */
+  geographic?: Geographic;
 }
 
 const D2R = Math.PI / 180;
 const R2D = 180 / Math.PI;
+const OPTIONS = [
+  'centralMeridian',
+  'scaleFactor',
+  'falseEasting',
+  'falseNorthing',
+  'latitudeOfOrigin',
+  'ellipsoid',
+  'geographic',
+];
+const RENAMED = { lon0: 'centralMeridian', k0: 'scaleFactor' };
 
-export function tmerc({
-  lon0: lon0Deg,
-  k0 = 1,
-  falseEasting = 0,
-  falseNorthing = 0,
-  ellipsoid = WGS84,
-}: TransverseMercatorOptions): TransverseMercator {
-  checkNumber(lon0Deg, 'lon0');
-  if (!(Math.abs(lon0Deg) <= 180)) throw new RangeError(`lon0 must be in [-180, 180], got ${lon0Deg}`);
-  checkNumber(k0, 'k0');
-  if (!(k0 > 0)) throw new RangeError(`k0 must be positive, got ${k0}`);
+export function tmerc(options: TransverseMercatorOptions): TransverseMercator {
+  const [p, g] = parseTmerc(options);
+  return withGeographic(p, g);
+}
+
+/** Validates the options and builds the JavaScript converter without its geographic step. */
+export function parseTmerc(options: TransverseMercatorOptions): [TransverseMercator, Geographic | undefined] {
+  checkOptions(options, 'tmerc', OPTIONS, RENAMED);
+  const {
+    centralMeridian,
+    scaleFactor = 1,
+    falseEasting = 0,
+    falseNorthing = 0,
+    latitudeOfOrigin = 0,
+    ellipsoid = WGS84,
+    geographic,
+  } = options;
+  checkNumber(centralMeridian, 'centralMeridian');
+  if (!(Math.abs(centralMeridian) <= 180)) {
+    throw new RangeError(`fast-proj: centralMeridian must be in [-180, 180], got ${centralMeridian}`);
+  }
+  checkNumber(scaleFactor, 'scaleFactor');
+  if (!(scaleFactor > 0)) throw new RangeError(`fast-proj: scaleFactor must be positive, got ${scaleFactor}`);
   checkNumber(falseEasting, 'falseEasting');
   checkNumber(falseNorthing, 'falseNorthing');
-  checkEllipsoid(ellipsoid);
-  return transverseMercator(lon0Deg, k0, falseEasting, falseNorthing, ellipsoid);
+  checkNumber(latitudeOfOrigin, 'latitudeOfOrigin');
+  if (latitudeOfOrigin !== 0) {
+    throw new RangeError(`fast-proj: latitudeOfOrigin other than 0 is not supported yet, got ${latitudeOfOrigin}`);
+  }
+  const e = checkEllipsoid(ellipsoid);
+  checkGeographic(geographic);
+  return [transverseMercator(centralMeridian, scaleFactor, falseEasting, falseNorthing, e), geographic];
 }
 
 /** Builds the converter from validated parameters. */
@@ -222,14 +254,15 @@ export function transverseMercator(
   }
 
   return {
-    lon0: lon0Deg,
-    k0,
+    centralMeridian: lon0Deg,
+    scaleFactor: k0,
     falseEasting: fe,
     falseNorthing: fn,
+    latitudeOfOrigin: 0,
     ellipsoid,
     toLonLat(x, y, lon, lat) {
       const n = x.length;
-      if (y.length !== n) throw new RangeError('x and y must have the same length');
+      checkSame(n, y.length, 'x and y');
       if (lon) checkOut(lon, n, 'lon');
       else lon = new Float64Array(n);
       if (lat) checkOut(lat, n, 'lat');
@@ -244,7 +277,7 @@ export function transverseMercator(
     },
     fromLonLat(lon, lat, x, y) {
       const n = lon.length;
-      if (lat.length !== n) throw new RangeError('lon and lat must have the same length');
+      checkSame(n, lat.length, 'lon and lat');
       if (x) checkOut(x, n, 'x');
       else x = new Float64Array(n);
       if (y) checkOut(y, n, 'y');

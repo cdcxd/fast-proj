@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { centralMeridian, utmFor, zoneFor } from '../src/index.js';
+import { utmFor, utmZoneFor } from '../src/index.js';
 
-describe('zoneFor', () => {
+describe('utmZoneFor', () => {
   it.each([
     [-180, 0, 1],
     [-177, 0, 1],
@@ -27,7 +27,7 @@ describe('zoneFor', () => {
     [20, 84, 33],
     [20, -80, 34],
   ])('lon %d lat %d -> %d', (lon, lat, zone) => {
-    expect(zoneFor(lon, lat)).toBe(zone);
+    expect(utmZoneFor(lon, lat)).toBe(zone);
   });
 
   it('rejects non-finite input and latitudes outside UTM', () => {
@@ -39,7 +39,7 @@ describe('zoneFor', () => {
       [10, -80.0001],
       [10, 89],
     ]) {
-      expect(() => zoneFor(lon!, lat!)).toThrow(RangeError);
+      expect(() => utmZoneFor(lon!, lat!)).toThrow(RangeError);
     }
   });
 });
@@ -49,14 +49,5 @@ describe('utmFor', () => {
     expect(utmFor(15, 52)).toEqual({ zone: 33, south: false });
     expect(utmFor(151.2, -33.9)).toEqual({ zone: 56, south: true });
     expect(utmFor(0, 0)).toEqual({ zone: 31, south: false });
-  });
-});
-
-describe('centralMeridian', () => {
-  it('computes and validates', () => {
-    expect(centralMeridian(1)).toBe(-177);
-    expect(centralMeridian(33)).toBe(15);
-    expect(centralMeridian(60)).toBe(177);
-    expect(() => centralMeridian(0)).toThrow(RangeError);
   });
 });
