@@ -6,7 +6,8 @@ import { positions, lineString, latLngs } from 'fast-proj/geojson';
 import { loadWasm } from 'fast-proj/wasm';
 ```
 
-ESM-only, `sideEffects: false`: unused converters are removed by tree-shaking. Node ≥ 20 and modern browsers. All
+ESM-only, `sideEffects: false`: unused converters are removed by tree-shaking. Node ≥ 20 and modern browsers;
+the `fast-proj/wasm` types need TypeScript ≥ 5.2 (`Disposable`). All
 angles are in degrees, all distances in metres.
 
 Factories reject unknown option keys (own enumerable keys, including ones set to `undefined`). Errors are `TypeError`
@@ -276,10 +277,16 @@ wasm.dispose(); // or: using wasm = await loadWasm();
 - **Re-entrancy.** Calling the same context from inside an array-like getter during a batch call throws.
 - **Accuracy contract.** Batch results match the JavaScript backend within 4e-9 m and 6e-14° (longitude differences
   scaled by cos(latitude)), not bit for bit. Coordinates above 2^25 m (about 33,554 km, such as Gauss–Krüger eastings
-  with a zone prefix) can differ by one ulp of the output, 7.5e-9 m. This holds for each converter on its own and
-  for a projection with a `geographic` system, except GCJ-02 longitude/latitude within 1e-11° of longitude 105°: at
-  the formula's √|x| cusp, one ulp of WGS84 longitude moves GCJ-02 latitude by up to 2e-13°, so differences there
-  stay within 1e-12° (0.1 µm).
+  with a zone prefix) can differ by one ulp of the output, 7.5e-9 m.
+- **Composed accuracy.** A projection with a `geographic` system holds the same bound, except where the geographic
+  system amplifies a one-ulp difference in the projection's WGS84 result. For GCJ-02 that is:
+  - WGS84 longitude within 1e-11° of 105°, the formula's √|x| cusp: one ulp there moves GCJ-02 latitude by about
+    2.2e-13°, so differences are up to 1e-12° below latitude 85° and grow toward the poles in `'transform'` mode
+    (about 5e-12° at 89.9°).
+  - In `'passthrough'` mode, WGS84 positions within one ulp of the China box edge: one backend may apply the offset and
+    the other pass the point through, a difference of up to the offset itself (several hundred metres).
+
+  Standalone `gcj02()` converters agree at the box edges; the jumps come only from the projection step in front.
 
 ## Domain and accuracy
 

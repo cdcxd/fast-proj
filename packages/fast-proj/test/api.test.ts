@@ -9,6 +9,9 @@ const close = (a: ArrayLike<number>, b: ArrayLike<number>, tol: number) => {
   for (let i = 0; i < a.length; i++) expect(Math.abs(a[i]! - b[i]!)).toBeLessThan(tol);
 };
 
+// v moved by k units in the last place.
+const ulp = (v: number, k: number) => v + k * 2 ** (Math.floor(Math.log2(Math.abs(v))) - 52);
+
 const overlaps = (a: unknown, b: unknown) =>
   a !== b && a instanceof Float64Array && b instanceof Float64Array && a.buffer === b.buffer;
 
@@ -258,6 +261,59 @@ describe('root rules', () => {
     close(c.lat, d.lat, 6e-14);
     for (let i = 0; i < 200; i++) {
       expect(Math.abs(c.lon[i]! - d.lon[i]!) * Math.cos((c.lat[i]! * Math.PI) / 180)).toBeLessThan(6e-14);
+    }
+  });
+
+  it('standalone GCJ-02 agrees across backends at the four China box edges', () => {
+    const [js, w] = backends;
+    const lon: number[] = [],
+      lat: number[] = [];
+    for (const k of [-2, -1, 0, 1, 2]) {
+      lon.push(ulp(72.004, k), ulp(137.8347, k), 110, 110);
+      lat.push(30, 30, ulp(0.8293, k), ulp(55.8271, k));
+    }
+    for (const dir of ['fromWgs84', 'toWgs84'] as const) {
+      const a = js!.gcj02()[dir](lon, lat);
+      const b = w!.gcj02()[dir](lon, lat);
+      for (let i = 0; i < lon.length; i++) {
+        // Same side of the edge: either both passed through or both within the kernel bound.
+        expect(Math.abs(a.lon[i]! - b.lon[i]!)).toBeLessThan(1e-13);
+        expect(Math.abs(a.lat[i]! - b.lat[i]!)).toBeLessThan(1e-13);
+      }
+    }
+  });
+
+  it("composed GCJ-02 at a box edge matches each backend's own two steps", () => {
+    // The projections' WGS84 latitudes straddle 55.8271 by one ulp, so only one backend applies the offset.
+    const [js, w] = backends;
+    const x = [2129071.436267239];
+    const y = [6506264.087319659];
+    for (const [b, g] of [
+      [js!, GCJ02],
+      [w!, w!.gcj02()],
+    ] as const) {
+      const wgs = b.utm({ zone: 48 }).toLonLat(x, y);
+      const ref = g.fromWgs84(wgs.lon, wgs.lat);
+      const r = b.utm({ zone: 48, geographic: g }).toLonLat(x, y);
+      expect([r.lon[0], r.lat[0]]).toEqual([ref.lon[0], ref.lat[0]]);
+    }
+  });
+
+  it("composed 'transform' GCJ-02 stays within 1e-12 degrees at the cusp below latitude 85", () => {
+    const [js, w] = backends;
+    const plain = js!.utm({ zone: 44 });
+    const x = [],
+      y = [];
+    for (let i = 0; i < 170; i++) {
+      const [px, py] = plain.fromLonLatPoint(105 + ((i % 9) - 4) * 2 ** -46, i / 2);
+      x.push(px);
+      y.push(py);
+    }
+    const a = js!.utm({ zone: 44, geographic: js!.gcj02({ outsideChina: 'transform' }) }).toLonLat(x, y);
+    const b = w!.utm({ zone: 44, geographic: w!.gcj02({ outsideChina: 'transform' }) }).toLonLat(x, y);
+    close(a.lat, b.lat, 1e-12);
+    for (let i = 0; i < x.length; i++) {
+      expect(Math.abs(a.lon[i]! - b.lon[i]!) * Math.cos((a.lat[i]! * Math.PI) / 180)).toBeLessThan(1e-12);
     }
   });
 
