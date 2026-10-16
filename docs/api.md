@@ -29,16 +29,16 @@ angles are in degrees, all distances in metres.
 
 Every converter is defined relative to one hub: geodetic longitude/latitude in degrees, longitude in [-180, 180].
 Projections (`Projection`: `utm`, `tmerc`) convert projected x/y ↔ hub longitude/latitude with `toLonLat` /
-`fromLonLat`. Datums (`Datum`: `gcj02`) convert their own
-longitude/latitude ↔ WGS84 with `toWgs84` / `fromWgs84`. Converting between two non-hub systems is two calls on the
-same buffer; see [Chaining](#chaining).
+`fromLonLat`. Datums (`Datum`: `gcj02`) convert their own longitude/latitude ↔ WGS84 with `toWgs84` / `fromWgs84`.
+Converting between two non-hub systems is two calls on the same buffer; see [Chaining](#chaining).
 
 An ellipsoid is not a datum: a projection on another ellipsoid (e.g. GRS80 for CGCS2000 or ETRS89) treats its
 longitude/latitude as WGS84. For those datums the difference from WGS84 is below a metre and usually ignored.
 
 ## `utm(options)`
 
-Creates a converter for one UTM zone: `tmerc` with scale factor 0.9996, false easting 500 km and the zone's central meridian.
+Creates a converter for one UTM zone: `tmerc` with scale factor 0.9996, false easting 500 km and the zone's central
+meridian.
 Series coefficients are computed once here; keep the converter and reuse it.
 
 ```ts

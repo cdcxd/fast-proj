@@ -216,7 +216,7 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
 ## Breaking-change checklist before 0.1.0
 
 1. Single package `fast-proj` with the entries above, nothing more.
-2. `Projection` / `GeographicTransform` / `TransverseMercator` / `Utm` types; `utm()` built on `tmerc()`.
+2. `Projection` / `Datum` / `TransverseMercator` / `Utm` types; `utm()` built on `tmerc()`.
 3. GeoJSON helpers take lon/lat buffers.
 4. Every converter is a factory.
 5. `loadWasm` with `source`, context, `dispose`; no wasm in the root.

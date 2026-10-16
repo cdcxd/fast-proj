@@ -47,7 +47,7 @@ export interface WasmContext extends WasmDisposable {
   gcj02(options?: Gcj02Options): Datum & WasmDisposable;
 }
 
-// lon0, k0, falseEasting, falseNorthing, a, f
+// centralMeridian, scaleFactor, falseEasting, falseNorthing, a, f
 type TmParams = [number, number, number, number, number, number];
 
 interface Exports {

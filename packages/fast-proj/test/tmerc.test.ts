@@ -33,7 +33,7 @@ describe.each(backends)('$name backend', ({ tmerc, utm }) => {
 
   it.each([
     [
-      'CGCS2000 3° Gauss-Krüger, lon0 117',
+      'CGCS2000 3° Gauss-Krüger, CM 117E',
       { centralMeridian: 117, scaleFactor: 1, falseEasting: 500000 },
       '+lon_0=117 +k=1 +x_0=500000',
     ],

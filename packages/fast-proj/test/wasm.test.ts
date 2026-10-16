@@ -108,6 +108,22 @@ describe('loadWasm', () => {
   it('ships the wasm gcj02 kernel', async () => {
     const names = WebAssembly.Module.exports(await WebAssembly.compile(readFileSync(url))).map((e) => e.name);
     expect(names).toEqual(expect.arrayContaining(['gcj_forward_batch', 'gcj_inverse_batch']));
+    expect(names).not.toContain('forward_batch');
+    expect(names).not.toContain('inverse_batch');
+  });
+
+  it('falls back to the JavaScript backend for a non-SIMD module', async () => {
+    const module = await WebAssembly.compile(readFileSync(url));
+    const instantiate = WebAssembly.instantiate;
+    const spy = vi.spyOn(WebAssembly, 'instantiate').mockImplementation((async (m: WebAssembly.Module) => {
+      const { exports } = await instantiate(m, {});
+      return { exports: { ...exports, simd_enabled: () => 0 } };
+    }) as typeof WebAssembly.instantiate);
+    const ctx = await loadWasm({ source: module }).finally(() => spy.mockRestore());
+    expect(ctx.backend).toBe('js');
+    expect(ctx.utm({ zone: 33 }).fromLonLatPoint(15, 0)[0]).toBeCloseTo(500000, 6);
+    ctx.dispose();
+    expect(() => ctx.utm({ zone: 33 })).toThrow(/dispose/);
   });
 
   it('runs the JavaScript gcj02 kernel for modules without the wasm one', async () => {
