@@ -455,7 +455,7 @@ mod tests {
         let f = gcj_max_error(&gcj_fixture("fromWgs84"), sgcj::forward);
         let i = gcj_max_error(&gcj_fixture("toWgs84"), sgcj::inverse);
         assert!(f < 2e-14, "forward {f:e}");
-        assert!(i < 2e-11, "inverse {i:e}");
+        assert!(i < 3e-12, "inverse {i:e}");
     }
 
     #[test]

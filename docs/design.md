@@ -268,7 +268,7 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
   identities; the inverse takes two Newton steps (3e-12°), up to six within 1e-4° of longitude 105°. The Jacobian comes
   from the offset's multiple-angle values; the √|x| term's derivative is singular at 105°, so it is dropped within 1e-10°
   of it, and on the first step, which starts at the input and may be across 105° from the solution, within 1e-4°. Since
-  0.3.1 this replaces four fixed-point steps (six near 105°, 2e-11°): 25–46% faster in both backends and 4–25× more
+  0.3.1 this replaces four fixed-point steps (six near 105°, 2e-11°): 25–46% faster in both backends and 3–20× more
   accurate (fixture 8.7e-12° -> 2.5e-12°, round trip 7e-12° -> 4e-13°).
   `'transform'` mode iterates until converged instead and gives `NaN` where it doesn't. That per-point step count
   doesn't fit the fixed-step f64x2 kernel, so it stays JavaScript; the kernel masks the extra steps near 105° per lane,

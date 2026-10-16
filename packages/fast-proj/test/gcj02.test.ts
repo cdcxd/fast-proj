@@ -60,7 +60,7 @@ describe('gcj02', () => {
     let gcj = 0;
     for (let e = -12; e <= -1; e += 0.25) {
       for (const side of [-1, 1]) {
-        for (let lat = 1; lat <= 55.8; lat += 2.7) {
+        for (const lat of [1, 12.3, 22.5, 35, 47.1, 54.4, 55.8255]) {
           const lon = 105 + side * 10 ** e;
           const [l, p] = g.toWgs84Point(...g.fromWgs84Point(lon, lat));
           wgs = Math.max(wgs, Math.abs(l - lon) * cosd(lat), Math.abs(p - lat));

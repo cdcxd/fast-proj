@@ -170,7 +170,10 @@ pub(crate) mod sgcj {
             let dy = (ja * gy - jc * gx) * idet;
             wx += dx;
             wy += dy;
-            if k >= STEPS && (k == CUSP_STEPS || (wx - 105.0).abs() >= CUSP) {
+            // Negated, as in the TS kernel, so a NaN iterate stops too.
+            #[allow(clippy::neg_cmp_op_on_partial_ord)]
+            let stop = k >= STEPS && (k == CUSP_STEPS || !((wx - 105.0).abs() < CUSP));
+            if stop {
                 break;
             }
             let d = dx * KX;
