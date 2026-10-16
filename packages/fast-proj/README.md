@@ -71,9 +71,9 @@ UTM ↔ GCJ-02: `utm({ zone: 50, geographic: GCJ02 })`, against proj4 then gcoor
 
 | Operation    | Implementation            | Node 24         | Bun 1.4         | Chromium 156    |
 | ------------ | ------------------------- | --------------- | --------------- | --------------- |
-| UTM → GCJ-02 | proj4 + gcoord            | 16.26 ms        | 11.17 ms        | 12.33 ms        |
-|              | `toLonLat`, JavaScript    | 1.26 ms (12.9×) | 1.24 ms (9.0×)  | 2.25 ms (5.5×)  |
-|              | `toLonLat`, WebAssembly   | 0.94 ms (17.3×) | 0.92 ms (12.1×) | 0.93 ms (13.2×) |
+| UTM → GCJ-02 | proj4 + gcoord            | 16.19 ms        | 11.10 ms        | 12.29 ms        |
+|              | `toLonLat`, JavaScript    | 1.11 ms (14.6×) | 1.12 ms (9.9×)  | 1.65 ms (7.4×)  |
+|              | `toLonLat`, WebAssembly   | 0.93 ms (17.3×) | 0.92 ms (12.1×) | 0.95 ms (13.0×) |
 | GCJ-02 → UTM | proj4 + gcoord            | 20.59 ms        | 17.10 ms        | 18.11 ms        |
 |              | `fromLonLat`, JavaScript  | 1.92 ms (10.7×) | 1.84 ms (9.3×)  | 2.76 ms (6.6×)  |
 |              | `fromLonLat`, WebAssembly | 1.26 ms (16.4×) | 1.44 ms (11.9×) | 1.25 ms (14.5×) |
