@@ -10,7 +10,7 @@ use crate::gcj::*;
 use crate::kernel::reduce_lon;
 use core::arch::wasm32::{
     f64x2, f64x2_abs, f64x2_add, f64x2_div, f64x2_extract_lane, f64x2_ge, f64x2_gt, f64x2_le, f64x2_lt, f64x2_mul,
-    f64x2_splat, f64x2_sqrt, f64x2_sub, v128, v128_and, v128_any_true, v128_bitselect, v128_or,
+    f64x2_splat, f64x2_sqrt, f64x2_sub, v128, v128_and, v128_andnot, v128_any_true, v128_bitselect, v128_or,
 };
 
 use crate::math::{C, S};
@@ -270,9 +270,13 @@ fn rotate(w: W) -> W {
     }
 }
 
+/// Lanes within CUSP of 105, unless outside DERIV_CUT with the last step below CUSP_TOL.
 #[inline]
-fn near_cusp(w: &W) -> v128 {
-    f64x2_lt(f64x2_abs(sub(w.wx, spl(105.0))), spl(CUSP))
+fn unsettled(w: &W) -> v128 {
+    let x = f64x2_abs(sub(w.wx, spl(105.0)));
+    let tol = spl(CUSP_TOL);
+    let small = v128_and(f64x2_lt(f64x2_abs(w.dx), tol), f64x2_lt(f64x2_abs(w.dy), tol));
+    v128_andnot(f64x2_lt(x, spl(CUSP)), v128_and(f64x2_gt(x, spl(DERIV_CUT)), small))
 }
 
 pub fn inverse_batch(lon: &[f64], lat: &[f64], olon: &mut [f64], olat: &mut [f64]) {
@@ -292,7 +296,7 @@ pub fn inverse_batch(lon: &[f64], lat: &[f64], olon: &mut [f64], olat: &mut [f64
         for _ in 1..STEPS {
             w = step(l, p, rotate(w), DERIV_CUT);
         }
-        let mut active = v128_and(inbox, near_cusp(&w));
+        let mut active = v128_and(inbox, unsettled(&w));
         for _ in STEPS..CUSP_STEPS {
             if !v128_any_true(active) {
                 break;
@@ -304,7 +308,7 @@ pub fn inverse_batch(lon: &[f64], lat: &[f64], olon: &mut [f64], olat: &mut [f64
                 wy: v128_bitselect(n.wy, w.wy, active),
                 ..n
             };
-            active = v128_and(active, near_cusp(&w));
+            active = v128_and(active, unsettled(&w));
         }
         store_pair(v128_bitselect(w.wx, l, inbox), olon, i);
         store_pair(v128_bitselect(w.wy, p, inbox), olat, i);

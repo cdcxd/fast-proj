@@ -29,10 +29,13 @@ const KLON = 180 / (A * Math.PI);
 const STEPS = 2;
 // The sqrt(|x|) term's derivative is singular at longitude 105. The Newton steps drop it within DERIV_CUT of 105, or
 // within CUSP on the first step, which starts at the input and may be across 105 from the solution; they converge
-// more slowly near 105, so take up to CUSP_STEPS within CUSP of it.
+// more slowly near 105, so take up to CUSP_STEPS within CUSP of it. Outside DERIV_CUT they stop once a step is below
+// CUSP_TOL: the next would be under a seventh of it, so the backends can stop a step apart and still agree within an
+// ulp. Within DERIV_CUT the steps don't shrink steadily (the next can be 3x the last), so all CUSP_STEPS run.
 const CUSP = 1e-4;
 const DERIV_CUT = 1e-10;
 const CUSP_STEPS = 6;
+const CUSP_TOL = 1e-13;
 // Derivatives of the offset's sine terms, per degree: (term weight) * (multiple) * (radians per degree of the angle).
 const JS360 = (40 / 3) * 360 * KX;
 const JS120 = (40 / 3) * 120 * KX;
@@ -467,7 +470,13 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
       const dy = (ja * gy - jc * gx) * idet;
       wx += dx;
       wy += dy;
-      if (k >= STEPS && (k === CUSP_STEPS || !(Math.abs(wx - 105) < CUSP))) break;
+      if (
+        k >= STEPS &&
+        (k === CUSP_STEPS ||
+          !(Math.abs(wx - 105) < CUSP) ||
+          (Math.abs(wx - 105) > DERIV_CUT && Math.abs(dx) < CUSP_TOL && Math.abs(dy) < CUSP_TOL))
+      )
+        break;
       // Rotate the sines by the step instead of recomputing them; inside the China box a step is below 6e-4 rad.
       const d = dx * KX;
       const e = dy * KY;
@@ -616,7 +625,13 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
           const dy = (ja * gy - jc * gx) * idet;
           wx += dx;
           wy += dy;
-          if (k >= STEPS && (k === CUSP_STEPS || !(Math.abs(wx - 105) < CUSP))) break;
+          if (
+            k >= STEPS &&
+            (k === CUSP_STEPS ||
+              !(Math.abs(wx - 105) < CUSP) ||
+              (Math.abs(wx - 105) > DERIV_CUT && Math.abs(dx) < CUSP_TOL && Math.abs(dy) < CUSP_TOL))
+          )
+            break;
           const d = dx * KX;
           const e = dy * KY;
           const d2 = d * d;
