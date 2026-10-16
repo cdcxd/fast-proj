@@ -1,11 +1,12 @@
 // Usage: bun scripts/inline.ts [--check]
 //
 // Expands `// @inline name(args); key = value; ... // @end` regions from the `// @kernel` function `name` in the same
-// file. Engines optimize a loop with the kernel written out in it much better than one calling a kernel that returns
-// through closure variables (Node and Chromium up to 2×), so the batch loops hold copies and the point methods call
-// the kernel. Options rename identifiers in the copy (`rx = out[i]`); `return = ...` replaces a bare `return;`
-// (default `continue;`); `scope = open` leaves out the enclosing block, so code after the region can read the copy's
-// locals. A kernel's own regions are expanded before it is copied. --check fails if a region is stale.
+// file, or in a file before it in FILES (whose closure must then bind the constants the kernel reads). Engines
+// optimize a loop with the kernel written out in it much better than one calling a kernel that returns through
+// closure variables (Node and Chromium up to 2×), so the batch loops hold copies and the point methods call the
+// kernel. Options rename identifiers in the copy, parameters included (`rx = out[i]`); `return = ...` replaces a bare
+// `return;` (default `continue;`); `scope = open` leaves out the enclosing block, so code after the region can read
+// the copy's locals. A kernel's own regions are expanded before it is copied. --check fails if a region is stale.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -95,18 +96,19 @@ function expand(k: Kernel, name: string, args: string[], opts: [string, string][
   const open = opts.some(([key, v]) => key === 'scope' && v === 'open');
   const pad = open ? '' : '  ';
   const out = open ? [] : ['{'];
+  const exit = opts.find(([key]) => key === 'return')?.[1] ?? 'continue;';
+  const renames = opts.filter(([key]) => key !== 'return' && key !== 'scope');
   k.params.forEach((p, i) => {
     const a = args[i]!;
-    if (a === p) return;
+    const bound = renames.find(([from]) => from === p)?.[1] ?? p;
+    if (a === bound) return;
     for (const id of a.match(/\b[A-Za-z_]\w*\b/g) ?? []) {
       if (declared.has(id) || k.params.some((q, j) => q === id && args[j] !== q))
         throw new Error(`@inline ${name}: argument ${a} uses ${id}, a name the kernel binds`);
     }
     const mutated = new RegExp(`\\b${p}\\s*(?:[-+*/%]?=)(?!=)`).test(text);
-    out.push(`${pad}${mutated ? 'let' : 'const'} ${p} = ${a};`);
+    out.push(`${pad}${mutated ? 'let' : 'const'} ${bound} = ${a};`);
   });
-  const exit = opts.find(([key]) => key === 'return')?.[1] ?? 'continue;';
-  const renames = opts.filter(([key]) => key !== 'return' && key !== 'scope');
   // Blocks opened by loops and functions: a `return;` inside one can't become `continue;`.
   const nested: boolean[] = [];
   for (let line of body) {
@@ -128,12 +130,14 @@ function expand(k: Kernel, name: string, args: string[], opts: [string, string][
   return out;
 }
 
-function generate(text: string): string {
+function generate(text: string, earlier: Map<string, Kernel>): string {
   let lines = text.split('\n');
   checkMarkers(lines);
   // A copy of a kernel that itself has regions may be stale until those are expanded: repeat until nothing changes.
   for (let pass = 0; pass < 10; pass++) {
-    const ks = kernels(lines);
+    const own = kernels(lines);
+    for (const name of own.keys()) if (earlier.has(name)) throw new Error(`@kernel ${name} is defined in two files`);
+    const ks = new Map([...earlier, ...own]);
     const next = [...lines];
     const rs = regions(lines);
     // Last first, so splicing doesn't move the regions not yet done.
@@ -153,10 +157,12 @@ function generate(text: string): string {
 const check = process.argv.includes('--check');
 const squash = (s: string) => s.replace(/\s+/g, '');
 const stale: string[] = [];
+const earlier = new Map<string, Kernel>();
 for (const f of FILES) {
   const path = join(src, f);
   const text = readFileSync(path, 'utf8');
-  const out = generate(text);
+  const out = generate(text, earlier);
+  for (const [name, k] of kernels(out.split('\n'))) earlier.set(name, k);
   // oxfmt may rewrap the copies, so compare ignoring whitespace.
   if (squash(out) === squash(text)) continue;
   if (check) stale.push(f);
