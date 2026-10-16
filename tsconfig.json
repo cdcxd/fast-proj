@@ -10,5 +10,6 @@
     "types": ["node"],
     "lib": ["es2022", "esnext.disposable", "dom"]
   },
-  "include": ["packages/*/src", "packages/*/test"]
+  "include": ["packages/*/src", "packages/*/test"],
+  "exclude": ["packages/fast-proj/test/smoke.mts"]
 }
