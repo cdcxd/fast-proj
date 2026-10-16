@@ -100,7 +100,11 @@ function isUrl(source: unknown): source is string | URL {
   return typeof source === 'string' || Object.prototype.toString.call(source) === '[object URL]';
 }
 
-function isModule(source: WasmSource): source is WebAssembly.Module {
+function isArrayBuffer(source: unknown): source is ArrayBuffer {
+  return Object.prototype.toString.call(source) === '[object ArrayBuffer]';
+}
+
+function isModule(source: unknown): source is WebAssembly.Module {
   return Object.prototype.toString.call(source) === '[object WebAssembly.Module]';
 }
 
@@ -123,7 +127,7 @@ async function compile(source: Loadable): Promise<WebAssembly.Module> {
     }
   }
   const res = await response;
-  if (!res.ok) throw new Error(`failed to fetch ${url}: ${res.status} ${res.statusText}`);
+  if (!res.ok) throw new Error(`fast-proj: failed to fetch ${url}: ${res.status} ${res.statusText}`);
   return WebAssembly.compile(await res.arrayBuffer());
 }
 
@@ -183,12 +187,16 @@ function jsContext(): WasmContext {
  */
 export async function loadWasm(options: LoadWasmOptions = {}): Promise<WasmContext> {
   checkOptions(options, 'loadWasm', ['source']);
+  const { source: given } = options;
+  if (given !== undefined && !isUrl(given) && !isModule(given) && !ArrayBuffer.isView(given) && !isArrayBuffer(given)) {
+    throw new TypeError('fast-proj: source must be a URL, string, ArrayBuffer, ArrayBufferView or WebAssembly.Module');
+  }
   if (typeof WebAssembly === 'undefined') return jsContext();
   // A scalar wasm build measured no faster than the JavaScript kernel, so engines without SIMD use that.
   const simd = WebAssembly.validate(SIMD_PROBE);
-  if (options.source === undefined && !simd) return jsContext();
+  if (given === undefined && !simd) return jsContext();
   // A literal URL expression, so bundlers such as Vite and webpack copy the asset.
-  const source = options.source ?? new URL('./fast-proj.wasm', import.meta.url);
+  const source = given ?? new URL('./fast-proj.wasm', import.meta.url);
   let module = source as WebAssembly.Module;
   let evict: (() => void) | undefined;
   if (!isModule(source)) {
@@ -396,12 +404,12 @@ function wasmContext(exports: Exports): WasmContext {
     tmerc: (o) => {
       open();
       const [p, g] = parseTmerc(o);
-      return withGeographic(buildTmerc(p), g);
+      return withGeographic(buildTmerc(p), g, live);
     },
     utm: (o) => {
       open();
       const [p, g] = parseUtm(o);
-      return withGeographic(buildTmerc(p), g);
+      return withGeographic(buildTmerc(p), g, live);
     },
     gcj02: (o) => {
       const ex = open();

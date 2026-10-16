@@ -9,8 +9,9 @@ import { loadWasm } from 'fast-proj/wasm';
 ESM-only, `sideEffects: false`: unused converters are removed by tree-shaking. Node ≥ 20 and modern browsers. All
 angles are in degrees, all distances in metres.
 
-Factories reject unknown option keys. Errors are `TypeError` for a wrong type (including unknown options) and
-`RangeError` for a value out of range; messages start with `fast-proj:`.
+Factories reject unknown option keys (own enumerable keys, including ones set to `undefined`). Errors are `TypeError`
+for a wrong type (including unknown options) and `RangeError` for a value out of range; using a disposed wasm context
+or re-entering one throws a plain `Error`. Messages start with `fast-proj:`.
 
 - [The hub: WGS84 longitude/latitude](#the-hub-wgs84-longitudelatitude)
 - [`utm(options)`](#utmoptions)
@@ -72,8 +73,8 @@ interface Utm extends TransverseMercator {
 }
 ```
 
-Throws `RangeError` if `zone` is not an integer in 1-60 or the ellipsoid is unsupported, and `TypeError` if `south` is
-given and is not a boolean.
+Throws `RangeError` if `zone` is not an integer in 1-60 or the ellipsoid is unsupported, and `TypeError` for a
+non-number `zone`, a non-boolean `south`, a non-object ellipsoid or a `geographic` without the six methods.
 
 `south` only selects the false northing; it does not check the input. With `south: false`, points south of the
 equator get negative northings; with `south: true`, points north of the equator get northings above 10 000 km.
@@ -105,6 +106,8 @@ interface TransverseMercator extends Projection {
 }
 ```
 
+Every projection also has `readonly geographic?: Geographic`, the system given as the `geographic` option.
+
 Throws `RangeError` for a non-finite option, `scaleFactor <= 0` or an unsupported ellipsoid. A latitude of origin other
 than 0 (`+lat_0`, e.g. the British National Grid) is not supported yet and throws `RangeError`.
 
@@ -125,7 +128,7 @@ interface Gcj02Options {
 
 - **Outside China.** With `'passthrough'`, points outside the box longitude 72.004–137.8347, latitude 0.8293–55.8271
   (the box gcoord uses) are returned unchanged. With `'transform'`, the offset is applied everywhere; see below for
-  the poles and the antimeridian. Throws `RangeError` for any other value.
+  the poles and the antimeridian. Throws `RangeError` for any other string and `TypeError` for a non-string.
 - **Accuracy.** `fromWgs84` is within one ulp (1.6e-14°) of a 40-digit evaluation of the formula. The formula has no
   closed-form inverse; `toWgs84` takes four fixed-point steps, six within 1e-4° of longitude 105° (where the formula
   has a √|x| cusp), and is within 2e-11° (about 2 µm; longitude errors scaled by the cosine of latitude) of the exact
@@ -179,7 +182,7 @@ function utmZoneFor(lon: number, lat: number): number;
 
 `utmZoneFor` returns the standard UTM zone, including the Norway (32V) and Svalbard (31X, 33X, 35X, 37X) exceptions.
 Longitude is wrapped, so 190 gives zone 2. `utmFor` adds `south: lat < 0`, and its result can be passed straight to
-`utm`. Both throw `TypeError` for non-number input, and `RangeError` for non-finite input and for latitudes outside [-80, 84] (the polar regions use UPS,
+`utm`; it stays exactly `{ zone, south }`. Both throw `TypeError` for non-number input, and `RangeError` for non-finite input and for latitudes outside [-80, 84] (the polar regions use UPS,
 which is not implemented).
 
 A zone's central meridian is `utm({ zone }).centralMeridian`.
@@ -319,7 +322,7 @@ intermediate values.
 | `zoneFor(lon, lat)`                                      | `utmZoneFor(lon, lat)`                                                             |
 | `centralMeridian(zone)`                                  | `utm({ zone }).centralMeridian` or `zone * 6 - 183`                                |
 | `MAX_FLATTENING`                                         | `0.01`                                                                             |
-| `positionsFromArrays(lon, lat)`                          | `positions(lon, lat)`                                                              |
+| `positionsFromArrays(lon, lat)`                          | `positions(lon, lat)`; `lineString` and `latLngs` take `(lon, lat)` too            |
 | `wasm.utm(...).dispose()` (converters)                   | dispose the context; converters have no `dispose`                                  |
 | `WasmDisposable` type                                    | removed; `WasmContext` extends `Disposable`                                        |
 | `backend === 'wasm-simd'`                                | `'wasm'`; a non-SIMD custom build gives `'js'`                                     |

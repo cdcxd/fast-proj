@@ -161,30 +161,36 @@ GCJ-02's reverse direction has no closed form; `toWgs84` iterates and documents 
 
 ## Chaining
 
-Two calls on the same buffer, no helper in 0.1:
+Two calls on the same buffer. For a projection and a geographic system, the `geographic` option does the same two
+passes:
 
 ```ts
-import { utm, gcj02 } from 'fast-proj';
+import { GCJ02, utm } from 'fast-proj';
 import { lineString } from 'fast-proj/geojson';
 
-const u = utm({ zone: 50 });
-const g = gcj02();
-u.toLonLatInterleaved(buf, buf); // UTM -> WGS84, in place
-g.fromWgs84Interleaved(buf, buf); // WGS84 -> GCJ-02, in place
+utm({ zone: 50, geographic: GCJ02 }).toLonLatInterleaved(buf, buf); // UTM -> GCJ-02, in place
 map.getSource('track').setData(lineString(buf));
 ```
 
 A fused UTM <-> GCJ-02 loop can reuse the tmerc step's sines and cosines in the GCJ-02 step (four fewer trigonometric
 calls per point); a prototype measured 9-25% faster UTM -> GCJ-02 and 0-11% faster GCJ-02 -> UTM (10k points). Not
-provided yet. A `pipe()` helper can be added later without a break.
+provided yet (#13); it would sit behind the `geographic` option. A `pipe()` helper can be added later without a break.
+
+Rules that keep later additions non-breaking:
+
+- `Geographic` and `Projection` only gain optional members: third parties implement them, and `geographic` is checked
+  by its six methods. Fused kernels detect the built-in GCJ-02 objects by identity, not by a marker property.
+- Uppercase constants name one kind each: `WGS84` and `GRS80` are ellipsoids, `GCJ02` (later `BD09`) are geographic
+  systems. A geodetic datum gets its own names (e.g. `datum: OSGB36`), never a bare ellipsoid name.
+- `utmFor` returns exactly `{ zone, south }`, so `utm(utmFor(lon, lat))` keeps working under strict option checks.
 
 ## GeoJSON
 
 Formatting only. Input is a lon/lat buffer, the output of any converter or chain; no converter argument.
 
 ```ts
+// each also takes (lon, lat) arrays
 export function positions(lonlat: ArrayLike<number>): [lon: number, lat: number][];
-export function positionsFromArrays(lon: ArrayLike<number>, lat: ArrayLike<number>): [lon: number, lat: number][];
 export function lineString(lonlat: ArrayLike<number>): { type: 'LineString'; coordinates: [number, number][] };
 export function latLngs(lonlat: ArrayLike<number>): [lat: number, lng: number][];
 ```

@@ -14,7 +14,7 @@ export const GRS80: Ellipsoid = Object.freeze({ a: 6378137, f: 1 / 298.257222101
  */
 const MAX_FLATTENING = 0.01;
 
-/** Validates an ellipsoid and returns it if frozen, else a frozen copy. */
+/** Validates an ellipsoid and returns it if frozen with plain `a` and `f`, else a frozen copy of the values read. */
 export function checkEllipsoid(e: unknown): Ellipsoid {
   if (typeof e !== 'object' || e === null) {
     throw new TypeError(`fast-proj: ellipsoid must be an object, got ${e === null ? 'null' : typeof e}`);
@@ -27,7 +27,8 @@ export function checkEllipsoid(e: unknown): Ellipsoid {
   if (!(f >= 0 && f < MAX_FLATTENING)) {
     throw new RangeError(`fast-proj: ellipsoid.f must satisfy 0 <= f < ${MAX_FLATTENING}, got ${f}`);
   }
-  return Object.isFrozen(e) ? (e as Ellipsoid) : Object.freeze({ a, f });
+  const plain = (k: string) => Object.getOwnPropertyDescriptor(e, k)?.value !== undefined;
+  return Object.isFrozen(e) && plain('a') && plain('f') ? (e as Ellipsoid) : Object.freeze({ a, f });
 }
 
 export type Series6 = readonly [number, number, number, number, number, number];

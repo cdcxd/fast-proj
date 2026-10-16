@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GCJ02, GRS80, WGS84, gcj02, utmFor, utmZoneFor } from '../src/index.js';
+import { GCJ02, GRS80, WGS84, gcj02, utm as jsUtm, utmFor, utmZoneFor } from '../src/index.js';
 import { loadWasm } from '../src/wasm.js';
 import { backends } from './backends.js';
 
@@ -54,6 +54,30 @@ describe.each(backends)('$name backend geographic option', ({ utm, tmerc, gcj02:
     close(out.y, y, 1e-6);
   });
 
+  it('converts only the first n elements of longer output buffers', () => {
+    const s = 1234.5;
+    const fill = (n: number) => new Float64Array(n).fill(s);
+    const r = p.toLonLat(x, y);
+    const lon = fill(x.length + 1);
+    const lat = fill(x.length + 2);
+    p.toLonLat(x, y, lon, lat);
+    expect(Array.from(lon.subarray(0, x.length))).toEqual(Array.from(r.lon));
+    expect([lon[x.length], lat[x.length], lat[x.length + 1]]).toEqual([s, s, s]);
+    const ox = fill(x.length + 1);
+    const oy = fill(x.length + 1);
+    p.fromLonLat(r.lon, r.lat, ox, oy);
+    close(ox.subarray(0, x.length), x, 1e-6);
+    expect([ox[x.length], oy[x.length]]).toEqual([s, s]);
+    const xy = x.flatMap((v, i) => [v, y[i]!]);
+    const out = fill(xy.length + 3);
+    p.toLonLatInterleaved(xy, out);
+    expect(out[xy.length]).toBe(s);
+    const back = fill(xy.length + 3);
+    p.fromLonLatInterleaved(out.subarray(0, xy.length), back);
+    close(back.subarray(0, xy.length), xy, 1e-6);
+    expect([back[xy.length], back[xy.length + 2]]).toEqual([s, s]);
+  });
+
   it('checks buffers and the geographic value', () => {
     expect(() => p.fromLonLat([1, 2], [1])).toThrow(RangeError);
     expect(() => p.fromLonLat([1, 2], [1, 2], new Float64Array(1))).toThrow(RangeError);
@@ -91,7 +115,7 @@ describe.each(backends)('$name backend option and error rules', ({ utm, tmerc, g
 
   it('freezes converters and keeps a frozen ellipsoid', () => {
     const e = { a: 6378137, f: 1 / 298.257223563 };
-    const u = utm({ zone: 33, ellipsoid: e });
+    const u = jsUtm({ zone: 33, ellipsoid: e });
     expect(Object.isFrozen(u)).toBe(true);
     expect(Object.isFrozen(make())).toBe(true);
     expect(Object.isFrozen(u.ellipsoid)).toBe(true);
@@ -116,6 +140,33 @@ describe('root rules', () => {
     expect(() => utmZoneFor('1' as never, 0)).toThrow(TypeError);
     expect(() => utmFor(0, NaN)).toThrow(RangeError);
     expect(() => utmZoneFor(0, 85)).toThrow(/^fast-proj: /);
+  });
+
+  it('a disposed wasm context throws before a JavaScript geographic step writes', async () => {
+    const ctx = await loadWasm({ source: new URL('../dist/fast-proj.wasm', import.meta.url) });
+    const u = ctx.utm({ zone: 50, geographic: GCJ02 });
+    ctx.dispose();
+    const lon = Float64Array.of(116.391);
+    const lat = Float64Array.of(39.907);
+    expect(() => u.fromLonLat(lon, lat, lon, lat)).toThrow(/dispose/);
+    expect([lon[0], lat[0]]).toEqual([116.391, 39.907]);
+  });
+
+  it('copies a frozen ellipsoid with accessors', () => {
+    let reads = 0;
+    const e = Object.freeze({
+      get a() {
+        return ++reads === 1 ? 6378137 : 1;
+      },
+      f: 0,
+    });
+    const u = jsUtm({ zone: 33, ellipsoid: e });
+    expect(u.ellipsoid).not.toBe(e);
+    expect(u.ellipsoid.a).toBe(6378137);
+  });
+
+  it('loadWasm rejects bad sources', async () => {
+    await expect(loadWasm({ source: 123 as never })).rejects.toThrow(/^fast-proj: source must be/);
   });
 
   it('loadWasm rejects unknown options', async () => {

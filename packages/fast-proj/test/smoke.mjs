@@ -1,7 +1,7 @@
 // Imports the built package through its `exports` (package self-reference). Run after `bun run build`.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { GRS80, WGS84, gcj02, tmerc, utm, utmFor, utmZoneFor } from 'fast-proj';
+import { GCJ02, GRS80, WGS84, gcj02, tmerc, utm, utmFor, utmZoneFor } from 'fast-proj';
 import { latLngs, lineString } from 'fast-proj/geojson';
 import { loadWasm } from 'fast-proj/wasm';
 
@@ -23,6 +23,10 @@ assert.equal(lineString(buf).type, 'LineString');
 assert.ok(Math.abs(latLngs(buf)[0][1] - 15) < 1e-12);
 const [gl, gp] = gcj02().toWgs84Point(...gcj02().fromWgs84Point(116.391, 39.907));
 assert.ok(Math.abs(gl - 116.391) < 1e-10 && Math.abs(gp - 39.907) < 1e-10);
+const amap = utm({ zone: 50, geographic: GCJ02 });
+const [al, ap] = amap.toLonLatPoint(...utm({ zone: 50 }).fromLonLatPoint(116.391, 39.907));
+const [el, ep] = GCJ02.fromWgs84Point(116.391, 39.907);
+assert.ok(Math.abs(al - el) < 1e-12 && Math.abs(ap - ep) < 1e-12);
 
 const ctx = await loadWasm();
 assert.match(ctx.backend, /^wasm/);
