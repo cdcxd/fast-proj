@@ -31,10 +31,10 @@ export interface Projection {
 }
 
 /**
- * Another geographic system's longitude/latitude <-> WGS84 longitude/latitude, both in degrees. Same buffer rules as
+ * Longitude/latitude on another datum <-> WGS84 longitude/latitude, both in degrees. Same buffer rules as
  * {@link Projection}.
  */
-export interface GeographicTransform {
+export interface Datum {
   /** This system's longitude/latitude arrays -> WGS84 longitude/latitude arrays. */
   toWgs84(
     lon: ArrayLike<number>,
@@ -59,10 +59,10 @@ export interface GeographicTransform {
 
 /** A transverse Mercator projection. */
 export interface TransverseMercator extends Projection {
-  /** Central meridian in degrees. */
-  readonly lon0: number;
-  /** Scale factor on the central meridian. */
-  readonly k0: number;
+  /** Degrees. */
+  readonly centralMeridian: number;
+  /** On the central meridian. */
+  readonly scaleFactor: number;
   /** Metres. */
   readonly falseEasting: number;
   /** Metres. */

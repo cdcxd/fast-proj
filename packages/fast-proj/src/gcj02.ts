@@ -7,7 +7,7 @@
  * converge to ~1e-11 degrees, and after the first step the two pairs are rotated by the step rather than recomputed.
  */
 import { checkEven, checkOut } from './checks.js';
-import type { GeographicTransform } from './types.js';
+import type { Datum } from './types.js';
 
 export interface Gcj02Options {
   /**
@@ -45,7 +45,7 @@ function reduce(lon: number): number {
   return lon;
 }
 
-export function gcj02({ outsideChina = 'passthrough' }: Gcj02Options = {}): GeographicTransform {
+export function gcj02({ outsideChina = 'passthrough' }: Gcj02Options = {}): Datum {
   if (outsideChina !== 'passthrough' && outsideChina !== 'transform') {
     throw new RangeError(`outsideChina must be 'passthrough' or 'transform', got ${String(outsideChina)}`);
   }

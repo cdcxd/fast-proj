@@ -24,7 +24,7 @@ zone33.toLonLatInterleaved(xy, xy); // [x0, y0, x1, y1, ...] -> [lon0, lat0, ...
 const [x, y] = zone33.fromLonLatPoint(15, 52);
 map.getSource('track').setData(lineString(xy)); // MapLibre
 
-const gk = tmerc({ lon0: 117, falseEasting: 500000 }); // Gauss-Krüger, CM 117E
+const gk = tmerc({ centralMeridian: 117, falseEasting: 500000 }); // Gauss-Krüger, CM 117E
 gcj02().fromWgs84Interleaved(lonlat, lonlat); // WGS84 -> GCJ-02 for AMap/Tencent basemaps, in place
 
 import { loadWasm } from 'fast-proj/wasm'; // opt-in, ~31 kB

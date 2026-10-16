@@ -144,7 +144,7 @@ describe('dispose', () => {
   it('converter dispose is idempotent and only affects that converter', async () => {
     const ctx = await loadWasm({ source: url });
     const a = ctx.utm({ zone: 33 });
-    const b = ctx.tmerc({ lon0: 117 });
+    const b = ctx.tmerc({ centralMeridian: 117 });
     const out = a.toLonLat([500000], [0]);
     a.dispose();
     a[Symbol.dispose]();
@@ -162,7 +162,7 @@ describe('dispose', () => {
     ctx.dispose();
     expect(() => a.fromLonLatPoint(15, 0)).toThrow(/dispose/);
     expect(() => ctx.utm({ zone: 33 })).toThrow(/dispose/);
-    expect(() => ctx.tmerc({ lon0: 0 })).toThrow(/dispose/);
+    expect(() => ctx.tmerc({ centralMeridian: 0 })).toThrow(/dispose/);
   });
 
   it('gcj02 follows the disposal rules', async () => {
@@ -209,7 +209,7 @@ describe('dispose', () => {
     expect(() => a.toLonLatPoint(500000, 0)).toThrow(/dispose/);
     expect(() => g.fromWgs84Point(116, 39)).toThrow(/dispose/);
     expect(() => ctx.utm({ zone: 33 })).toThrow(/dispose/);
-    expect(() => ctx.tmerc({ lon0: 0 })).toThrow(/dispose/);
+    expect(() => ctx.tmerc({ centralMeridian: 0 })).toThrow(/dispose/);
     expect(() => ctx.gcj02()).toThrow(/dispose/);
   });
 
@@ -240,7 +240,7 @@ describe('dispose', () => {
     const ctx = await loadWasm({ source: url });
     expect(() => ctx.utm({ zone: 61 })).toThrow(RangeError);
     expect(() => ctx.utm({ zone: 33, south: 'yes' as unknown as boolean })).toThrow(TypeError);
-    expect(() => ctx.tmerc({ lon0: 0, k0: 0 })).toThrow(RangeError);
+    expect(() => ctx.tmerc({ centralMeridian: 0, scaleFactor: 0 })).toThrow(RangeError);
     const conv = ctx.utm({ zone: 33 });
     expect(() => conv.toLonLatInterleaved([1, 2, 3])).toThrow(RangeError);
     expect(() => conv.toLonLat([1, 2], [1, 2], new Float64Array(1))).toThrow(RangeError);

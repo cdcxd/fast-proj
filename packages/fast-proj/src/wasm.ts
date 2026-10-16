@@ -8,7 +8,7 @@
 import { checkEven, checkOut } from './checks.js';
 import { type Gcj02Options, gcj02 as jsGcj02 } from './gcj02.js';
 import { type TransverseMercatorOptions, tmerc as jsTmerc } from './tmerc.js';
-import type { GeographicTransform, TransverseMercator, Utm } from './types.js';
+import type { Datum, TransverseMercator, Utm } from './types.js';
 import { type UtmOptions, utm as jsUtm } from './utm.js';
 
 type Loadable = URL | string | ArrayBuffer | ArrayBufferView;
@@ -25,7 +25,7 @@ export interface LoadWasmOptions {
   source?: WasmSource;
 }
 
-export type WasmBackend = 'wasm-simd' | 'wasm' | 'js';
+export type WasmBackend = 'wasm-simd' | 'js';
 
 export interface WasmDisposable extends Disposable {
   /** Idempotent. Later calls on the disposed object throw. Output arrays already returned stay valid. */
@@ -34,8 +34,8 @@ export interface WasmDisposable extends Disposable {
 
 export interface WasmContext extends WasmDisposable {
   /**
-   * `js` when WebAssembly or wasm SIMD is unavailable (a `source` that doesn't compile without SIMD also falls back);
-   * converters then run the JavaScript backend. `wasm` only for a custom non-SIMD build passed as `source`.
+   * `js` when WebAssembly or wasm SIMD is unavailable (a `source` that doesn't compile without SIMD, or a custom
+   * non-SIMD build, also falls back); converters then run the JavaScript backend.
    */
   readonly backend: WasmBackend;
   tmerc(options: TransverseMercatorOptions): TransverseMercator & WasmDisposable;
@@ -44,7 +44,7 @@ export interface WasmContext extends WasmDisposable {
    * Batch methods run the wasm kernel in `'passthrough'` mode; `'transform'` mode, single points, and the `js`
    * backend run the JavaScript kernel.
    */
-  gcj02(options?: Gcj02Options): GeographicTransform & WasmDisposable;
+  gcj02(options?: Gcj02Options): Datum & WasmDisposable;
 }
 
 // lon0, k0, falseEasting, falseNorthing, a, f
@@ -211,14 +211,15 @@ export async function loadWasm(options: LoadWasmOptions = {}): Promise<WasmConte
     if (!(exports.memory instanceof WebAssembly.Memory) || REQUIRED.some((k) => typeof exports[k] !== 'function')) {
       throw new TypeError('fast-proj: not a fast-proj wasm module');
     }
-    return wasmContext(exports, exports.simd_enabled() ? 'wasm-simd' : 'wasm');
+    // A scalar build is no faster than the JavaScript kernel (see above).
+    return exports.simd_enabled() ? wasmContext(exports) : jsContext();
   } catch (err) {
     evict?.();
     throw err;
   }
 }
 
-function wasmContext(exports: Exports, backend: WasmBackend): WasmContext {
+function wasmContext(exports: Exports): WasmContext {
   let e: Exports | null = exports;
   let busy = false;
   // The heap is a fixed static arena that never grows, so these views stay valid for the instance lifetime.
@@ -292,7 +293,7 @@ function wasmContext(exports: Exports, backend: WasmBackend): WasmContext {
   }
 
   function buildTmerc<T extends TransverseMercator>(js: T): T & WasmDisposable {
-    const { lon0, k0, falseEasting, falseNorthing } = js;
+    const { centralMeridian: lon0, scaleFactor: k0, falseEasting, falseNorthing } = js;
     const { a, f } = js.ellipsoid;
     let closed = false;
     const fwd: Kernel = (ex, m) => ex.tm_forward_batch(pa, pb, pc, pd, m, lon0, k0, falseEasting, falseNorthing, a, f);
@@ -354,7 +355,7 @@ function wasmContext(exports: Exports, backend: WasmBackend): WasmContext {
   const gcjFwd: Kernel = (ex, m) => ex.gcj_forward_batch!(pa, pb, pc, pd, m);
   const gcjInv: Kernel = (ex, m) => ex.gcj_inverse_batch!(pa, pb, pc, pd, m);
 
-  function buildGcj(js: GeographicTransform): GeographicTransform & WasmDisposable {
+  function buildGcj(js: Datum): Datum & WasmDisposable {
     let closed = false;
 
     function live(): void {
@@ -414,7 +415,7 @@ function wasmContext(exports: Exports, backend: WasmBackend): WasmContext {
     wa = wb = wc = wd = null;
   };
   return {
-    backend,
+    backend: 'wasm-simd',
     tmerc: (o) => {
       if (!e) throw new Error('fast-proj: context used after dispose()');
       return buildTmerc(jsTmerc(o));

@@ -24,12 +24,6 @@ export function utmFor(lon: number, lat: number): { zone: number; south: boolean
   return { zone: zoneFor(lon, lat), south: lat < 0 };
 }
 
-/** Central meridian of a UTM zone in degrees. */
-export function centralMeridian(zone: number): number {
-  checkZone(zone);
-  return zone * 6 - 183;
-}
-
 export function checkZone(zone: number): void {
   if (!Number.isInteger(zone) || zone < 1 || zone > 60) {
     throw new RangeError(`UTM zone must be an integer in 1-60, got ${zone}`);

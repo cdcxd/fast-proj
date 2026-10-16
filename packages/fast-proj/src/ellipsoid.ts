@@ -9,7 +9,7 @@ export const WGS84: Ellipsoid = Object.freeze({ a: 6378137, f: 1 / 298.257223563
 export const GRS80: Ellipsoid = Object.freeze({ a: 6378137, f: 1 / 298.257222101 });
 
 /**
- * Largest supported flattening. The small-angle expansions in `utm.ts` are exact to double precision only for
+ * Largest supported flattening. The small-angle expansions in `tmerc.ts` are exact to double precision only for
  * terrestrial flattenings (Earth: 0.0034).
  */
 export const MAX_FLATTENING = 0.01;

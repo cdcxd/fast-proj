@@ -17,10 +17,10 @@ import { checkEven, checkNumber, checkOut } from './checks.js';
 import type { TransverseMercator } from './types.js';
 
 export interface TransverseMercatorOptions {
-  /** Central meridian in degrees, in [-180, 180]. */
-  lon0: number;
-  /** Scale factor on the central meridian. Default 1. */
-  k0?: number;
+  /** Degrees, in [-180, 180]. */
+  centralMeridian: number;
+  /** On the central meridian. Default 1. */
+  scaleFactor?: number;
   /** Metres. Default 0. */
   falseEasting?: number;
   /** Metres. Default 0. */
@@ -31,22 +31,27 @@ export interface TransverseMercatorOptions {
 
 const D2R = Math.PI / 180;
 const R2D = 180 / Math.PI;
+const RENAMED = [
+  ['lon0', 'centralMeridian'],
+  ['k0', 'scaleFactor'],
+] as const;
 
-export function tmerc({
-  lon0: lon0Deg,
-  k0 = 1,
-  falseEasting = 0,
-  falseNorthing = 0,
-  ellipsoid = WGS84,
-}: TransverseMercatorOptions): TransverseMercator {
-  checkNumber(lon0Deg, 'lon0');
-  if (!(Math.abs(lon0Deg) <= 180)) throw new RangeError(`lon0 must be in [-180, 180], got ${lon0Deg}`);
-  checkNumber(k0, 'k0');
-  if (!(k0 > 0)) throw new RangeError(`k0 must be positive, got ${k0}`);
+export function tmerc(options: TransverseMercatorOptions): TransverseMercator {
+  for (const [old, name] of RENAMED) {
+    if (old in options) throw new TypeError(`${old} was renamed to ${name} in 0.3.0`);
+  }
+  if ('latitudeOfOrigin' in options) throw new TypeError('latitudeOfOrigin is not supported yet');
+  const { centralMeridian, scaleFactor = 1, falseEasting = 0, falseNorthing = 0, ellipsoid = WGS84 } = options;
+  checkNumber(centralMeridian, 'centralMeridian');
+  if (!(Math.abs(centralMeridian) <= 180)) {
+    throw new RangeError(`centralMeridian must be in [-180, 180], got ${centralMeridian}`);
+  }
+  checkNumber(scaleFactor, 'scaleFactor');
+  if (!(scaleFactor > 0)) throw new RangeError(`scaleFactor must be positive, got ${scaleFactor}`);
   checkNumber(falseEasting, 'falseEasting');
   checkNumber(falseNorthing, 'falseNorthing');
   checkEllipsoid(ellipsoid);
-  return transverseMercator(lon0Deg, k0, falseEasting, falseNorthing, ellipsoid);
+  return transverseMercator(centralMeridian, scaleFactor, falseEasting, falseNorthing, ellipsoid);
 }
 
 /** Builds the converter from validated parameters. */
@@ -222,8 +227,8 @@ export function transverseMercator(
   }
 
   return {
-    lon0: lon0Deg,
-    k0,
+    centralMeridian: lon0Deg,
+    scaleFactor: k0,
     falseEasting: fe,
     falseNorthing: fn,
     ellipsoid,

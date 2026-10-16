@@ -12,7 +12,7 @@ export interface UtmOptions {
   ellipsoid?: Ellipsoid;
 }
 
-/** UTM: transverse Mercator with k0 = 0.9996, false easting 500 km and the zone's central meridian. */
+/** UTM: transverse Mercator with scale factor 0.9996, false easting 500 km and the zone's central meridian. */
 export function utm({ zone, south = false, ellipsoid = WGS84 }: UtmOptions): Utm {
   checkZone(zone);
   if (typeof south !== 'boolean') throw new TypeError(`south must be a boolean, got ${typeof south}`);

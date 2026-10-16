@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { centralMeridian, utmFor, zoneFor } from '../src/index.js';
+import { utmFor, zoneFor } from '../src/index.js';
 
 describe('zoneFor', () => {
   it.each([
@@ -49,14 +49,5 @@ describe('utmFor', () => {
     expect(utmFor(15, 52)).toEqual({ zone: 33, south: false });
     expect(utmFor(151.2, -33.9)).toEqual({ zone: 56, south: true });
     expect(utmFor(0, 0)).toEqual({ zone: 31, south: false });
-  });
-});
-
-describe('centralMeridian', () => {
-  it('computes and validates', () => {
-    expect(centralMeridian(1)).toBe(-177);
-    expect(centralMeridian(33)).toBe(15);
-    expect(centralMeridian(60)).toBe(177);
-    expect(() => centralMeridian(0)).toThrow(RangeError);
   });
 });

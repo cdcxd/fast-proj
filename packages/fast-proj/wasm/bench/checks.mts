@@ -274,7 +274,7 @@ function wasmForward(pts, zone, south, a = A, f = F) {
     lon[i] = pts[i][0];
     lat[i] = pts[i][1];
   }
-  e.forward_batch(lp, tp, xp, yp, n, zone, south ? 1 : 0, a, f);
+  e.tm_forward_batch(lp, tp, xp, yp, n, zone * 6 - 183, 0.9996, 500000, south ? 10000000 : 0, a, f);
   return { x: Array.from(F64(xp, n)), y: Array.from(F64(yp, n)) };
 }
 
@@ -290,7 +290,7 @@ function wasmInverse(pts, zone, south, a = A, f = F) {
     x[i] = pts[i][0];
     y[i] = pts[i][1];
   }
-  e.inverse_batch(xp, yp, lp, tp, n, zone, south ? 1 : 0, a, f);
+  e.tm_inverse_batch(xp, yp, lp, tp, n, zone * 6 - 183, 0.9996, 500000, south ? 10000000 : 0, a, f);
   return { lon: Array.from(F64(lp, n)), lat: Array.from(F64(tp, n)) };
 }
 

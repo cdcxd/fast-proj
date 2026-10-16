@@ -1,7 +1,7 @@
 # fast-proj API
 
 ```ts
-import { gcj02, tmerc, utm, utmFor, zoneFor, centralMeridian, WGS84, GRS80, MAX_FLATTENING } from 'fast-proj';
+import { gcj02, tmerc, utm, utmFor, zoneFor, WGS84, GRS80 } from 'fast-proj';
 import { positions, positionsFromArrays, lineString, latLngs } from 'fast-proj/geojson';
 import { loadWasm } from 'fast-proj/wasm';
 ```
@@ -15,29 +15,30 @@ angles are in degrees, all distances in metres.
 - [`gcj02(options)`](#gcj02options)
 - [Converter methods](#converter-methods)
 - [Buffers and aliasing](#buffers-and-aliasing)
-- [Zones: `utmFor`, `zoneFor`, `centralMeridian`](#zones)
+- [Zones: `utmFor`, `zoneFor`](#zones)
 - [Ellipsoids](#ellipsoids)
 - [GeoJSON and Leaflet helpers](#geojson-and-leaflet-helpers)
 - [WebAssembly backend](#webassembly-backend)
 - [Domain and accuracy](#domain-and-accuracy)
 - [Chaining](#chaining)
 - [Examples](#examples)
+- [Migrating from 0.2](#migrating-from-02)
 - [Coming from proj4](proj4.md)
 
 ## The hub: WGS84 longitude/latitude
 
 Every converter is defined relative to one hub: geodetic longitude/latitude in degrees, longitude in [-180, 180].
 Projections (`Projection`: `utm`, `tmerc`) convert projected x/y ↔ hub longitude/latitude with `toLonLat` /
-`fromLonLat`. Datum transforms (`GeographicTransform`: `gcj02`) convert another system's
+`fromLonLat`. Datums (`Datum`: `gcj02`) convert their own
 longitude/latitude ↔ WGS84 with `toWgs84` / `fromWgs84`. Converting between two non-hub systems is two calls on the
 same buffer; see [Chaining](#chaining).
 
-There are no datum shifts: a projection on another ellipsoid (e.g. GRS80 for CGCS2000 or ETRS89) treats its
-longitude/latitude as the hub's. For those datums the difference from WGS84 is below a metre and usually ignored.
+An ellipsoid is not a datum: a projection on another ellipsoid (e.g. GRS80 for CGCS2000 or ETRS89) treats its
+longitude/latitude as WGS84. For those datums the difference from WGS84 is below a metre and usually ignored.
 
 ## `utm(options)`
 
-Creates a converter for one UTM zone: `tmerc` with k0 = 0.9996, false easting 500 km and the zone's central meridian.
+Creates a converter for one UTM zone: `tmerc` with scale factor 0.9996, false easting 500 km and the zone's central meridian.
 Series coefficients are computed once here; keep the converter and reuse it.
 
 ```ts
@@ -70,32 +71,35 @@ of origin is the equator.
 function tmerc(options: TransverseMercatorOptions): TransverseMercator;
 
 interface TransverseMercatorOptions {
-  lon0: number; // central meridian, degrees, in [-180, 180]
-  k0?: number; // scale on the central meridian, default 1
+  centralMeridian: number; // degrees, in [-180, 180]
+  scaleFactor?: number; // on the central meridian, default 1
   falseEasting?: number; // metres, default 0
   falseNorthing?: number; // metres, default 0
   ellipsoid?: Ellipsoid; // default WGS84
 }
 
 interface TransverseMercator extends Projection {
-  readonly lon0: number;
-  readonly k0: number;
+  readonly centralMeridian: number;
+  readonly scaleFactor: number;
   readonly falseEasting: number;
   readonly falseNorthing: number;
   readonly ellipsoid: Ellipsoid;
 }
 ```
 
-Throws `TypeError` for a non-number option and `RangeError` for a non-finite one, `k0 <= 0`, or an unsupported
-ellipsoid. A latitude of origin other than 0 (`+lat_0`, e.g. the British National Grid) is not supported yet.
+Throws `TypeError` for a non-number option and `RangeError` for a non-finite one, `scaleFactor <= 0`, or an
+unsupported ellipsoid. The 0.2 names `lon0` and `k0` throw `TypeError` naming their replacements. A latitude of origin
+other than 0 (`+lat_0`, e.g. the British National Grid) is not supported yet; `latitudeOfOrigin` is reserved for it
+and throws `TypeError`.
 
 ## `gcj02(options)`
 
 GCJ-02, the obfuscated datum required for maps of mainland China (AMap/Gaode, Tencent, Google Maps in China). It
 follows the published WGS84 → GCJ-02 formula, as gcoord and coordtransform do; Baidu's BD-09 is not supported yet.
+GCJ-02 is an obfuscation of WGS84 rather than a geodetic datum; it is a `Datum` here because map users call it one.
 
 ```ts
-function gcj02(options?: Gcj02Options): GeographicTransform;
+function gcj02(options?: Gcj02Options): Datum;
 
 interface Gcj02Options {
   outsideChina?: 'passthrough' | 'transform'; // default 'passthrough'
@@ -119,7 +123,7 @@ interface Gcj02Options {
 
 ## Converter methods
 
-Every `Projection` has the methods below. A `GeographicTransform` has the same set with lon/lat on both sides:
+Every `Projection` has the methods below. A `Datum` has the same set with lon/lat on both sides:
 `toWgs84(lon, lat, outLon?, outLat?)`, `fromWgs84(...)`, `toWgs84Interleaved(lonlat, out?)`, `fromWgs84Interleaved`,
 `toWgs84Point(lon, lat)` and `fromWgs84Point`.
 
@@ -152,7 +156,6 @@ odd length, or an output buffer is shorter than the input. The point methods nev
 ```ts
 function utmFor(lon: number, lat: number): { zone: number; south: boolean };
 function zoneFor(lon: number, lat: number): number;
-function centralMeridian(zone: number): number;
 ```
 
 `zoneFor` returns the standard UTM zone, including the Norway (32V) and Svalbard (31X, 33X, 35X, 37X) exceptions.
@@ -160,7 +163,7 @@ Longitude is wrapped, so 190 gives zone 2. `utmFor` adds `south: lat < 0`, and i
 `utm`. Both throw `RangeError` for non-finite input and for latitudes outside [-80, 84] (the polar regions use UPS,
 which is not implemented).
 
-`centralMeridian(zone)` returns `zone * 6 - 183` and throws `RangeError` for invalid zones.
+A zone's central meridian is `utm({ zone }).centralMeridian`.
 
 ## Ellipsoids
 
@@ -171,10 +174,9 @@ interface Ellipsoid {
 }
 const WGS84: Ellipsoid; // frozen
 const GRS80: Ellipsoid; // frozen; also CGCS2000 and ETRS89 in practice
-const MAX_FLATTENING = 0.01;
 ```
 
-Any ellipsoid with `a > 0` and `0 <= f < MAX_FLATTENING` is supported, which covers every terrestrial ellipsoid
+Any ellipsoid with `a > 0` and `0 <= f < 0.01` is supported, which covers every terrestrial ellipsoid
 (Earth's is 0.0034). The implementation's small-angle expansions are exact to double precision only in that range. The
 accuracy figures under [Domain and accuracy](#domain-and-accuracy) hold for terrestrial flattenings. The series are
 truncated at order n^6, so error grows with f: up to f = 0.005 it stays within those figures; near the limit (f =
@@ -209,10 +211,10 @@ function loadWasm(options?: {
 }): Promise<WasmContext>;
 
 interface WasmContext extends WasmDisposable {
-  readonly backend: 'wasm-simd' | 'wasm' | 'js'; // 'wasm' only for a custom non-SIMD source
+  readonly backend: 'wasm-simd' | 'js';
   tmerc(options: TransverseMercatorOptions): TransverseMercator & WasmDisposable;
   utm(options: UtmOptions): Utm & WasmDisposable;
-  gcj02(options?: Gcj02Options): GeographicTransform & WasmDisposable;
+  gcj02(options?: Gcj02Options): Datum & WasmDisposable;
   dispose(): void;
 }
 
@@ -232,8 +234,8 @@ wasm.dispose(); // or: using wasm = await loadWasm();
   import.meta.url)`. Vite and webpack 5 copy the asset; on Node and Bun it is read from disk. With a bundler that
   doesn't handle the pattern (esbuild), pass `source`: a URL you serve, the bytes, or a compiled `WebAssembly.Module`.
 - **Backend.** `wasm-simd` normally. `js` when WebAssembly or wasm SIMD (Safari before 16.4) is unavailable, including
-  when a `source` is given that can't compile without SIMD; the context's converters then run the JavaScript backend,
-  which measured as fast as the former scalar wasm build. `wasm` only for a custom non-SIMD build passed as `source`.
+  when a `source` is given that can't compile without SIMD or is a non-SIMD build; the context's converters then run
+  the JavaScript backend, which measured as fast as a scalar wasm build.
 - **Instances.** The compiled module is cached per source. Each `loadWasm` call returns a new context with its own
   instance and a fixed 64 Ki-point workspace (about 2 MiB); larger inputs are processed in chunks. A failed load can
   be retried.
@@ -273,9 +275,9 @@ Converters compose through the hub on the same buffer, with no allocation:
 
 ```ts
 const zone50 = utm({ zone: 50 });
-const gk = tmerc({ lon0: 117, falseEasting: 500000, ellipsoid: GRS80 });
+const gk = tmerc({ centralMeridian: 117, falseEasting: 500000, ellipsoid: GRS80 });
 zone50.toLonLatInterleaved(buf, buf); // UTM 50N -> lon/lat
-gk.fromLonLatInterleaved(buf, buf); // lon/lat -> CGCS2000 3° zone, lon0 117
+gk.fromLonLatInterleaved(buf, buf); // lon/lat -> CGCS2000 3° zone, CM 117E
 ```
 
 ```ts
@@ -287,6 +289,17 @@ gcj.fromWgs84Interleaved(buf, buf); // WGS84 -> GCJ-02, for an AMap basemap
 
 For two projections, a fused single loop measured no faster than two passes: the steps share no expensive
 intermediate values.
+
+## Migrating from 0.2
+
+| 0.2                                 | 0.3                                                 |
+| ----------------------------------- | --------------------------------------------------- |
+| `tmerc({ lon0, k0 })`               | `tmerc({ centralMeridian, scaleFactor })`           |
+| `t.lon0`, `t.k0`                    | `t.centralMeridian`, `t.scaleFactor`                |
+| `GeographicTransform` type          | `Datum`                                             |
+| `centralMeridian(zone)`             | `utm({ zone }).centralMeridian` or `zone * 6 - 183` |
+| `MAX_FLATTENING`                    | `0.01`                                              |
+| `backend === 'wasm'` (custom build) | `'js'`: non-SIMD builds fall back to JavaScript     |
 
 ## Examples
 

@@ -2,6 +2,9 @@
 
 Status: accepted, implemented in 0.1 (except `webMercator` and `gcj02`, whose names and shapes are fixed here for later; `gcj02` is added in 0.2). See [Implementation notes](#implementation-notes) for where 0.1 refines this proposal.
 
+Names follow 0.3, which renamed `GeographicTransform` to `Datum` and `lon0`/`k0` to `centralMeridian`/`scaleFactor`;
+see the [migration table](api.md#migrating-from-02).
+
 The goal is to fix every decision that would be a breaking change after 0.1. Everything else can come in 0.1.x.
 
 ## Scope
@@ -47,7 +50,7 @@ export const WGS84: Ellipsoid;
 export const GRS80: Ellipsoid; // CGCS2000 uses the same ellipsoid in practice
 ```
 
-Projections take `ellipsoid?: Ellipsoid`, default `WGS84`, validated as `a > 0`, `0 <= f < MAX_FLATTENING` (0.01).
+Projections take `ellipsoid?: Ellipsoid`, default `WGS84`, validated as `a > 0`, `0 <= f < 0.01`.
 Ellipsoids used only internally (Krasovsky for GCJ-02) stay private. Series coefficients stay internal.
 
 ## Two kinds of converter
@@ -77,7 +80,7 @@ interface Projection {
 }
 
 // other lon/lat <-> hub lon/lat
-interface GeographicTransform {
+interface Datum {
   toWgs84(
     lon: ArrayLike<number>,
     lat: ArrayLike<number>,
@@ -97,8 +100,8 @@ interface GeographicTransform {
 }
 
 interface TransverseMercator extends Projection {
-  readonly lon0: number;
-  readonly k0: number;
+  readonly centralMeridian: number;
+  readonly scaleFactor: number;
   readonly falseEasting: number;
   readonly falseNorthing: number;
   readonly ellipsoid: Ellipsoid;
@@ -125,8 +128,8 @@ All are factories, including the ones with no options today, so that options can
 
 ```ts
 export function tmerc(opts: {
-  lon0: number;
-  k0?: number;
+  centralMeridian: number;
+  scaleFactor?: number;
   falseEasting?: number;
   falseNorthing?: number;
   ellipsoid?: Ellipsoid;
@@ -136,11 +139,11 @@ export function zoneFor(lon: number, lat: number): number;
 export function utmFor(lon: number, lat: number): { zone: number; south: boolean };
 
 export function webMercator(): Projection; // EPSG:3857, sphere of radius WGS84.a
-export function gcj02(opts?: { outsideChina?: 'passthrough' | 'transform' }): GeographicTransform;
+export function gcj02(opts?: { outsideChina?: 'passthrough' | 'transform' }): Datum;
 ```
 
 `webMercator` and `gcj02` come after 0.1; their names and shapes are fixed here so 0.1 doesn't need to change for them.
-BD-09, if added, is another `GeographicTransform` relative to WGS84 (composing GCJ-02 internally).
+BD-09, if added, is another `Datum` relative to WGS84 (composing GCJ-02 internally).
 
 GCJ-02's reverse direction has no closed form; `toWgs84` iterates and documents its accuracy.
 
@@ -185,7 +188,7 @@ modern bundlers resolve). No base64 inlining.
 import { loadWasm } from 'fast-proj/wasm';
 
 const wasm = await loadWasm(); // or loadWasm({ source: url | bytes | WebAssembly.Module })
-wasm.backend; // 'wasm-simd' | 'wasm' | 'js'
+wasm.backend; // 'wasm-simd' | 'js'
 const u = wasm.utm({ zone: 50 }); // same signature, returns Utm & Disposable
 u.toLonLatInterleaved(buf, buf);
 wasm.dispose(); // or `using wasm = await loadWasm()`

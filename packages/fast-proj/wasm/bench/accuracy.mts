@@ -47,7 +47,7 @@ function wasmForwardBatch(lon, lat, zone, south, a, f) {
     wLat = view(bLat, n);
   wLon.set(lon.subarray ? lon.subarray(0, n) : lon);
   wLat.set(lat);
-  e.forward_batch(bLon, bLat, bX, bY, n, zone, south ? 1 : 0, a, f);
+  e.tm_forward_batch(bLon, bLat, bX, bY, n, zone * 6 - 183, 0.9996, 500000, south ? 10000000 : 0, a, f);
   return { x: Array.from(view(bX, n)), y: Array.from(view(bY, n)) };
 }
 
@@ -57,7 +57,7 @@ function wasmInverseBatch(x, y, zone, south, a, f) {
     wY = view(bY, n);
   wX.set(x);
   wY.set(y);
-  e.inverse_batch(bX, bY, bLon, bLat, n, zone, south ? 1 : 0, a, f);
+  e.tm_inverse_batch(bX, bY, bLon, bLat, n, zone * 6 - 183, 0.9996, 500000, south ? 10000000 : 0, a, f);
   return { lon: Array.from(view(bLon, n)), lat: Array.from(view(bLat, n)) };
 }
 
