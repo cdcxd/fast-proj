@@ -51,7 +51,7 @@
     "build": "rm -rf dist && tsc -p tsconfig.build.json && bash wasm/build.sh",
     "prepack": "bun run build",
     "test": "vitest run",
-    "bench": "bun run build && node bench/run.mjs && bun bench/run.mjs && node bench/run.mjs --browser"
+    "bench": "bun run build && node bench/run.mts && bun bench/run.mts && node bench/run.mts --browser"
   },
   "engines": {
     "node": ">=20"

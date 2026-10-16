@@ -1,5 +1,5 @@
 // Extended accuracy sweeps over the kernel's actual argument ranges.
-// Run: node bench/sweeps.mjs   /   bun bench/sweeps.mjs
+// Run: node bench/sweeps.mts   /   bun bench/sweeps.mts
 import { readFileSync } from 'node:fs';
 
 const here = new URL('.', import.meta.url);

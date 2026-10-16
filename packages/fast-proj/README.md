@@ -67,7 +67,7 @@ GCJ-02: points in eastern China, against gcoord 1.0.7's `transform`.
 |                | `toWgs84`, WebAssembly   | 1.00 ms (14.7×) | 1.09 ms (12.9×) | 1.00 ms (12.4×) |
 
 The interleaved variants run at the same speed as the array form. Single-point methods use the JavaScript kernel in
-both backends. Single runs: `node bench/run.mjs`, `bun bench/run.mjs`, `node bench/run.mjs --browser` (needs
+both backends. Single runs: `node bench/run.mts`, `bun bench/run.mts`, `node bench/run.mts --browser` (needs
 `bunx playwright install chromium`).
 
 ## License

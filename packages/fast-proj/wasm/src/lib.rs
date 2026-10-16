@@ -321,7 +321,7 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 
 // ---------------------------------------------------------------------------
 // Host unit tests (target-independent logic; the f64x2 paths are gated by
-// the JS suites bench/sweeps.mjs and bench/checks.mjs against the artifact)
+// the JS suites bench/sweeps.mts and bench/checks.mts against the artifact)
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]

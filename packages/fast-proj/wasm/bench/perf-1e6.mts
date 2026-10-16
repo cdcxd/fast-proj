@@ -1,9 +1,9 @@
 // Fresh-process perf protocol at n=1e6, mirroring packages/fast-proj/bench/
-// compare-performance.mjs (which hardcodes n=10000): each revision runs in its
+// compare-performance.mts (which hardcodes n=10000): each revision runs in its
 // own worker process, order alternates per round, medians over samples.
-// Run: node bench/perf-1e6.mjs            (node workers)
-//      node bench/perf-1e6.mjs --runtime=bun
-//      node bench/perf-1e6.mjs --base=/path/baseline/utm.js --candidate=/path/candidate/utm.js
+// Run: node bench/perf-1e6.mts            (node workers)
+//      node bench/perf-1e6.mts --runtime=bun
+//      node bench/perf-1e6.mts --base=/path/baseline/utm.js --candidate=/path/candidate/utm.js
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 

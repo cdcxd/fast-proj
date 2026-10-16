@@ -32,5 +32,5 @@ jobs:
       - run: bun run check
       - run: cargo test --release --locked --manifest-path packages/fast-proj/wasm/Cargo.toml
       - run: bash packages/fast-proj/wasm/build.sh --bench
-      - run: node packages/fast-proj/wasm/bench/checks.mjs
-      - run: node packages/fast-proj/wasm/bench/accuracy.mjs
+      - run: node packages/fast-proj/wasm/bench/checks.mts
+      - run: node packages/fast-proj/wasm/bench/accuracy.mts

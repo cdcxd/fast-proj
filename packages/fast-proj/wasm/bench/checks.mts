@@ -1,7 +1,7 @@
 // Wasm-artifact checks that cannot run as host cargo tests: simd seams,
 // tails, NaN/Inf/±0 propagation, allocator contract, and kernel-level
 // parity with the TypeScript kernel (guards, signed zeros).
-// Run: node bench/checks.mjs   /   bun bench/checks.mjs
+// Run: node bench/checks.mts   /   bun bench/checks.mts
 import { readFileSync } from 'node:fs';
 
 const here = new URL('.', import.meta.url);

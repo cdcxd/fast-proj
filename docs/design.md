@@ -206,7 +206,7 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
 ## Release
 
 - Package `fast-proj`, version 0.1.0, tags `v*` (the `npm` environment rule changes from `utm-v*` to `v*`).
-- `engines.node`: `>=20` for the package. The repo's dev tooling needs `>=22.12`; that stays in the private root only.
+- `engines.node`: `>=20` for the package. The repo's dev tooling needs `>=22.18` (the `.mts` scripts rely on unflagged type stripping); that stays in the private root only. The release smoke stays `smoke.mjs` so it runs on the package floor.
 - The release workflow builds the wasm with the pinned Rust toolchain and ships it in `dist`.
 - `@fast-proj/utm` was never published; nothing to deprecate.
 

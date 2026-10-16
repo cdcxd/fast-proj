@@ -3,6 +3,7 @@
     "target": "es2020",
     "module": "esnext",
     "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
@@ -10,5 +11,5 @@
     "types": ["node"],
     "lib": ["es2022", "esnext.disposable", "dom"]
   },
-  "include": ["packages/*/src", "packages/*/test"]
+  "include": ["packages/*/src", "packages/*/test", "packages/*/bench"]
 }
