@@ -44,7 +44,8 @@ export interface WasmContext extends Disposable {
   utm(options: UtmOptions): Utm;
   /**
    * Batch methods run the wasm kernel in `'passthrough'` mode; `'transform'` mode, single points, and the `js`
-   * backend run the JavaScript kernel.
+   * backend run the JavaScript kernel. As the `geographic` of this context's `tmerc`/`utm`, x/y -> GCJ-02 runs as one
+   * wasm kernel in `'passthrough'` mode.
    */
   gcj02(options?: Gcj02Options): Geographic;
   /** Idempotent. Output arrays already returned stay valid. */

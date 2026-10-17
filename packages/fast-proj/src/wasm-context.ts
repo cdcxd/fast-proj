@@ -4,7 +4,7 @@
  */
 import { checkEven, checkOut, checkSame } from './checks.js';
 import { buildGcj02, gcj02Mode } from './gcj02.js';
-import { fusers, withGeographic } from './geographic.js';
+import { type FusedInverse, fusers, tmInverses, withGeographic } from './geographic.js';
 import { parseTmerc, tmerc as jsTmerc } from './tmerc.js';
 import type { Geographic, TransverseMercator } from './types.js';
 import { parseUtm, utm as jsUtm } from './utm.js';
@@ -22,6 +22,8 @@ export interface Exports {
   // Absent from builds without simd128 and from modules older than 0.2.1.
   gcj_forward_batch?(lon: number, lat: number, outLon: number, outLat: number, n: number): void;
   gcj_inverse_batch?(lon: number, lat: number, outLon: number, outLat: number, n: number): void;
+  // x/y -> GCJ-02 (passthrough) in one pass; absent from builds without simd128 and from modules older than 0.3.2.
+  tm_gcj_batch?(x: number, y: number, lon: number, lat: number, n: number, ...params: TmParams): void;
 }
 
 const CAP = 1 << 16;
@@ -76,6 +78,11 @@ export function jsContext(): WasmContext {
     },
   };
   return ctx;
+}
+
+function params(js: TransverseMercator): TmParams {
+  const { a, f } = js.ellipsoid;
+  return [js.centralMeridian, js.scaleFactor, js.falseEasting, js.falseNorthing, a, f];
 }
 
 export function wasmContext(exports: Exports): WasmContext {
@@ -149,8 +156,7 @@ export function wasmContext(exports: Exports): WasmContext {
   }
 
   function buildTmerc<T extends TransverseMercator>(js: T): T {
-    const { centralMeridian: lon0, scaleFactor: k0, falseEasting, falseNorthing } = js;
-    const { a, f } = js.ellipsoid;
+    const [lon0, k0, falseEasting, falseNorthing, a, f] = params(js);
     const fwd: Kernel = (ex, m) => ex.tm_forward_batch(pa, pb, pc, pd, m, lon0, k0, falseEasting, falseNorthing, a, f);
     const inv: Kernel = (ex, m) => ex.tm_inverse_batch(pa, pb, pc, pd, m, lon0, k0, falseEasting, falseNorthing, a, f);
     return {
@@ -197,11 +203,25 @@ export function wasmContext(exports: Exports): WasmContext {
     };
   }
 
+  // x/y -> this context's wasm GCJ-02 in one call, for a projection composed with it; single points run the
+  // JavaScript fused kernel.
+  function fuse(js: TransverseMercator, g: Geographic | undefined): FusedInverse | undefined {
+    if (!g || g !== wasmGcj || !e!.tm_gcj_batch) return undefined;
+    const t = tmInverses.get(js.toLonLat)!;
+    const { point } = fusers.get(buildGcj02('passthrough'))!(t);
+    const [lon0, k0, falseEasting, falseNorthing, a, f] = params(js);
+    const kernel: Kernel = (ex, m) => ex.tm_gcj_batch!(pa, pb, pc, pd, m, lon0, k0, falseEasting, falseNorthing, a, f);
+    return {
+      batch: (x, y, lon, lat, _o1, step) => (step === 1 ? run(kernel, x, y, lon, lat) : runInterleaved(kernel, x, lon)),
+      point,
+    };
+  }
+
   const gcjFwd: Kernel = (ex, m) => ex.gcj_forward_batch!(pa, pb, pc, pd, m);
   const gcjInv: Kernel = (ex, m) => ex.gcj_inverse_batch!(pa, pb, pc, pd, m);
 
   function buildGcj(js: Geographic): Geographic {
-    return Object.freeze({
+    return (wasmGcj = Object.freeze({
       toWgs84(lon, lat, outLon, outLat) {
         const n = lon.length;
         checkSame(n, lat.length, 'lon and lat');
@@ -240,11 +260,12 @@ export function wasmContext(exports: Exports): WasmContext {
       },
       toWgs84Point: (lon, lat) => (live(), js.toWgs84Point(lon, lat)),
       fromWgs84Point: (lon, lat) => (live(), js.fromWgs84Point(lon, lat)),
-    } satisfies Geographic);
+    } satisfies Geographic));
   }
 
   // One converter per mode, as for the root gcj02().
   const gcj: Partial<Record<'passthrough' | 'transform', Geographic>> = {};
+  let wasmGcj: Geographic | undefined;
   const dispose = () => {
     if (busy) throw new Error('fast-proj: dispose() during an active call');
     e = null;
@@ -259,12 +280,12 @@ export function wasmContext(exports: Exports): WasmContext {
     tmerc: (o) => {
       open();
       const [p, g] = parseTmerc(o);
-      return withGeographic(buildTmerc(p), g, live);
+      return withGeographic(buildTmerc(p), g, live, fuse(p, g));
     },
     utm: (o) => {
       open();
       const [p, g] = parseUtm(o);
-      return withGeographic(buildTmerc(p), g, live);
+      return withGeographic(buildTmerc(p), g, live, fuse(p, g));
     },
     gcj02: (o) => {
       const ex = open();

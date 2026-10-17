@@ -17,7 +17,7 @@ use core::arch::wasm32::{
     v128_or, v128_xor,
 };
 
-use crate::simd::{load_pair, store_pair, vatan, vatan2, vexp, vlog1p, vsincos};
+use crate::simd::{load_pair, store_pair, vatan, vatan2, vatan_q, vexp_eo, vlog1p, vsincos, vsincos_eo};
 
 #[inline]
 fn spl(x: f64) -> v128 {
@@ -42,7 +42,7 @@ pub struct KS {
     b6: v128,
 }
 
-fn splat_k(k: &K) -> KS {
+pub fn splat_k(k: &K) -> KS {
     let s = spl;
     let s4 = |a: &[f64; 4]| [s(a[0]), s(a[1]), s(a[2]), s(a[3])];
     let s6 = |a: &[f64; 6]| [s(a[0]), s(a[1]), s(a[2]), s(a[3]), s(a[4]), s(a[5])];
@@ -62,6 +62,15 @@ fn splat_k(k: &K) -> KS {
         b5: s(k.b56[0]),
         b6: s(k.b56[1]),
     }
+}
+
+/// `poly6` as two interleaved Horner chains in p^2.
+#[inline]
+fn poly6_eo(p: v128, c: &[v128; 6]) -> v128 {
+    let p2 = f64x2_mul(p, p);
+    let e = f64x2_add(c[0], f64x2_mul(p2, f64x2_add(c[2], f64x2_mul(p2, c[4]))));
+    let o = f64x2_add(c[1], f64x2_mul(p2, f64x2_add(c[3], f64x2_mul(p2, c[5]))));
+    f64x2_add(e, f64x2_mul(p, o))
 }
 
 #[inline]
@@ -181,12 +190,34 @@ pub fn forward2(mut lon: v128, lat: v128, q: &KS) -> (v128, v128) {
     )
 }
 
+/// The inverse's result and the intermediates a fused GCJ-02 offset reuses: sx/h and she/cx are proportional to
+/// the sin/cos of the conformal latitude chi and of the longitude from the central meridian; r2 = sx^2 + h^2, and
+/// dchi = phi - chi.
+pub struct Inv {
+    pub lon: v128,
+    pub lat: v128,
+    pub sx: v128,
+    pub cx: v128,
+    pub she: v128,
+    pub h: v128,
+    pub r2: v128,
+    pub dchi: v128,
+}
+
 pub fn inverse2(x: v128, y: v128, q: &KS) -> (v128, v128) {
+    let r = inverse_parts(x, y, q);
+    (r.lon, r.lat)
+}
+
+/// The latency-bound chain (sincos/exp, then atan of the conformal latitude) takes the shallow polynomial forms:
+/// `vsincos_eo`, `vexp_eo`, `vatan_q` and `poly6_eo`.
+#[inline(always)]
+pub fn inverse_parts(x: v128, y: v128, q: &KS) -> Inv {
     let xi = f64x2_mul(f64x2_sub(y, q.fnorth), q.inv_k_a);
     let eta = f64x2_mul(f64x2_sub(x, q.feast), q.inv_k_a);
 
-    let (s1, c1x) = vsincos(xi);
-    let e = vexp(eta);
+    let (s1, c1x) = vsincos_eo(xi);
+    let e = vexp_eo(eta);
     let ie = f64x2_div(spl(1.0), e);
     let ch1 = f64x2_mul(spl(0.5), f64x2_add(e, ie));
     let sh1 = f64x2_mul(spl(0.5), f64x2_sub(e, ie));
@@ -246,7 +277,7 @@ pub fn inverse2(x: v128, y: v128, q: &KS) -> (v128, v128) {
     let she0 = f64x2_extract_lane::<0>(she);
     let she1 = f64x2_extract_lane::<1>(she);
     let lam = if cx0 > 0.0 && cx1 > 0.0 && she0.is_finite() && she1.is_finite() {
-        vatan(f64x2_div(she, cx))
+        vatan_q(she, cx)
     } else {
         v128_bitselect(
             vatan(f64x2_div(she, cx)),
@@ -259,7 +290,7 @@ pub fn inverse2(x: v128, y: v128, q: &KS) -> (v128, v128) {
     let sx0 = f64x2_extract_lane::<0>(sx);
     let sx1 = f64x2_extract_lane::<1>(sx);
     let chi = if h0 > 0.0 && h1 > 0.0 && sx0.is_finite() && sx1.is_finite() {
-        vatan(f64x2_div(sx, h))
+        vatan_q(sx, h)
     } else {
         v128_bitselect(
             vatan(f64x2_div(sx, h)),
@@ -271,19 +302,14 @@ pub fn inverse2(x: v128, y: v128, q: &KS) -> (v128, v128) {
     let sx2 = f64x2_mul(sx, sx);
     let r2 = f64x2_add(sx2, h2);
     let p = f64x2_div(f64x2_mul(spl(2.0), f64x2_sub(h2, sx2)), r2);
-    let q1 = poly6(p, &q.dp);
-    let phi = f64x2_add(
-        chi,
-        f64x2_mul(
-            f64x2_div(f64x2_mul(f64x2_mul(spl(2.0), sx), h), r2),
-            q1,
-        ),
-    );
+    let q1 = poly6_eo(p, &q.dp);
+    let dchi = f64x2_mul(f64x2_div(f64x2_mul(f64x2_mul(spl(2.0), sx), h), r2), q1);
+    let phi = f64x2_add(chi, dchi);
 
     let mut lon = f64x2_mul(f64x2_add(q.lon0, lam), spl(R2D));
     lon = v128_bitselect(f64x2_sub(lon, spl(360.0)), lon, f64x2_gt(lon, spl(180.0)));
     lon = v128_bitselect(f64x2_add(lon, spl(360.0)), lon, f64x2_lt(lon, spl(-180.0)));
-    (lon, f64x2_mul(phi, spl(R2D)))
+    Inv { lon, lat: f64x2_mul(phi, spl(R2D)), sx, cx, she, h, r2, dchi }
 }
 
 pub fn forward_batch(lon: &[f64], lat: &[f64], x: &mut [f64], y: &mut [f64], k: &K) {

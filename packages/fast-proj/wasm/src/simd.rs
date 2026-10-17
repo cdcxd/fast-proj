@@ -24,6 +24,30 @@ pub fn poly(t: v128, c: &[f64]) -> v128 {
     r
 }
 
+/// `poly` as two interleaved Horner chains in t^2 (even and odd coefficients): half the dependency depth, two more
+/// live values; rounded differently, within an ulp.
+#[inline(always)]
+pub fn poly_eo(t: v128, c: &[f64]) -> v128 {
+    let t2 = f64x2_mul(t, t);
+    let mut e = spl(0.0);
+    let mut o = spl(0.0);
+    let mut k = c.len().div_ceil(2);
+    while k > 0 {
+        k -= 1;
+        e = f64x2_add(f64x2_mul(e, t2), spl(c[2 * k]));
+        if 2 * k + 1 < c.len() {
+            o = f64x2_add(f64x2_mul(o, t2), spl(c[2 * k + 1]));
+        }
+    }
+    f64x2_add(e, f64x2_mul(o, t))
+}
+
+/// `poly`, or with `EO` `poly_eo`.
+#[inline(always)]
+fn poly_p<const EO: bool>(t: v128, c: &[f64]) -> v128 {
+    if EO { poly_eo(t, c) } else { poly(t, c) }
+}
+
 /// Load a pair; odd tails splat the last point into both lanes.
 #[inline]
 pub fn load_pair(inp: &[f64], i: usize) -> v128 {
@@ -65,6 +89,25 @@ pub fn vatan(x: v128) -> v128 {
     v128_bitselect(f64x2_neg(comp), comp, i64x2_lt(x, i64x2_splat(0)))
 }
 
+/// atan(n / d) for d > 0 and finite n, with one division (the quotient and the pi/8 reduction share it) and
+/// `poly_eo`.
+#[inline]
+pub fn vatan_q(n: v128, d: v128) -> v128 {
+    let a = f64x2_abs(n);
+    let gt1 = f64x2_gt(a, d);
+    let num = v128_bitselect(d, a, gt1);
+    let den = v128_bitselect(a, d, gt1);
+    let big = f64x2_gt(num, f64x2_mul(den, spl(TAN_PI_8)));
+    let nn = v128_bitselect(f64x2_sub(num, f64x2_mul(den, spl(TAN_PI_8))), num, big);
+    let dd = v128_bitselect(f64x2_add(den, f64x2_mul(num, spl(TAN_PI_8))), den, big);
+    let u = f64x2_div(nn, dd);
+    let t2 = f64x2_mul(u, u);
+    let pr = f64x2_add(u, f64x2_mul(t2, f64x2_mul(u, poly_eo(t2, &AT))));
+    let r = f64x2_add(pr, v128_bitselect(spl(PI_8), spl(0.0), big));
+    let comp = v128_bitselect(f64x2_sub(spl(PI_2), r), r, gt1);
+    v128_bitselect(f64x2_neg(comp), comp, i64x2_lt(n, i64x2_splat(0)))
+}
+
 /// atan2(y, x) — magnitude path plus exact-zero and quadrant handling.
 pub fn vatan2(y: v128, x: v128) -> v128 {
     let ay = f64x2_abs(y);
@@ -104,14 +147,25 @@ pub fn vatan2(y: v128, x: v128) -> v128 {
 }
 
 pub fn vsincos(x: v128) -> (v128, v128) {
+    vsincos_p::<false>(x)
+}
+
+/// `vsincos` with `poly_eo`.
+#[inline(always)]
+pub fn vsincos_eo(x: v128) -> (v128, v128) {
+    vsincos_p::<true>(x)
+}
+
+#[inline(always)]
+fn vsincos_p<const EO: bool>(x: v128) -> (v128, v128) {
     let k = f64x2_nearest(f64x2_mul(x, spl(TWO_OVER_PI)));
     let r = f64x2_sub(
         f64x2_sub(f64x2_sub(x, f64x2_mul(k, spl(PIO2_1))), f64x2_mul(k, spl(PIO2_1T))),
         f64x2_mul(k, spl(PIO2_2T)),
     );
     let t = f64x2_mul(r, r);
-    let sp = f64x2_add(r, f64x2_mul(t, f64x2_mul(r, poly(t, &S))));
-    let cp = f64x2_add(spl(1.0), f64x2_mul(t, poly(t, &C)));
+    let sp = f64x2_add(r, f64x2_mul(t, f64x2_mul(r, poly_p::<EO>(t, &S))));
+    let cp = f64x2_add(spl(1.0), f64x2_mul(t, poly_p::<EO>(t, &C)));
     // quadrant masks must be f64-lane masks: i32 lane masks from
     // trunc_sat_f64x2_zero do not align with 64-bit lanes; the residue must
     // be unsigned — a signed -1 would take the q==1 pattern
@@ -137,9 +191,20 @@ pub fn vsincos(x: v128) -> (v128, v128) {
 /// kernel and the diagnostics suite; beyond that, classification differs
 /// from libm — documented in RESULTS.md).
 pub fn vexp(x: v128) -> v128 {
+    vexp_p::<false>(x)
+}
+
+/// `vexp` with `poly_eo`.
+#[inline(always)]
+pub fn vexp_eo(x: v128) -> v128 {
+    vexp_p::<true>(x)
+}
+
+#[inline(always)]
+fn vexp_p<const EO: bool>(x: v128) -> v128 {
     let k = f64x2_nearest(f64x2_mul(x, spl(LOG2E)));
     let r = f64x2_sub(f64x2_sub(x, f64x2_mul(k, spl(LN2_HI))), f64x2_mul(k, spl(LN2_LO)));
-    let p = f64x2_add(f64x2_add(spl(1.0), r), f64x2_mul(f64x2_mul(r, r), poly(r, &E)));
+    let p = f64x2_add(f64x2_add(spl(1.0), r), f64x2_mul(f64x2_mul(r, r), poly_p::<EO>(r, &E)));
     let kc = f64x2_pmin(f64x2_pmax(k, spl(-1000.0)), spl(1000.0));
     // k is integral and |k| <= 1000, exact through f32 and i32
     let ki32 = i32x4_trunc_sat_f32x4(f32x4_demote_f64x2_zero(kc));

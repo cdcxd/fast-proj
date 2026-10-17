@@ -180,12 +180,29 @@ longitude scaled by cos(latitude) (except in `'transform'` mode poleward of abou
 moves the two-pass longitude by up to degrees). `geographic.ts` holds two WeakMaps: tmerc registers its inverse
 constants under its `toLonLat`, and gcj02 registers a builder for its shared objects. So a `utm`-only bundle has no
 GCJ-02 code (0.2 KB gzip more). Both maps are keyed by identity, so a spread copy of a GCJ-02 object, a wasm projection
-or the wasm GCJ-02 kernel (passthrough mode) runs the two passes. The builder (`gcj02-fused.ts`) and its copy of the
-tmerc inverse come with GCJ-02: `utm` + `GCJ02` grows by 2.4 KB gzip, and a `GCJ02`-only bundle by 2.2 KB. Its constants
-are shared from `gcj02-constants.ts` and bound to each module's own consts: V8 reads an imported const slower, 12% on
-`fromWgs84` in unbundled Node. GCJ-02 -> x/y stays two passes: fused, it could share only the latitude's sin/cos after
+or the wasm GCJ-02 kernel (passthrough mode) runs the two passes here; a wasm context fuses its own pair in wasm
+(below). The builder (`gcj02-fused.ts`) and its copy of the tmerc inverse come with GCJ-02: `utm` + `GCJ02` grows by
+2.4 KB gzip, and a `GCJ02`-only bundle by 2.2 KB. Its constants are shared from `gcj02-constants.ts` and bound to each
+module's own consts: V8 reads an imported const slower, 12% on `fromWgs84` in unbundled Node. GCJ-02 -> x/y stays two passes: fused, it could share only the latitude's sin/cos after
 the Newton steps, and measured 1% faster in Node, 5% slower in Bun and 13% faster in Chromium. A `pipe()` helper can be
 added later without a break.
+
+The wasm backend fuses the same pair when a context's `tmerc`/`utm` has that context's `gcj02()` (passthrough mode) as
+its `geographic`: one export, `tm_gcj_batch` (`vfused.rs`), runs the f64x2 inverse and the offset, its sin/cos pairs
+by angle addition as above (sin/cos of 3 lam from (cx + i she)^3), replacing both `vsincos` calls of the GCJ-02
+kernel. Its copy of the offset series sums the latest-ready terms last, so it is not the shared `vgcj::offset`: 3-5%
+faster in Node, 1% in Bun. The one call also saves a copy in and out of the workspace. With 10k UTM points, 22-28%
+faster than the wasm two passes in Node, Bun and Chromium (32-37% faster than 0.3.1's), within 3e-14° of them. The
+context detects its own GCJ-02 converter by identity; another context's, a JavaScript projection with a wasm GCJ-02
+(or the reverse), and modules without the export run the two passes. Single points run the JavaScript fused kernel.
+
+The wasm inverse is latency-bound: its chain of sincos/exp, then atan of the conformal latitude, then the phi - chi
+series leaves the SIMD units idle. So the inverse takes shallower forms of those (`vsincos_eo`, `vexp_eo`, `poly6_eo`:
+each polynomial as two interleaved Horner chains in t^2, within an ulp of one chain; `vatan_q`: atan(n / d) with one
+division instead of three), 57.8 -> 50 ns per point, 14-16% faster through the API. The forward kernel and the GCJ-02
+kernels keep the single chains. Tried and not kept: a full Estrin atan (more live values spill in V8), hoisting the
+splatted constants (Node 3% faster, Bun 7-10% slower), unrolling to two pairs per iteration (Bun twice as slow), and one
+shared division for 1/r, 1/h and 1/cos(lat) (it serializes the longitude chain behind the latitude's).
 
 Rules that keep later additions non-breaking:
 

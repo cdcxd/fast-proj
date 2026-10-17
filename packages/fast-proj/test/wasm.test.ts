@@ -5,8 +5,9 @@ import { pathToFileURL } from 'node:url';
 import vm from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
 import { fusers } from '../src/geographic.js';
-import { GCJ02, gcj02, utm } from '../src/index.js';
-import { loadWasm } from '../src/wasm.js';
+import { GCJ02, gcj02, tmerc as jsTmerc, utm } from '../src/index.js';
+import type { Geographic, Projection } from '../src/types.js';
+import { loadWasm, type WasmContext } from '../src/wasm.js';
 
 const url = new URL('../dist/fast-proj.wasm', import.meta.url);
 
@@ -168,6 +169,94 @@ describe('loadWasm', () => {
     const lon = [116.391, 105.004];
     const lat = [39.907, 30];
     expect(ctx.gcj02().toWgs84(lon, lat)).toEqual(gcj02().toWgs84(lon, lat));
+  });
+
+  it('fuses a projection with its own wasm gcj02 into one wasm call', async () => {
+    const module = await WebAssembly.compile(readFileSync(url));
+    const instantiate = WebAssembly.instantiate;
+    const calls: string[] = [];
+    const count =
+      (k: string, f: unknown) =>
+      (...a: unknown[]) => (calls.push(k), (f as (...b: unknown[]) => void)(...a));
+    // Counts the kernel calls, optionally dropping the fused export as modules older than 0.3.2 do.
+    const load = async (fused: boolean) => {
+      const spy = vi.spyOn(WebAssembly, 'instantiate').mockImplementation((async (m: WebAssembly.Module) => {
+        const { tm_gcj_batch, ...exports } = (await instantiate(m, {})).exports as Record<string, unknown>;
+        return {
+          exports: {
+            ...exports,
+            tm_inverse_batch: count('inverse', exports.tm_inverse_batch),
+            gcj_forward_batch: count('gcj', exports.gcj_forward_batch),
+            ...(fused && { tm_gcj_batch: count('fused', tm_gcj_batch) }),
+          },
+        };
+      }) as unknown as typeof WebAssembly.instantiate);
+      return loadWasm({ source: module }).finally(() => spy.mockRestore());
+    };
+    const ctx = await load(true);
+    const other = await load(true);
+    const old = await load(false);
+    // Odd, past the workspace, inside and around the China box (and across zone 50's edges).
+    const n = 150001;
+    const x = Float64Array.from({ length: n }, (_, i) => -300000 + ((i * 7919) % n) * (1600000 / n));
+    const y = Float64Array.from({ length: n }, (_, i) => -1e6 + ((i * 104729) % n) * (8e6 / n));
+    const xy = new Float64Array(2 * n);
+    for (let i = 0; i < n; i++) {
+      xy[2 * i] = x[i]!;
+      xy[2 * i + 1] = y[i]!;
+    }
+    type Factories = Pick<WasmContext, 'utm' | 'tmerc'>;
+    const projections: ((m: Factories, geographic: Geographic) => Projection)[] = [
+      (m, geographic) => m.utm({ zone: 50, geographic }),
+      (m, geographic) => m.utm({ zone: 50, south: true, geographic }),
+      (m, geographic) => m.utm({ zone: 1, geographic }),
+      (m, geographic) =>
+        m.tmerc({ centralMeridian: 117.5, scaleFactor: 0.9999, falseEasting: 250000, falseNorthing: -1e6, geographic }),
+      (m, geographic) => m.tmerc({ centralMeridian: 104.25, ellipsoid: { a: 6371000, f: 0 }, geographic }),
+    ];
+    for (const make of projections) {
+      const js = make({ utm, tmerc: jsTmerc }, GCJ02);
+      const want = js.toLonLat(x, y);
+      calls.length = 0;
+      const w = make(ctx, ctx.gcj02());
+      const got = w.toLonLat(x, y);
+      const inter = w.toLonLatInterleaved(xy, new Float64Array(2 * n));
+      expect(calls).toEqual(['fused', 'fused', 'fused', 'fused', 'fused', 'fused']);
+      let max = 0;
+      for (let i = 0; i < n; i++) {
+        const k = Math.cos((want.lat[i]! * Math.PI) / 180);
+        max = Math.max(max, Math.abs(got.lon[i]! - want.lon[i]!) * k, Math.abs(got.lat[i]! - want.lat[i]!));
+        max = Math.max(max, Math.abs(inter[2 * i]! - want.lon[i]!) * k, Math.abs(inter[2 * i + 1]! - want.lat[i]!));
+      }
+      expect(max).toBeLessThan(6e-14);
+      expect(w.toLonLatPoint(x[7]!, y[7]!)).toEqual(js.toLonLatPoint(x[7]!, y[7]!));
+      // Another context's converter, or a module without the fused export, takes the two passes.
+      for (const [c, g] of [
+        [ctx, other.gcj02()],
+        [old, old.gcj02()],
+      ] as const) {
+        calls.length = 0;
+        const two = make(c, g).toLonLat(x, y);
+        expect(calls).toEqual(['inverse', 'inverse', 'inverse', 'gcj', 'gcj', 'gcj']);
+        let d = 0;
+        for (let i = 0; i < n; i++) {
+          const k = Math.cos((got.lat[i]! * Math.PI) / 180);
+          d = Math.max(d, Math.abs(two.lon[i]! - got.lon[i]!) * k, Math.abs(two.lat[i]! - got.lat[i]!));
+        }
+        expect(d).toBeLessThan(6e-14);
+      }
+    }
+    // In place, interleaved.
+    const w = ctx.utm({ zone: 50, geographic: ctx.gcj02() });
+    const copy = xy.slice();
+    expect(w.toLonLatInterleaved(copy, copy)).toEqual(w.toLonLatInterleaved(xy));
+    // Disposal: throws before writing.
+    ctx.dispose();
+    const lon = new Float64Array(1);
+    const lat = new Float64Array(1);
+    expect(() => w.toLonLat([440000], [4420000], lon, lat)).toThrow(/disposed/);
+    expect(() => w.toLonLatPoint(440000, 4420000)).toThrow(/disposed/);
+    expect([lon[0], lat[0]]).toEqual([0, 0]);
   });
 
   it('handles gcj02 inputs larger than the 64 Ki-point workspace', async () => {
