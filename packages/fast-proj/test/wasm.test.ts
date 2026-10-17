@@ -11,6 +11,10 @@ import { loadWasm, type WasmContext } from '../src/wasm.js';
 
 const url = new URL('../dist/fast-proj.wasm', import.meta.url);
 
+type Factories = Pick<WasmContext, 'utm' | 'tmerc'>;
+type Make = (m: Factories, geographic?: Geographic) => Projection;
+const zone1: Make = (m, geographic) => m.utm({ zone: 1, geographic });
+
 describe('loadWasm', () => {
   it('accepts a URL, bytes or a compiled module', async () => {
     const bytes = readFileSync(url);
@@ -196,25 +200,32 @@ describe('loadWasm', () => {
     const ctx = await load(true);
     const other = await load(true);
     const old = await load(false);
-    // Odd, past the workspace, inside and around the China box (and across zone 50's edges).
+    // Odd and past the workspace.
     const n = 150001;
-    const x = Float64Array.from({ length: n }, (_, i) => -300000 + ((i * 7919) % n) * (1600000 / n));
-    const y = Float64Array.from({ length: n }, (_, i) => -1e6 + ((i * 104729) % n) * (8e6 / n));
-    const xy = new Float64Array(2 * n);
-    for (let i = 0; i < n; i++) {
-      xy[2 * i] = x[i]!;
-      xy[2 * i + 1] = y[i]!;
-    }
-    type Factories = Pick<WasmContext, 'utm' | 'tmerc'>;
-    const projections: ((m: Factories, geographic: Geographic) => Projection)[] = [
+    const gx = Float64Array.from({ length: n }, (_, i) => -300000 + ((i * 7919) % n) * (1600000 / n));
+    const gy = Float64Array.from({ length: n }, (_, i) => -1e6 + ((i * 104729) % n) * (8e6 / n));
+    const glon = Float64Array.from({ length: n }, (_, i) => 70 + ((i * 7919) % n) * (70 / n));
+    const glat = Float64Array.from({ length: n }, (_, i) => -2 + ((i * 104729) % n) * (60 / n));
+    const interleave = (a: Float64Array, b: Float64Array) => {
+      const ab = new Float64Array(2 * n);
+      for (let i = 0; i < n; i++) {
+        ab[2 * i] = a[i]!;
+        ab[2 * i + 1] = b[i]!;
+      }
+      return ab;
+    };
+    const projections: Make[] = [
       (m, geographic) => m.utm({ zone: 50, geographic }),
       (m, geographic) => m.utm({ zone: 50, south: true, geographic }),
-      (m, geographic) => m.utm({ zone: 1, geographic }),
+      zone1,
       (m, geographic) =>
         m.tmerc({ centralMeridian: 117.5, scaleFactor: 0.9999, falseEasting: 250000, falseNorthing: -1e6, geographic }),
       (m, geographic) => m.tmerc({ centralMeridian: 104.25, ellipsoid: { a: 6371000, f: 0 }, geographic }),
     ];
     for (const make of projections) {
+      // In and around the China box (86% in it); zone 1 can't reach China, so the x/y grid, all passing through.
+      const { x, y } = make === zone1 ? { x: gx, y: gy } : make({ utm, tmerc: jsTmerc }).fromLonLat(glon, glat);
+      const xy = interleave(x, y);
       const js = make({ utm, tmerc: jsTmerc }, GCJ02);
       const want = js.toLonLat(x, y);
       calls.length = 0;
@@ -246,8 +257,14 @@ describe('loadWasm', () => {
         expect(d).toBeLessThan(6e-14);
       }
     }
-    // In place, interleaved.
     const w = ctx.utm({ zone: 50, geographic: ctx.gcj02() });
+    // Far from the central meridian, yet in the box: the offset's angle sums must not overflow.
+    const far = [48707797.27050504, 32399795.303083114] as const;
+    expect(w.toLonLatInterleaved(far)).toEqual(
+      ctx.utm({ zone: 50, geographic: other.gcj02() }).toLonLatInterleaved(far),
+    );
+    // In place, interleaved.
+    const xy = interleave(gx, gy);
     const copy = xy.slice();
     expect(w.toLonLatInterleaved(copy, copy)).toEqual(w.toLonLatInterleaved(xy));
     // Disposal: throws before writing.

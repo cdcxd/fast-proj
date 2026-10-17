@@ -71,15 +71,17 @@ pub fn tm_gcj_batch(x: &[f64], y: &[f64], olon: &mut [f64], olat: &mut [f64], k:
             i += 2;
             continue;
         }
-        // sin, cos of 3 lam + (lon0 - 105) pi/60: (cx + i she)^3 rotated, over h^3 (she, cx come before h, so the
-        // longitude chain starts as early as it can).
-        let cx2 = mul(t.cx, t.cx);
-        let she2 = mul(t.she, t.she);
-        let s3u = mul(t.she, sub(mul(spl(3.0), cx2), she2));
-        let c3u = mul(t.cx, sub(cx2, mul(spl(3.0), she2)));
-        let ih3 = f64x2_div(spl(1.0), mul(t.h, sub(t.r2, mul(t.sx, t.sx))));
-        let s1 = mul(add(mul(s3u, c3k), mul(c3u, s3k)), ih3);
-        let c1 = mul(sub(mul(c3u, c3k), mul(s3u, s3k)), ih3);
+        // sin, cos of 3 lam + (lon0 - 105) pi/60: (cx + i she)^3 / h^3, rotated. Normalized before cubing, so a
+        // far-out x (h near 1e154) can't overflow.
+        let ih = f64x2_div(spl(1.0), t.h);
+        let sl = mul(t.she, ih);
+        let cl = mul(t.cx, ih);
+        let cl2 = mul(cl, cl);
+        let sl2 = mul(sl, sl);
+        let s3 = mul(sl, sub(mul(spl(3.0), cl2), sl2));
+        let c3 = mul(cl, sub(cl2, mul(spl(3.0), sl2)));
+        let s1 = add(mul(s3, c3k), mul(c3, s3k));
+        let c1 = sub(mul(c3, c3k), mul(s3, s3k));
         // sin, cos of the latitude: the conformal latitude chi plus phi - chi, below 0.01 rad.
         let ir = f64x2_div(spl(1.0), f64x2_sqrt(t.r2));
         let s_chi = mul(t.sx, ir);
