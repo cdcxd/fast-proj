@@ -88,7 +88,7 @@ pub fn tm_gcj_batch(x: &[f64], y: &[f64], olon: &mut [f64], olat: &mut [f64], k:
         let c_chi = mul(t.h, ir);
         let dc = t.dchi;
         let dc2 = mul(dc, dc);
-        let sdc = mul(dc, add(spl(1.0), mul(dc2, spl(-1.0 / 6.0))));
+        let sdc = mul(dc, add(spl(1.0), mul(dc2, add(spl(-1.0 / 6.0), mul(dc2, spl(1.0 / 120.0))))));
         let cdc = add(spl(1.0), mul(dc2, add(spl(-0.5), mul(dc2, spl(1.0 / 24.0)))));
         let sp = add(mul(s_chi, cdc), mul(c_chi, sdc));
         let cp = sub(mul(c_chi, cdc), mul(s_chi, sdc));

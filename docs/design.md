@@ -199,10 +199,12 @@ context detects its own GCJ-02 converter by identity; another context's, a JavaS
 The wasm inverse is latency-bound: its chain of sincos/exp, then atan of the conformal latitude, then the phi - chi
 series leaves the SIMD units idle. So the inverse takes shallower forms of those (`vsincos_eo`, `vexp_eo`, `poly6_eo`:
 each polynomial as two interleaved Horner chains in t^2, within an ulp of one chain; `vatan_q`: atan(n / d) with one
-division instead of three), 57.8 -> 50 ns per point, 14-16% faster through the API. The forward kernel and the GCJ-02
-kernels keep the single chains. Tried and not kept: a full Estrin atan (more live values spill in V8), hoisting the
-splatted constants (Node 3% faster, Bun 7-10% slower), unrolling to two pairs per iteration (Bun twice as slow), and one
-shared division for 1/r, 1/h and 1/cos(lat) (it serializes the longitude chain behind the latitude's).
+division instead of three; a pair with an out-of-domain lane takes the atan2 blend, which keeps `vatan_q` for the
+in-domain lane, so no lane's result depends on its neighbour), 57.8 -> 50 ns per point, 14-16% faster through the API.
+The forward kernel and the GCJ-02 kernels keep the single chains. Tried and not kept: a full Estrin atan (more live
+values spill in V8), hoisting the splatted constants (Node 3% faster, Bun 7-10% slower), unrolling to two pairs per
+iteration (Bun twice as slow), and one shared division for 1/r, 1/h and 1/cos(lat) (it serializes the longitude chain
+behind the latitude's).
 
 Rules that keep later additions non-breaking:
 

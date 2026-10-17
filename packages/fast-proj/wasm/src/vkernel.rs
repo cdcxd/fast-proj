@@ -271,7 +271,9 @@ pub fn inverse_parts(x: v128, y: v128, q: &KS) -> Inv {
     let h2 = f64x2_add(f64x2_mul(she, she), f64x2_mul(cx, cx));
     let h = f64x2_sqrt(h2);
     // guarded atan sites hoisted per pair: in-domain lanes (cx > 0, she finite)
-    // pay only atan; any out-of-domain lane falls back to the atan2 blend
+    // pay only atan; any out-of-domain lane falls back to the atan2 blend, which
+    // keeps vatan_q for in-domain lanes so a lane's result never depends on its
+    // neighbour
     let cx0 = f64x2_extract_lane::<0>(cx);
     let cx1 = f64x2_extract_lane::<1>(cx);
     let she0 = f64x2_extract_lane::<0>(she);
@@ -280,7 +282,7 @@ pub fn inverse_parts(x: v128, y: v128, q: &KS) -> Inv {
         vatan_q(she, cx)
     } else {
         v128_bitselect(
-            vatan(f64x2_div(she, cx)),
+            vatan_q(she, cx),
             vatan2(she, cx),
             v128_and(f64x2_gt(cx, spl(0.0)), is_finite(she)),
         )
@@ -293,7 +295,7 @@ pub fn inverse_parts(x: v128, y: v128, q: &KS) -> Inv {
         vatan_q(sx, h)
     } else {
         v128_bitselect(
-            vatan(f64x2_div(sx, h)),
+            vatan_q(sx, h),
             vatan2(sx, h),
             v128_and(f64x2_gt(h, spl(0.0)), is_finite(sx)),
         )
