@@ -267,7 +267,9 @@ wasm.dispose(); // or: using wasm = await loadWasm();
 - **Disposal.** Only the context is disposable; `dispose()` is idempotent. Its converters hold nothing of their own
   and throw once it is disposed. Output arrays already returned are caller-owned and stay valid.
 - **`geographic`.** `wasm.utm({ zone, geographic })` runs the wasm projection, then the geographic system's batch
-  method on the same buffer: `wasm.gcj02()` for the wasm kernel, or the root `GCJ02` for the JavaScript one.
+  method on the same buffer: `wasm.gcj02()` for the wasm kernel, or the root `GCJ02` for the JavaScript one. With the
+  same context's `wasm.gcj02()` (`'passthrough'` mode), x/y -> GCJ-02 runs as one wasm kernel instead, 22–28% faster
+  and within 3e-14° of the two passes (longitude scaled by cos(latitude)).
 - **Copies.** Converters take and return caller-owned arrays, so each batch call copies the input into the workspace
   and the result back (about 0.17 ns per point). There is no zero-copy access to wasm memory.
 - **GCJ-02.** The context's `gcj02()` batch methods run the wasm kernel in `'passthrough'` mode (about 1.9–4×
@@ -320,7 +322,7 @@ gk.fromLonLatInterleaved(buf, buf); // lon/lat -> CGCS2000 3° zone, CM 117E
 ```
 
 A projection's `geographic` option is the same two passes, for GCJ-02 lon/lat. In the JavaScript backend, x/y -> GCJ-02
-on a `tmerc`/`utm` runs as one loop instead, 9-37% faster and within 3e-14° of the two passes (longitude scaled by
+on a `tmerc`/`utm` runs as one loop instead (a wasm context does the same in wasm; see [WebAssembly backend](#webassembly-backend)), 9-37% faster and within 3e-14° of the two passes (longitude scaled by
 cos(latitude)), except in `'transform'` mode poleward of about 87°, where the longitude can differ by more, up to
 degrees at the poles: the two passes are as unstable there (one ulp of WGS84 latitude moves the longitude by up to tens
 of degrees). Pass the `gcj02()` object itself: a copy such as `{ ...GCJ02 }` gives the same results but runs the two

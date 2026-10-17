@@ -71,14 +71,19 @@ function head(a: Float64Array, n: number): Float64Array {
 /**
  * Freezes `p`, first composing it with `g` when given: x/y <-> WGS84 (`p`) <-> `g`. Each batch method runs the two
  * steps on the first n elements of the output buffer, the second in place, except x/y -> `g` in one pass when `g`
- * fuses with `p`. `live` runs before any step, so a call on a disposed wasm
+ * fuses with `p` (or with `fused`, a wasm context's kernel). `live` runs before any step, so a call on a disposed wasm
  * context throws before writing anything.
  */
-export function withGeographic<T extends Projection>(p: T, g: Geographic | undefined, live?: () => void): T {
+export function withGeographic<T extends Projection>(
+  p: T,
+  g: Geographic | undefined,
+  live?: () => void,
+  fused?: FusedInverse,
+): T {
   if (!g) return Object.freeze(p);
   const check = live ?? (() => {});
   const t = tmInverses.get(p.toLonLat);
-  const f = t && fusers.get(g)?.(t);
+  const f = fused ?? (t && fusers.get(g)?.(t));
   return Object.freeze({
     ...p,
     geographic: g,
