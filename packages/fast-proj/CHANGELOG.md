@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.2
+
+### Patch Changes
+
+- 4bec5e2: `loadWasm()`: the batch `toLonLat` methods of `tmerc`/`utm` are 14–16% faster. Results move by a few ulp and stay within the documented 6e-14° of the JavaScript backend.
+- 88f8cbe: JavaScript `utm`/`tmerc` with `geographic: GCJ02`: x/y → GCJ-02 runs as one loop, 9–11% faster in Node and Bun and 36–37% in Chromium (point method 14–48%). Results move by up to 3e-14° (longitude scaled by cos(latitude)), except in `'transform'` mode poleward of about 87°, where the longitude can move more.
+- 4bec5e2: `loadWasm()`: a context's `utm`/`tmerc` with that context's `gcj02()` as `geographic` runs x/y → GCJ-02 as one wasm kernel, 32–37% faster than 0.3.1 in Node, Bun and Chromium. Results move by up to 3e-14° (longitude scaled by cos(latitude)).
+
 ## 0.3.1
 
 ### Patch Changes

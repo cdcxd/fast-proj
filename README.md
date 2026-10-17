@@ -23,30 +23,30 @@ reused **proj4 2.22** converter:
 
 | Operation                | Backend     |  Node 24 |  Bun 1.4 | Chromium 156 |
 | ------------------------ | ----------- | -------: | -------: | -----------: |
-| WGS84 → UTM              | JavaScript  | **5.7×** | **3.6×** |     **4.6×** |
-|                          | WebAssembly | **9.7×** | **4.4×** |    **10.4×** |
-| UTM → WGS84              | JavaScript  | **5.3×** | **3.2×** |     **3.9×** |
-|                          | WebAssembly | **8.3×** | **4.5×** |     **9.0×** |
-| UTM → GeoJSON LineString | JavaScript  | **5.3×** | **3.1×** |     **3.9×** |
-|                          | WebAssembly | **7.5×** | **4.2×** |     **8.2×** |
+| WGS84 → UTM              | JavaScript  | **5.6×** | **3.6×** |     **4.6×** |
+|                          | WebAssembly | **9.4×** | **4.4×** |    **10.5×** |
+| UTM → WGS84              | JavaScript  | **5.3×** | **3.1×** |     **3.9×** |
+|                          | WebAssembly | **9.5×** | **5.2×** |    **10.5×** |
+| UTM → GeoJSON LineString | JavaScript  | **5.3×** | **3.1×** |     **3.7×** |
+|                          | WebAssembly | **8.2×** | **4.9×** |     **9.3×** |
 
 GCJ-02 against **gcoord 1.0.7**:
 
 | Operation      | Backend     |   Node 24 |   Bun 1.4 | Chromium 156 |
 | -------------- | ----------- | --------: | --------: | -----------: |
-| WGS84 → GCJ-02 | JavaScript  | **20.7×** | **15.9×** |     **7.7×** |
-|                | WebAssembly | **28.2×** | **23.0×** |    **19.5×** |
-| GCJ-02 → WGS84 | JavaScript  | **12.0×** | **11.8×** |     **7.3×** |
-|                | WebAssembly | **19.4×** | **15.9×** |    **16.1×** |
+| WGS84 → GCJ-02 | JavaScript  | **20.0×** | **15.9×** |     **7.5×** |
+|                | WebAssembly | **27.4×** | **23.0×** |    **19.4×** |
+| GCJ-02 → WGS84 | JavaScript  | **11.9×** | **11.6×** |     **7.5×** |
+|                | WebAssembly | **19.3×** | **15.8×** |    **16.2×** |
 
 UTM zone 50 with `geographic: GCJ02` against proj4 + gcoord:
 
 | Operation    | Backend     |   Node 24 |   Bun 1.4 | Chromium 156 |
 | ------------ | ----------- | --------: | --------: | -----------: |
-| UTM → GCJ-02 | JavaScript  | **14.6×** |  **9.9×** |     **7.4×** |
-|              | WebAssembly | **17.3×** | **12.1×** |    **13.0×** |
-| GCJ-02 → UTM | JavaScript  | **10.7×** |  **9.3×** |     **6.6×** |
-|              | WebAssembly | **16.4×** | **11.9×** |    **14.5×** |
+| UTM → GCJ-02 | JavaScript  | **14.5×** |  **9.8×** |     **7.5×** |
+|              | WebAssembly | **23.0×** | **15.7×** |    **17.4×** |
+| GCJ-02 → UTM | JavaScript  | **10.8×** |  **9.3×** |     **6.7×** |
+|              | WebAssembly | **16.2×** | **11.9×** |    **14.7×** |
 
 Timings vary with hardware, runtime and dataset. See the [full benchmark and reproduction commands](packages/fast-proj/README.md#benchmark).
 
