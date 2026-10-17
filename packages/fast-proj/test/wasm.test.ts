@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import vm from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
-import { gcj02, utm } from '../src/index.js';
+import { fusers } from '../src/geographic.js';
+import { GCJ02, gcj02, utm } from '../src/index.js';
 import { loadWasm } from '../src/wasm.js';
 
 const url = new URL('../dist/fast-proj.wasm', import.meta.url);
@@ -122,8 +123,37 @@ describe('loadWasm', () => {
     const ctx = await loadWasm({ source: module }).finally(() => spy.mockRestore());
     expect(ctx.backend).toBe('js');
     expect(ctx.utm({ zone: 33 }).fromLonLatPoint(15, 0)[0]).toBeCloseTo(500000, 6);
+    // Its gcj02() fuses with JavaScript projections like the root one.
+    const x = [440000, 449000.5, 600000];
+    const y = [4420000, 4430000, 3500000];
+    const fused = utm({ zone: 50, geographic: GCJ02 }).toLonLat(x, y);
+    const own = ctx.utm({ zone: 50, geographic: ctx.gcj02() });
+    const root = utm({ zone: 50, geographic: ctx.gcj02() });
+    expect(fusers.has(root.geographic!)).toBe(true);
+    expect(own.toLonLat(x, y)).toEqual(fused);
+    expect(root.toLonLat(x, y)).toEqual(fused);
+    expect(root.toLonLatPoint(x[0]!, y[0]!)).toEqual([fused.lon[0], fused.lat[0]]);
     ctx.dispose();
     expect(() => ctx.utm({ zone: 33 })).toThrow(/dispose/);
+    expect(() => root.toLonLat(x, y)).toThrow(/disposed/);
+    expect(() => root.toLonLatInterleaved([x[0]!, y[0]!])).toThrow(/disposed/);
+    expect(() => root.toLonLatPoint(x[0]!, y[0]!)).toThrow(/disposed/);
+  });
+
+  it('a root projection with a wasm geographic throws once disposed, outputs untouched', async () => {
+    const ctx = await loadWasm({ source: url });
+    const root = utm({ zone: 50, geographic: ctx.gcj02({ outsideChina: 'transform' }) });
+    // 'transform' runs the guarded JavaScript kernel, which fuses; the wasm kernel never does.
+    expect(fusers.has(root.geographic!)).toBe(true);
+    expect(fusers.has(ctx.gcj02())).toBe(false);
+    expect(root.toLonLatPoint(440000, 4420000)).toEqual(
+      utm({ zone: 50, geographic: gcj02({ outsideChina: 'transform' }) }).toLonLatPoint(440000, 4420000),
+    );
+    ctx.dispose();
+    const lon = new Float64Array(1);
+    const lat = new Float64Array(1);
+    expect(() => root.toLonLat([440000], [4420000], lon, lat)).toThrow(/disposed/);
+    expect([lon[0], lat[0]]).toEqual([0, 0]);
   });
 
   it('runs the JavaScript gcj02 kernel for modules without the wasm one', async () => {

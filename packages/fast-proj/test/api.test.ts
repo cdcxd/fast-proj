@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { GCJ02, GRS80, WGS84, gcj02, utm as jsUtm, utmFor, utmZoneFor } from '../src/index.js';
+import { fusers, tmInverses } from '../src/geographic.js';
+import { GCJ02, GRS80, WGS84, gcj02, tmerc as jsTmerc, utm as jsUtm, utmFor, utmZoneFor } from '../src/index.js';
 import type { Geographic, Projection } from '../src/index.js';
 import { loadWasm } from '../src/wasm.js';
 import { backends } from './backends.js';
@@ -7,6 +8,16 @@ import { backends } from './backends.js';
 const close = (a: ArrayLike<number>, b: ArrayLike<number>, tol: number) => {
   expect(a.length).toBe(b.length);
   for (let i = 0; i < a.length; i++) expect(Math.abs(a[i]! - b[i]!)).toBeLessThan(tol);
+};
+
+// Equal (NaN included) or within 3e-14 degrees, scaled to the latitude for a longitude.
+const sameOrUlp = (a: ArrayLike<number>, ref: ArrayLike<number>, lat?: ArrayLike<number>) => {
+  expect(a.length).toBe(ref.length);
+  for (let i = 0; i < a.length; i++) {
+    if (Object.is(a[i], ref[i])) continue;
+    const scale = lat ? Math.cos((lat[i]! * Math.PI) / 180) : 1;
+    expect(Math.abs(a[i]! - ref[i]!) * scale).toBeLessThan(3e-14);
+  }
 };
 
 // v moved by k units in the last place.
@@ -129,14 +140,52 @@ describe.each(backends)('$name backend geographic option', ({ utm, tmerc, gcj02:
       const w = base.toLonLat(xs, ys);
       const ref = geo.fromWgs84(w.lon, w.lat);
       const r = composed.toLonLat(xs, ys);
-      expect(Array.from(r.lon)).toEqual(Array.from(ref.lon));
-      expect(Array.from(r.lat)).toEqual(Array.from(ref.lat));
+      // The JavaScript GCJ-02 fuses x/y -> GCJ-02 into one pass, within an ulp of the two.
+      sameOrUlp(r.lon, ref.lon, ref.lat);
+      sameOrUlp(r.lat, ref.lat);
       const wb = geo.toWgs84(r.lon, r.lat);
       const fwd = base.fromLonLat(wb.lon, wb.lat);
       const back = composed.fromLonLat(r.lon, r.lat);
       expect(Array.from(back.x)).toEqual(Array.from(fwd.x));
       expect(Array.from(back.y)).toEqual(Array.from(fwd.y));
       expect(Number.isNaN(back.x[2]) && Number.isNaN(back.y[3])).toBe(true);
+    }
+  });
+
+  it('x/y -> GCJ-02 matches the two steps in every form, zone and mode', () => {
+    for (const geo of [g, make({ outsideChina: 'transform' })]) {
+      for (let zone = 1; zone <= 60; zone += 1) {
+        for (const south of [false, true]) {
+          const base = utm({ zone, south });
+          const composed = utm({ zone, south, geographic: geo });
+          const xy: number[] = [NaN, 3000000, 500000, Infinity, 500000, south ? 10000000 : 0];
+          for (let i = 0; i < 60; i++) {
+            xy.push(
+              150000 + ((i * 0.618034) % 1) * 700000,
+              (south ? 10000000 : 0) + ((i * 0.754878) % 1) * 9e6 * (south ? -1 : 1),
+            );
+          }
+          const ref = geo.fromWgs84Interleaved(base.toLonLatInterleaved(xy));
+          const n = xy.length / 2;
+          const r = composed.toLonLatInterleaved(xy);
+          expect(r.length).toBe(xy.length);
+          const sep = composed.toLonLat(
+            xy.filter((_, i) => i % 2 === 0),
+            xy.filter((_, i) => i % 2 === 1),
+          );
+          const pts = Array.from({ length: n }, (_, i) => composed.toLonLatPoint(xy[2 * i]!, xy[2 * i + 1]!));
+          for (const [lon, lat] of [
+            [r.filter((_, i) => i % 2 === 0), r.filter((_, i) => i % 2 === 1)],
+            [sep.lon, sep.lat],
+            [pts.map((q) => q[0]), pts.map((q) => q[1])],
+          ] as const) {
+            const refLon = ref.filter((_, i) => i % 2 === 0);
+            const refLat = ref.filter((_, i) => i % 2 === 1);
+            sameOrUlp(lon, refLon, refLat);
+            sameOrUlp(lat, refLat);
+          }
+        }
+      }
     }
   });
 
@@ -335,5 +384,67 @@ describe('root rules', () => {
 
   it('loadWasm rejects unknown options', async () => {
     await expect(loadWasm({ sorce: 'x' } as never)).rejects.toThrow(/unknown loadWasm\(\) option/);
+  });
+});
+
+describe('fused x/y -> GCJ-02', () => {
+  it('registers both halves and runs the fused builder', () => {
+    const a = jsUtm({ zone: 1 });
+    const b = jsUtm({ zone: 2 });
+    expect(tmInverses.get(a.toLonLat)?.lon0Deg).toBe(-177);
+    expect(tmInverses.get(b.toLonLat)?.lon0Deg).toBe(-171);
+    expect(fusers.has(GCJ02)).toBe(true);
+    expect(fusers.has(gcj02({ outsideChina: 'transform' }))).toBe(true);
+    // A copy is another object: correct, but two passes.
+    expect(fusers.has({ ...GCJ02 })).toBe(false);
+    // gcj02() hands out the shared GCJ02: restore its builder afterwards.
+    const g = gcj02();
+    const own = fusers.get(g)!;
+    const seen: number[] = [];
+    fusers.set(g, (t) => ({
+      batch(_a, _b, outA, outB, o1, step, end) {
+        seen.push(t.lon0Deg);
+        for (let j = 0; j < end; j += step) {
+          outA[j] = 1;
+          outB[j + o1] = 2;
+        }
+      },
+      point: (x, y) => [x + t.lon0Deg, y],
+    }));
+    try {
+      const p = jsUtm({ zone: 50, geographic: g });
+      expect(p.toLonLatPoint(0, 5)).toEqual([117, 5]);
+      expect(Array.from(p.toLonLat([0], [0]).lat)).toEqual([2]);
+      expect(Array.from(p.toLonLatInterleaved([0, 0]))).toEqual([1, 2]);
+      expect(seen).toEqual([117, 117]);
+    } finally {
+      fusers.set(g, own);
+    }
+  });
+
+  it('matches the two steps for other tmerc parameters', () => {
+    const geo = gcj02();
+    for (const opts of [
+      { centralMeridian: 117.5 },
+      { centralMeridian: 104.25, scaleFactor: 0.9999, falseEasting: 250000, falseNorthing: -1e6 },
+      { centralMeridian: 110.3, ellipsoid: { a: 6371000, f: 0 } },
+      { centralMeridian: 108, ellipsoid: { a: 6378245, f: 0.0099 } },
+    ]) {
+      const base = jsTmerc(opts);
+      const composed = jsTmerc({ ...opts, geographic: geo });
+      const xs: number[] = [];
+      const ys: number[] = [];
+      for (let i = 0; i < 500; i++) {
+        const [x, y] = base.fromLonLatPoint(74 + ((i * 0.618034) % 1) * 61, 18 + ((i * 0.754878) % 1) * 36);
+        xs.push(x);
+        ys.push(y);
+      }
+      const w = base.toLonLat(xs, ys);
+      const ref = geo.fromWgs84(w.lon, w.lat);
+      const r = composed.toLonLat(xs, ys);
+      expect(r.lon.length).toBe(500);
+      sameOrUlp(r.lon, ref.lon, ref.lat);
+      sameOrUlp(r.lat, ref.lat);
+    }
   });
 });

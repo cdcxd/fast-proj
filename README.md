@@ -43,8 +43,8 @@ UTM zone 50 with `geographic: GCJ02` against proj4 + gcoord:
 
 | Operation    | Backend     |   Node 24 |   Bun 1.4 | Chromium 156 |
 | ------------ | ----------- | --------: | --------: | -----------: |
-| UTM → GCJ-02 | JavaScript  | **12.9×** |  **9.0×** |     **5.5×** |
-|              | WebAssembly | **17.3×** | **12.1×** |    **13.2×** |
+| UTM → GCJ-02 | JavaScript  | **14.6×** |  **9.9×** |     **7.4×** |
+|              | WebAssembly | **17.3×** | **12.1×** |    **13.0×** |
 | GCJ-02 → UTM | JavaScript  | **10.7×** |  **9.3×** |     **6.6×** |
 |              | WebAssembly | **16.4×** | **11.9×** |    **14.5×** |
 

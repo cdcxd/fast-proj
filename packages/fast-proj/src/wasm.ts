@@ -9,7 +9,7 @@
 /// <reference lib="esnext.disposable" preserve="true" />
 import { checkEven, checkOptions, checkOut, checkSame } from './checks.js';
 import { type Gcj02Options, buildGcj02, gcj02Mode } from './gcj02.js';
-import { withGeographic } from './geographic.js';
+import { fusers, withGeographic } from './geographic.js';
 import { type TransverseMercatorOptions, parseTmerc, tmerc as jsTmerc } from './tmerc.js';
 import type { Geographic, TransverseMercator, Utm } from './types.js';
 import { type UtmOptions, parseUtm, utm as jsUtm } from './utm.js';
@@ -149,7 +149,8 @@ function getModule(source: Loadable): [Promise<WebAssembly.Module>, () => void] 
   return [promise, evict];
 }
 
-// Wraps a JavaScript converter so it throws once its context is disposed.
+// Wraps a JavaScript converter so it throws once its context is disposed. A wrapped geographic system keeps fusing
+// with JavaScript projections, checking per call.
 function guarded<T extends object>(conv: T, disposed: () => boolean): T {
   const guard = () => {
     if (disposed()) throw new Error('fast-proj: converter used after its wasm context was disposed');
@@ -158,7 +159,18 @@ function guarded<T extends object>(conv: T, disposed: () => boolean): T {
   for (const [k, v] of Object.entries(conv)) {
     out[k] = typeof v === 'function' ? (...args: unknown[]) => (guard(), v(...args)) : v;
   }
-  return Object.freeze(out) as T;
+  Object.freeze(out);
+  const fuse = fusers.get(conv as unknown as Geographic);
+  if (fuse) {
+    fusers.set(out as unknown as Geographic, (t) => {
+      const f = fuse(t);
+      return {
+        batch: (a, b, outA, outB, o1, step, end) => (guard(), f.batch(a, b, outA, outB, o1, step, end)),
+        point: (x, y) => (guard(), f.point(x, y)),
+      };
+    });
+  }
+  return out as T;
 }
 
 function jsContext(): WasmContext {

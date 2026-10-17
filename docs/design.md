@@ -172,9 +172,18 @@ utm({ zone: 50, geographic: GCJ02 }).toLonLatInterleaved(buf, buf); // UTM -> GC
 map.getSource('track').setData(lineString(buf));
 ```
 
-A fused UTM <-> GCJ-02 loop can reuse the tmerc step's sines and cosines in the GCJ-02 step (four fewer trigonometric
-calls per point); a prototype measured 9-25% faster UTM -> GCJ-02 and 0-11% faster GCJ-02 -> UTM (10k points). Not
-provided yet (#13); it would sit behind the `geographic` option. A `pipe()` helper can be added later without a break.
+Since 0.3.2 the JavaScript backend fuses x/y -> GCJ-02 into one loop when a JavaScript `tmerc`/`utm` has a built-in
+JavaScript GCJ-02 as its `geographic`. The GCJ-02 offset's sin/cos pairs come from the inverse's conformal latitude and
+longitude by angle addition, which saves four of the six trigonometric calls. That is 9-11% faster in Node and Bun and
+36-37% in Chromium for 10k points (28%, 14% and 48% for the point method), and within 3e-14° of the two passes,
+longitude scaled by cos(latitude) (except in `'transform'` mode poleward of about 87°, where one ulp of WGS84 latitude
+moves the two-pass longitude by up to degrees). `geographic.ts` holds two WeakMaps: tmerc registers its inverse
+constants under its `toLonLat`, and gcj02 registers a builder for its shared objects. So a `utm`-only bundle has no
+GCJ-02 code (0.2 KB gzip more). Both maps are keyed by identity, so a spread copy of a GCJ-02 object, a wasm projection
+or the wasm GCJ-02 kernel (passthrough mode) runs the two passes. The builder and its copy of the tmerc inverse come
+with GCJ-02: `utm` + `GCJ02` grows by 2.2 KB gzip, and a `GCJ02`-only bundle by 2 KB. GCJ-02 -> x/y stays two passes:
+fused, it could share only the latitude's sin/cos after the Newton steps, and measured 1% faster in Node, 5% slower in
+Bun and 13% faster in Chromium. A `pipe()` helper can be added later without a break.
 
 Rules that keep later additions non-breaking:
 

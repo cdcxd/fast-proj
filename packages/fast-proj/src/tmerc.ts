@@ -14,7 +14,7 @@
  */
 import { type Ellipsoid, WGS84, checkEllipsoid, tmSeries } from './ellipsoid.js';
 import { checkEven, checkNumber, checkOptions, checkOut, checkSame } from './checks.js';
-import { checkGeographic, withGeographic } from './geographic.js';
+import { checkGeographic, tmInverses, withGeographic } from './geographic.js';
 import type { Geographic, TransverseMercator } from './types.js';
 
 export interface TransverseMercatorOptions {
@@ -408,7 +408,7 @@ export function transverseMercator(
     }
   }
 
-  return {
+  const converter: TransverseMercator = {
     centralMeridian: lon0Deg,
     scaleFactor: k0,
     falseEasting: fe,
@@ -460,4 +460,25 @@ export function transverseMercator(
       return [rx, ry];
     },
   };
+  // Keyed by the method: each converter needs its own toLonLat closure, or the last one registered wins.
+  tmInverses.set(converter.toLonLat, {
+    lon0Deg,
+    lon0,
+    fe,
+    fn,
+    invKA,
+    bp0,
+    bp1,
+    bp2,
+    bp3,
+    b5,
+    b6,
+    dp0,
+    dp1,
+    dp2,
+    dp3,
+    d5,
+    d6,
+  });
+  return converter;
 }
