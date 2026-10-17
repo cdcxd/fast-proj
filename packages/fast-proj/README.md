@@ -46,37 +46,37 @@ proj4 2.22 `proj4(from, to)` converter.
 
 | Operation                | Implementation                                    | Node 24        | Bun 1.4        | Chromium 156    |
 | ------------------------ | ------------------------------------------------- | -------------- | -------------- | --------------- |
-| WGS84 → UTM              | proj4                                             | 5.26 ms        | 2.45 ms        | 5.62 ms         |
-|                          | `fromLonLat`, JavaScript                          | 0.93 ms (5.7×) | 0.68 ms (3.6×) | 1.23 ms (4.6×)  |
-|                          | `fromLonLat`, WebAssembly                         | 0.54 ms (9.7×) | 0.55 ms (4.4×) | 0.54 ms (10.4×) |
-| UTM → WGS84              | proj4                                             | 4.91 ms        | 2.55 ms        | 5.23 ms         |
-|                          | `toLonLat`, JavaScript                            | 0.93 ms (5.3×) | 0.80 ms (3.2×) | 1.34 ms (3.9×)  |
-|                          | `toLonLat`, WebAssembly                           | 0.59 ms (8.3×) | 0.57 ms (4.5×) | 0.58 ms (9.0×)  |
-| UTM → GeoJSON LineString | proj4                                             | 5.17 ms        | 2.84 ms        | 5.43 ms         |
-|                          | `toLonLatInterleaved` + `lineString`, JavaScript  | 0.97 ms (5.3×) | 0.90 ms (3.1×) | 1.40 ms (3.9×)  |
-|                          | `toLonLatInterleaved` + `lineString`, WebAssembly | 0.69 ms (7.5×) | 0.67 ms (4.2×) | 0.66 ms (8.2×)  |
+| WGS84 → UTM              | proj4                                             | 5.10 ms        | 2.44 ms        | 5.69 ms         |
+|                          | `fromLonLat`, JavaScript                          | 0.91 ms (5.6×) | 0.67 ms (3.6×) | 1.23 ms (4.6×)  |
+|                          | `fromLonLat`, WebAssembly                         | 0.54 ms (9.4×) | 0.55 ms (4.4×) | 0.54 ms (10.5×) |
+| UTM → WGS84              | proj4                                             | 4.83 ms        | 2.51 ms        | 5.27 ms         |
+|                          | `toLonLat`, JavaScript                            | 0.91 ms (5.3×) | 0.80 ms (3.1×) | 1.35 ms (3.9×)  |
+|                          | `toLonLat`, WebAssembly                           | 0.51 ms (9.5×) | 0.48 ms (5.2×) | 0.50 ms (10.5×) |
+| UTM → GeoJSON LineString | proj4                                             | 5.06 ms        | 2.81 ms        | 5.41 ms         |
+|                          | `toLonLatInterleaved` + `lineString`, JavaScript  | 0.96 ms (5.3×) | 0.90 ms (3.1×) | 1.47 ms (3.7×)  |
+|                          | `toLonLatInterleaved` + `lineString`, WebAssembly | 0.61 ms (8.2×) | 0.58 ms (4.9×) | 0.58 ms (9.3×)  |
 
 GCJ-02: points in eastern China, against gcoord 1.0.7's `transform`.
 
 | Operation      | Implementation           | Node 24         | Bun 1.4         | Chromium 156    |
 | -------------- | ------------------------ | --------------- | --------------- | --------------- |
-| WGS84 → GCJ-02 | gcoord                   | 9.86 ms         | 8.11 ms         | 6.89 ms         |
-|                | `fromWgs84`, JavaScript  | 0.48 ms (20.7×) | 0.51 ms (15.9×) | 0.90 ms (7.7×)  |
-|                | `fromWgs84`, WebAssembly | 0.35 ms (28.2×) | 0.35 ms (23.0×) | 0.35 ms (19.5×) |
-| GCJ-02 → WGS84 | gcoord                   | 14.09 ms        | 14.04 ms        | 11.60 ms        |
-|                | `toWgs84`, JavaScript    | 1.17 ms (12.0×) | 1.19 ms (11.8×) | 1.59 ms (7.3×)  |
-|                | `toWgs84`, WebAssembly   | 0.73 ms (19.4×) | 0.88 ms (15.9×) | 0.72 ms (16.1×) |
+| WGS84 → GCJ-02 | gcoord                   | 9.59 ms         | 8.13 ms         | 6.72 ms         |
+|                | `fromWgs84`, JavaScript  | 0.48 ms (20.0×) | 0.51 ms (15.9×) | 0.89 ms (7.5×)  |
+|                | `fromWgs84`, WebAssembly | 0.35 ms (27.4×) | 0.35 ms (23.0×) | 0.35 ms (19.4×) |
+| GCJ-02 → WGS84 | gcoord                   | 13.89 ms        | 13.86 ms        | 11.66 ms        |
+|                | `toWgs84`, JavaScript    | 1.17 ms (11.9×) | 1.19 ms (11.6×) | 1.55 ms (7.5×)  |
+|                | `toWgs84`, WebAssembly   | 0.72 ms (19.3×) | 0.88 ms (15.8×) | 0.72 ms (16.2×) |
 
 UTM ↔ GCJ-02: `utm({ zone: 50, geographic: GCJ02 })`, against proj4 then gcoord (or gcoord then proj4).
 
 | Operation    | Implementation            | Node 24         | Bun 1.4         | Chromium 156    |
 | ------------ | ------------------------- | --------------- | --------------- | --------------- |
-| UTM → GCJ-02 | proj4 + gcoord            | 16.19 ms        | 11.10 ms        | 12.29 ms        |
-|              | `toLonLat`, JavaScript    | 1.11 ms (14.6×) | 1.12 ms (9.9×)  | 1.65 ms (7.4×)  |
-|              | `toLonLat`, WebAssembly   | 0.93 ms (17.3×) | 0.92 ms (12.1×) | 0.95 ms (13.0×) |
-| GCJ-02 → UTM | proj4 + gcoord            | 20.59 ms        | 17.10 ms        | 18.11 ms        |
-|              | `fromLonLat`, JavaScript  | 1.92 ms (10.7×) | 1.84 ms (9.3×)  | 2.76 ms (6.6×)  |
-|              | `fromLonLat`, WebAssembly | 1.26 ms (16.4×) | 1.44 ms (11.9×) | 1.25 ms (14.5×) |
+| UTM → GCJ-02 | proj4 + gcoord            | 16.09 ms        | 10.97 ms        | 12.15 ms        |
+|              | `toLonLat`, JavaScript    | 1.11 ms (14.5×) | 1.12 ms (9.8×)  | 1.62 ms (7.5×)  |
+|              | `toLonLat`, WebAssembly   | 0.70 ms (23.0×) | 0.70 ms (15.7×) | 0.70 ms (17.4×) |
+| GCJ-02 → UTM | proj4 + gcoord            | 20.49 ms        | 17.04 ms        | 18.27 ms        |
+|              | `fromLonLat`, JavaScript  | 1.89 ms (10.8×) | 1.83 ms (9.3×)  | 2.75 ms (6.7×)  |
+|              | `fromLonLat`, WebAssembly | 1.26 ms (16.2×) | 1.43 ms (11.9×) | 1.25 ms (14.7×) |
 
 The interleaved variants run at the same speed as the array form. Single-point methods use the JavaScript kernel in
 both backends. Single runs: `node bench/run.mts`, `bun bench/run.mts`, `node bench/run.mts --browser` (needs
