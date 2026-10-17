@@ -17,7 +17,7 @@ use core::arch::wasm32::{
     v128_or, v128_xor,
 };
 
-use crate::simd::{load_pair, store_pair, vatan, vatan2, vatan_q, vexp_eo, vlog1p, vsincos, vsincos_eo};
+use crate::simd::{load_pair, store_pair, vatan2, vatan_q, vexp_eo, vlog1p_eo, vsincos_eo};
 
 #[inline]
 fn spl(x: f64) -> v128 {
@@ -64,22 +64,13 @@ pub fn splat_k(k: &K) -> KS {
     }
 }
 
-/// `poly6` as two interleaved Horner chains in p^2.
+/// c[0] + c[1] p + ... + c[5] p^5, as two interleaved Horner chains in p^2.
 #[inline]
 fn poly6_eo(p: v128, c: &[v128; 6]) -> v128 {
     let p2 = f64x2_mul(p, p);
     let e = f64x2_add(c[0], f64x2_mul(p2, f64x2_add(c[2], f64x2_mul(p2, c[4]))));
     let o = f64x2_add(c[1], f64x2_mul(p2, f64x2_add(c[3], f64x2_mul(p2, c[5]))));
     f64x2_add(e, f64x2_mul(p, o))
-}
-
-#[inline]
-fn poly6(p: v128, c: &[v128; 6]) -> v128 {
-    let mut r = f64x2_add(c[4], f64x2_mul(p, c[5]));
-    r = f64x2_add(c[3], f64x2_mul(p, r));
-    r = f64x2_add(c[2], f64x2_mul(p, r));
-    r = f64x2_add(c[1], f64x2_mul(p, r));
-    f64x2_add(c[0], f64x2_mul(p, r))
 }
 
 /// Per-32-bit-lane-all-ones mask when the f64 lane is finite.
@@ -99,9 +90,9 @@ pub fn forward2(mut lon: v128, lat: v128, q: &KS) -> (v128, v128) {
     }
     let lam = f64x2_sub(f64x2_mul(lon, q.d2r), q.lon0);
 
-    let (sp, cp) = vsincos(phi);
+    let (sp, cp) = vsincos_eo(phi);
     let p = f64x2_sub(spl(2.0), f64x2_mul(spl(4.0), f64x2_mul(sp, sp)));
-    let q1 = poly6(p, &q.cp);
+    let q1 = poly6_eo(p, &q.cp);
     let dchi = f64x2_mul(f64x2_mul(f64x2_add(sp, sp), cp), q1);
     let dd = f64x2_mul(dchi, dchi);
     let sd = f64x2_mul(
@@ -118,7 +109,7 @@ pub fn forward2(mut lon: v128, lat: v128, q: &KS) -> (v128, v128) {
     let sc = f64x2_add(f64x2_mul(sp, cd), f64x2_mul(cp, sd));
     let cc = f64x2_sub(f64x2_mul(cp, cd), f64x2_mul(sp, sd));
 
-    let (sl, cl) = vsincos(lam);
+    let (sl, cl) = vsincos_eo(lam);
     // !(cl > 1e-15) -> NaN pair (mirrors the early return in the TS kernel)
     let bad = v128_xor(f64x2_gt(cl, spl(1e-15)), i64x2_splat(-1));
 
@@ -130,10 +121,10 @@ pub fn forward2(mut lon: v128, lat: v128, q: &KS) -> (v128, v128) {
     let ccl1 = f64x2_extract_lane::<1>(ccl);
     let xip = if ccl0 > 0.0 && ccl1 > 0.0 {
         // every lane in-domain: atan alone matches atan2 for x > 0
-        vatan(f64x2_div(sc, ccl))
+        vatan_q(sc, ccl)
     } else {
         v128_bitselect(
-            vatan(f64x2_div(sc, ccl)),
+            vatan_q(sc, ccl),
             vatan2(sc, ccl),
             f64x2_gt(ccl, spl(0.0)),
         )
@@ -144,7 +135,7 @@ pub fn forward2(mut lon: v128, lat: v128, q: &KS) -> (v128, v128) {
     let sh0 = f64x2_extract_lane::<0>(she);
     let sh1 = f64x2_extract_lane::<1>(she);
     let etap = if sh0 > -1024.0 && sh0 < 1024.0 && sh1 > -1024.0 && sh1 < 1024.0 {
-        vlog1p(f64x2_add(
+        vlog1p_eo(f64x2_add(
             she,
             f64x2_div(f64x2_mul(she, she), f64x2_add(ir, spl(1.0))),
         ))

@@ -215,6 +215,11 @@ fn vexp_p<const EO: bool>(x: v128) -> v128 {
 /// log for positive normals; mantissa normalized into [sqrt(0.5), sqrt(2)),
 /// the L fit domain.
 pub fn vlog(x: v128) -> v128 {
+    vlog_p::<false>(x)
+}
+
+#[inline(always)]
+fn vlog_p<const EO: bool>(x: v128) -> v128 {
     let e_i = i64x2_sub(
         v128_and(u64x2_shr(x, 52), i64x2_splat(0x7ff)),
         i64x2_splat(1023),
@@ -236,7 +241,7 @@ pub fn vlog(x: v128) -> v128 {
         f64x2_add(
             f64x2_add(
                 f64x2_mul(spl(2.0), s),
-                f64x2_mul(f64x2_mul(spl(2.0), t), f64x2_mul(s, poly(t, &L))),
+                f64x2_mul(f64x2_mul(spl(2.0), t), f64x2_mul(s, poly_p::<EO>(t, &L))),
             ),
             f64x2_mul(ef, spl(LN2_HI)),
         ),
@@ -265,6 +270,17 @@ fn i64x2_extract_lane1(v: v128) -> i64 {
 
 /// log1p(t) for t in [-0.75, 2048]; ~1 ulp.
 pub fn vlog1p(t: v128) -> v128 {
+    vlog1p_p::<false>(t)
+}
+
+/// `vlog1p` with `poly_eo`.
+#[inline(always)]
+pub fn vlog1p_eo(t: v128) -> v128 {
+    vlog1p_p::<true>(t)
+}
+
+#[inline(always)]
+fn vlog1p_p<const EO: bool>(t: v128) -> v128 {
     let at = f64x2_abs(t);
     let small = f64x2_lt(at, spl(f64::from_bits(0x3CA0000000000000))); // 2^-53
     let mid = f64x2_le(at, spl(0.25));
@@ -273,19 +289,19 @@ pub fn vlog1p(t: v128) -> v128 {
     let a0 = core::arch::wasm32::f64x2_extract_lane::<0>(at);
     let a1 = core::arch::wasm32::f64x2_extract_lane::<1>(at);
     if a0 > 0.25 && a1 > 0.25 {
-        return vlog(f64x2_add(spl(1.0), t));
+        return vlog_p::<EO>(f64x2_add(spl(1.0), t));
     }
     // s = t/(2+t) in [-1/7, 1/9], inside the L fit domain
     let s = f64x2_div(t, f64x2_add(spl(2.0), t));
     let s2 = f64x2_mul(s, s);
     let lm = f64x2_add(
         f64x2_mul(spl(2.0), s),
-        f64x2_mul(f64x2_mul(spl(2.0), s2), f64x2_mul(s, poly(s2, &L))),
+        f64x2_mul(f64x2_mul(spl(2.0), s2), f64x2_mul(s, poly_p::<EO>(s2, &L))),
     );
     if a0 <= 0.25 && a1 <= 0.25 {
         return v128_bitselect(t, lm, small);
     }
-    let lg = vlog(f64x2_add(spl(1.0), t));
+    let lg = vlog_p::<EO>(f64x2_add(spl(1.0), t));
     let base = v128_bitselect(lm, lg, mid);
     v128_bitselect(t, base, small)
 }
