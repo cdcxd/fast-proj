@@ -180,10 +180,12 @@ longitude scaled by cos(latitude) (except in `'transform'` mode poleward of abou
 moves the two-pass longitude by up to degrees). `geographic.ts` holds two WeakMaps: tmerc registers its inverse
 constants under its `toLonLat`, and gcj02 registers a builder for its shared objects. So a `utm`-only bundle has no
 GCJ-02 code (0.2 KB gzip more). Both maps are keyed by identity, so a spread copy of a GCJ-02 object, a wasm projection
-or the wasm GCJ-02 kernel (passthrough mode) runs the two passes. The builder and its copy of the tmerc inverse come
-with GCJ-02: `utm` + `GCJ02` grows by 2.2 KB gzip, and a `GCJ02`-only bundle by 2 KB. GCJ-02 -> x/y stays two passes:
-fused, it could share only the latitude's sin/cos after the Newton steps, and measured 1% faster in Node, 5% slower in
-Bun and 13% faster in Chromium. A `pipe()` helper can be added later without a break.
+or the wasm GCJ-02 kernel (passthrough mode) runs the two passes. The builder (`gcj02-fused.ts`) and its copy of the
+tmerc inverse come with GCJ-02: `utm` + `GCJ02` grows by 2.4 KB gzip, and a `GCJ02`-only bundle by 2.2 KB. Its constants
+are shared from `gcj02-constants.ts` and bound to each module's own consts: V8 reads an imported const slower, 12% on
+`fromWgs84` in unbundled Node. GCJ-02 -> x/y stays two passes: fused, it could share only the latitude's sin/cos after
+the Newton steps, and measured 1% faster in Node, 5% slower in Bun and 13% faster in Chromium. A `pipe()` helper can be
+added later without a break.
 
 Rules that keep later additions non-breaking:
 

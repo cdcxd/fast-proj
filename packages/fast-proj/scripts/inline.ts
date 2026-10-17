@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const src = join(dirname(fileURLToPath(import.meta.url)), '../src');
-const FILES = ['tmerc.ts', 'gcj02.ts'];
+const FILES = ['tmerc.ts', 'gcj02.ts', 'gcj02-fused.ts'];
 
 type Kernel = { params: string[]; body: string[] };
 
