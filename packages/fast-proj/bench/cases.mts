@@ -218,3 +218,70 @@ export function runComposedCases(
   }
   return rows;
 }
+
+// Web Mercator, points over eastern China (both sides of 45°N), against proj4's EPSG:3857. `backends` maps column name
+// to a converter.
+export function runMercatorCases(
+  proj4: (from: string, to: string) => { forward(point: unknown): unknown; inverse(point: unknown): unknown },
+  backends: Record<string, Projection>,
+  { n = 10000, runs = 31, reps = 5 }: BenchOptions = {},
+): BenchRow[] {
+  const lon = new Float64Array(n);
+  const lat = new Float64Array(n);
+  const ll = new Float64Array(2 * n);
+  const xs = new Float64Array(n);
+  const ys = new Float64Array(n);
+  const xy = new Float64Array(2 * n);
+  const merc = proj4('EPSG:4326', 'EPSG:3857');
+  for (let i = 0; i < n; i++) {
+    lon[i] = ll[2 * i] = 100 + ((i * 7919) % n) * (30 / n);
+    lat[i] = ll[2 * i + 1] = 20 + ((i * 104729) % n) * (30 / n);
+    const p = merc.forward([lon[i], lat[i]]) as number[];
+    xs[i] = xy[2 * i] = p[0]!;
+    ys[i] = xy[2 * i + 1] = p[1]!;
+  }
+  const a = new Float64Array(n);
+  const b = new Float64Array(n);
+  const out = new Float64Array(2 * n);
+  const baselines: Record<string, () => void> = {
+    'WGS84 → Web Mercator': () => {
+      for (let i = 0; i < n; i++) merc.forward([lon[i], lat[i]]);
+    },
+    'Web Mercator → WGS84': () => {
+      for (let i = 0; i < n; i++) merc.inverse([xs[i], ys[i]]);
+    },
+  };
+  const cases = (conv: Projection | null): [string, string, () => void][] => [
+    [
+      'WGS84 → Web Mercator',
+      'fromLonLatPoint',
+      () => {
+        for (let i = 0; i < n; i++) conv!.fromLonLatPoint(lon[i]!, lat[i]!);
+      },
+    ],
+    ['WGS84 → Web Mercator', 'fromLonLat (output buffers)', () => conv!.fromLonLat(lon, lat, a, b)],
+    ['WGS84 → Web Mercator', 'fromLonLatInterleaved (output buffer)', () => conv!.fromLonLatInterleaved(ll, out)],
+    [
+      'Web Mercator → WGS84',
+      'toLonLatPoint',
+      () => {
+        for (let i = 0; i < n; i++) conv!.toLonLatPoint(xs[i]!, ys[i]!);
+      },
+    ],
+    ['Web Mercator → WGS84', 'toLonLat (output buffers)', () => conv!.toLonLat(xs, ys, a, b)],
+    ['Web Mercator → WGS84', 'toLonLatInterleaved (output buffer)', () => conv!.toLonLatInterleaved(xy, out)],
+  ];
+  const baseMs = Object.fromEntries(Object.entries(baselines).map(([k, fn]) => [k, time(fn, runs, reps)]));
+  const rows: BenchRow[] = cases(null).map(([direction, method]) => ({
+    direction,
+    method,
+    base: baseMs[direction]!,
+    ms: {},
+  }));
+  for (const [name, conv] of Object.entries(backends)) {
+    cases(conv).forEach(([, , fn], i) => {
+      rows[i]!.ms[name] = time(fn, runs, reps);
+    });
+  }
+  return rows;
+}

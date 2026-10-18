@@ -80,6 +80,17 @@ UTM ↔ GCJ-02: `utm({ zone: 50, geographic: GCJ02 })`, against proj4 then gcoor
 |              | `fromLonLat`, JavaScript  | 1.89 ms (10.8×) | 1.83 ms (9.3×)  | 2.75 ms (6.7×)  |
 |              | `fromLonLat`, WebAssembly | 1.26 ms (16.2×) | 1.43 ms (11.9×) | 1.25 ms (14.7×) |
 
+Web Mercator: `webMercator()`, points in eastern China, against proj4's `EPSG:3857`.
+
+| Operation            | Implementation            | Node 24         | Bun 1.4        | Chromium 156    |
+| -------------------- | ------------------------- | --------------- | -------------- | --------------- |
+| WGS84 → Web Mercator | proj4                     | 3.60 ms         | 0.76 ms        | 2.81 ms         |
+|                      | `fromLonLat`, JavaScript  | 0.46 ms (7.8×)  | 0.40 ms (1.9×) | 0.56 ms (5.0×)  |
+|                      | `fromLonLat`, WebAssembly | 0.26 ms (13.9×) | 0.25 ms (3.0×) | 0.26 ms (10.8×) |
+| Web Mercator → WGS84 | proj4                     | 3.77 ms         | 0.69 ms        | 2.95 ms         |
+|                      | `toLonLat`, JavaScript    | 0.38 ms (9.9×)  | 0.29 ms (2.4×) | 0.44 ms (6.7×)  |
+|                      | `toLonLat`, WebAssembly   | 0.22 ms (17.2×) | 0.21 ms (3.3×) | 0.22 ms (13.4×) |
+
 The interleaved variants run at the same speed as the array form. Single-point methods use the JavaScript kernel in
 both backends. Single runs: `node bench/run.mts`, `bun bench/run.mts`, `node bench/run.mts --browser` (needs
 `bunx playwright install chromium`).

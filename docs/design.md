@@ -311,5 +311,5 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
   y at 89.9999999999°), so y stays within three ulps up to the poles. The wasm kernel (`wm_forward_batch` /
   `wm_inverse_batch`) writes asinh(tan φ) as log1p of one quotient of positive terms, and sinh(y/R) as a Taylor series
   below 1/4 and from exp above; y agrees with JavaScript within 7.5e-9 m below 2^25 m, the inherent rounding of y/R
-  scaled by R. It measured 1.8× the JavaScript kernel in both directions on Node. Its composition with GCJ-02 runs the
+  scaled by R. It measured 1.3–2.1× the JavaScript kernel's batch methods (Node, Bun, Chromium). Its composition with GCJ-02 runs the
   two passes; a fused kernel waits for a measured gain.
