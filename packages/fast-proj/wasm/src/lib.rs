@@ -1,12 +1,13 @@
 //! Crate root: module wiring and the C-ABI surface (the transverse Mercator
 //! batch exports with scalar/simd dispatch, the GCJ-02 batch exports, and the
-//! fused x/y -> GCJ-02 export).
+//! fused x/y -> GCJ-02 export, and the Web Mercator batch exports).
 //!
 //! Layout: `math` (coefficients/constants + libm scalar wrappers), `simd`
 //! (f64x2 vector math, +simd128 only), `kernel` (UTM series + scalar
 //! kernel), `vkernel` (f64x2 kernel, +simd128 only), `gcj` (GCJ-02 constants
 //! and scalar reference), `vgcj` (f64x2 GCJ-02 kernel, +simd128 only),
-//! `vfused` (f64x2 inverse fused with GCJ-02, +simd128 only), `alloc` (bump
+//! `vfused` (f64x2 inverse fused with GCJ-02, +simd128 only), `vwebmerc` (f64x2
+//! Web Mercator kernel, +simd128 only), `alloc` (bump
 //! arena), `smoke` (math smoke exports), `tests` (host tests).
 #![cfg_attr(not(test), no_std)]
 #![allow(static_mut_refs)]
@@ -27,6 +28,8 @@ mod vfused;
 mod vgcj;
 #[cfg(target_feature = "simd128")]
 mod vkernel;
+#[cfg(target_feature = "simd128")]
+mod vwebmerc;
 
 // ---------------------------------------------------------------------------
 // Pointer helpers and the feature probe
@@ -172,6 +175,28 @@ pub unsafe extern "C" fn tm_gcj_batch(
 ) {
     let k = kernel::make_k_tm(a, f, lon0, k0, feast, fnorth);
     unsafe { vfused::tm_gcj_batch(r(xp, n), r(yp, n), w(lonp, n), w(latp, n), &k, lon0) }
+}
+
+// ---------------------------------------------------------------------------
+// Web Mercator batch exports (simd128 only, like GCJ-02)
+// ---------------------------------------------------------------------------
+
+/// # Safety
+/// Each pointer must be non-null and aligned, even when `n` is 0, and address `n` valid f64s; outputs must not
+/// overlap any other buffer.
+#[cfg(target_feature = "simd128")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn wm_forward_batch(lonp: *const f64, latp: *const f64, xp: *mut f64, yp: *mut f64, n: usize) {
+    unsafe { vwebmerc::forward_batch(r(lonp, n), r(latp, n), w(xp, n), w(yp, n)) }
+}
+
+/// # Safety
+/// Each pointer must be non-null and aligned, even when `n` is 0, and address `n` valid f64s; outputs must not
+/// overlap any other buffer.
+#[cfg(target_feature = "simd128")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn wm_inverse_batch(xp: *const f64, yp: *const f64, lonp: *mut f64, latp: *mut f64, n: usize) {
+    unsafe { vwebmerc::inverse_batch(r(xp, n), r(yp, n), w(lonp, n), w(latp, n)) }
 }
 
 #[cfg(not(test))]

@@ -1,6 +1,6 @@
 # fast-proj 0.1 design
 
-Status: accepted, implemented in 0.1 (except `webMercator` and `gcj02`, whose names and shapes are fixed here for later; `gcj02` is added in 0.2). See [Implementation notes](#implementation-notes) for where 0.1 refines this proposal.
+Status: accepted, implemented in 0.1 (except `webMercator` and `gcj02`, whose names and shapes are fixed here for later; `gcj02` is added in 0.2, `webMercator` in 0.4). See [Implementation notes](#implementation-notes) for where 0.1 refines this proposal.
 
 Updated for 0.3, the one breaking release before 1.0: `Geographic` systems and the `geographic` projection option,
 spelled-out transverse Mercator parameters, and context-only disposal; see the
@@ -304,3 +304,12 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
   `'transform'` mode iterates until converged instead and gives `NaN` where it doesn't. That per-point step count
   doesn't fit the fixed-step f64x2 kernel, so it stays JavaScript; the kernel masks the extra steps near 105° per lane,
   so each point takes the steps the JavaScript loop would.
+- `webMercator` (0.4) returns a new frozen `Projection` per call, like `tmerc`; there is no `WebMercator` subtype yet, so
+  one with readonly properties can be added later. It doesn't clamp at ±85.05° (a rendering decision that would break
+  round trips) and gives `NaN` at the poles, where `tan(pi/2)` rounds to a finite but meaningless 1.6e16. Poleward of
+  45° both kernels start from the colatitude, which is exact there: φ in radians loses digits near π/2 (about 640 m of
+  y at 89.9999999999°), so y stays within three ulps up to the poles. The wasm kernel (`wm_forward_batch` /
+  `wm_inverse_batch`) writes asinh(tan φ) as log1p of one quotient of positive terms, and sinh(y/R) as a Taylor series
+  below 1/4 and from exp above; y agrees with JavaScript within 7.5e-9 m below 2^25 m, the inherent rounding of y/R
+  scaled by R. It measured 1.8× the JavaScript kernel in both directions on Node. Its composition with GCJ-02 runs the
+  two passes; a fused kernel waits for a measured gain.

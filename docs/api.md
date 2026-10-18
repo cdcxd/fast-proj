@@ -1,7 +1,7 @@
 # fast-proj API
 
 ```ts
-import { GCJ02, gcj02, tmerc, utm, utmFor, utmZoneFor, WGS84, GRS80 } from 'fast-proj';
+import { GCJ02, gcj02, tmerc, utm, utmFor, utmZoneFor, webMercator, WGS84, GRS80 } from 'fast-proj';
 import { positions, lineString, latLngs } from 'fast-proj/geojson';
 import { loadWasm } from 'fast-proj/wasm';
 ```
@@ -17,6 +17,7 @@ or re-entering one throws a plain `Error`. Messages start with `fast-proj:`.
 - [The hub: WGS84 longitude/latitude](#the-hub-wgs84-longitudelatitude)
 - [`utm(options)`](#utmoptions)
 - [`tmerc(options)`](#tmercoptions)
+- [`webMercator(options)`](#webmercatoroptions)
 - [`GCJ02` and `gcj02(options)`](#gcj02-and-gcj02options)
 - [Converter methods](#converter-methods)
 - [Buffers and aliasing](#buffers-and-aliasing)
@@ -34,7 +35,7 @@ or re-entering one throws a plain `Error`. Messages start with `fast-proj:`.
 
 Every converter is defined relative to one hub: WGS84 longitude/latitude in degrees, longitude in [-180, 180].
 
-- **Projections** (`Projection`: `utm`, `tmerc`, and later others) convert projected x/y ↔ longitude/latitude with
+- **Projections** (`Projection`: `utm`, `tmerc`, `webMercator`) convert projected x/y ↔ longitude/latitude with
   `toLonLat` / `fromLonLat`. That longitude/latitude is WGS84, or the projection's `geographic` system when one is
   given.
 - **Geographic systems** (`Geographic`: `GCJ02`) convert their own longitude/latitude ↔ WGS84 with `toWgs84` /
@@ -113,6 +114,45 @@ projection borrows it: a `geographic` from a wasm context works only while that 
 
 Throws `RangeError` for a non-finite option, `scaleFactor <= 0` or an unsupported ellipsoid. A latitude of origin other
 than 0 (`+lat_0`, e.g. the British National Grid) is not supported yet and throws `RangeError`.
+
+## `webMercator(options)`
+
+Web Mercator (EPSG:3857), the projection of web map tiles: the spherical Mercator on a sphere of radius R = 6378137 m
+(WGS84's semi-major axis), applied to WGS84 longitude/latitude.
+
+```ts
+function webMercator(options?: WebMercatorOptions): Projection;
+
+interface WebMercatorOptions {
+  geographic?: Geographic; // lon/lat system of toLonLat/fromLonLat, default WGS84
+}
+```
+
+- **Formulas.** x = R λ, y = R asinh(tan φ), the same as R ln tan(π/4 + φ/2). The square tile world spans ±πR =
+  ±20037508.342789244 m in x and y. Its latitude limit is ±85.0511287798066° (atan(sinh π)).
+- **No clamping.** Latitudes beyond ±85.0511° project to |y| > πR, as in proj4 and PROJ. Clamp before projecting if a
+  renderer needs the square. Latitudes of ±90° or beyond give `NaN`: the poles have no finite y.
+- **Inverse.** x wraps: x beyond ±πR, such as tiles of a repeated world, gives longitudes reduced to [-180, 180], and ±πR
+  gives ±180 exactly. Latitude saturates at ±90° for large finite |y|. Beyond about 2.4e8 m it is exactly ±90°, which
+  `fromLonLat` maps to `NaN`.
+- **Non-finite input.** `NaN` and `Infinity` give `NaN`.
+- **Accuracy.** x is within 4e-9 m of a 40-digit reference. y is within three ulps of it (relative 7e-16), including
+  near the poles. The inverse is within 3e-14°. Agrees with proj4's EPSG:3857 within 1e-8 m.
+- **Errors.** Throws `TypeError` for an unknown option or a `geographic` without the six methods.
+
+### Map tiles in China
+
+AMap and Tencent tiles are Web Mercator of **GCJ-02** longitude/latitude. `webMercator({ geographic: GCJ02 })` is not
+their grid: its x/y stay on the WGS84 grid (x/y ↔ WGS84 ↔ GCJ-02), and only its longitude/latitude side is GCJ-02. For
+those tiles, chain the two converters:
+
+```ts
+const merc = webMercator();
+merc.fromLonLatInterleaved(gcj, out); // GCJ-02 lon/lat -> AMap/Tencent x/y
+GCJ02.fromWgs84Interleaved(buf, buf); // WGS84 (GPS) -> GCJ-02 ...
+merc.fromLonLatInterleaved(buf, buf); // ... -> AMap/Tencent x/y
+merc.toLonLatInterleaved(xy, xy); // AMap/Tencent x/y -> GCJ-02 lon/lat
+```
 
 ## `GCJ02` and `gcj02(options)`
 
@@ -241,6 +281,7 @@ interface WasmContext extends Disposable {
   readonly backend: 'wasm' | 'js';
   tmerc(options: TransverseMercatorOptions): TransverseMercator;
   utm(options: UtmOptions): Utm;
+  webMercator(options?: WebMercatorOptions): Projection;
   gcj02(options?: Gcj02Options): Geographic;
   dispose(): void;
 }
@@ -274,12 +315,15 @@ wasm.dispose(); // or: using wasm = await loadWasm();
   and the result back (about 0.17 ns per point). There is no zero-copy access to wasm memory.
 - **GCJ-02.** The context's `gcj02()` batch methods run the wasm kernel in `'passthrough'` mode (about 1.9–4×
   the JavaScript kernel); `'transform'` mode runs the JavaScript kernel. Each context returns one converter per mode.
+- **Web Mercator.** `webMercator()` batch methods run a wasm kernel. With a `source` older than 0.4.0, which has no
+  such kernel, they run the JavaScript one and `backend` still reports `wasm`.
 - **Single points.** `toLonLatPoint`/`fromLonLatPoint` and `toWgs84Point`/`fromWgs84Point` run the JavaScript kernel:
   passing one point into wasm costs more than computing it.
 - **Re-entrancy.** Calling the same context from inside an array-like getter during a batch call throws.
 - **Accuracy contract.** Batch results match the JavaScript backend within 4e-9 m and 6e-14° (longitude differences
   scaled by cos(latitude)), not bit for bit. Coordinates above 2^25 m (about 33,554 km, such as Gauss–Krüger eastings
-  with a zone prefix) can differ by one ulp of the output, 7.5e-9 m.
+  with a zone prefix) can differ by one ulp of the output, 7.5e-9 m. Web Mercator y comes from y / R and so can
+  differ by up to 7.5e-9 m below 2^25 m (latitude ±89.4°), and by two ulps above.
 - **Composed accuracy.** A projection with a `geographic` system holds the same bound, except where the geographic
   system amplifies a one-ulp difference in the projection's WGS84 result. For GCJ-02 that is:
   - WGS84 longitude within 1e-11° of 105°, the formula's √|x| cusp: one ulp there moves GCJ-02 latitude by about
@@ -294,6 +338,8 @@ wasm.dispose(); // or: using wasm = await loadWasm();
   Standalone `gcj02()` converters agree at the box edges; the jumps come only from the projection step in front.
 
 ## Domain and accuracy
+
+For `tmerc` and `utm`; see [`webMercator`](#webmercatoroptions) for its own domain and accuracy.
 
 - **Accuracy** for terrestrial ellipsoids, within 30° of the central meridian, all latitudes including the poles: at
   most 4e-9 m forward (6e-9 m for longitudes near ±180°, where one ulp of the input longitude is already 3e-9 m) and

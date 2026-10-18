@@ -1,12 +1,13 @@
 # fast-proj
 
-Fast batch coordinate conversions for JavaScript and TypeScript: UTM and transverse Mercator ↔ WGS84, and WGS84 ↔
-GCJ-02 for maps of China, with typed-array APIs and an optional WebAssembly backend.
+Fast batch coordinate conversions for JavaScript and TypeScript: UTM, transverse Mercator and Web Mercator ↔ WGS84,
+and WGS84 ↔ GCJ-02 for maps of China, with typed-array APIs and an optional WebAssembly backend.
 
 - Krüger series to 6th order (Karney 2011). Accuracy: ≤4e-9 m (6e-9 m near ±180°) / 1e-13° vs an exact reference;
   ≈6e-9 m / 1.3e-13° vs proj4.
 - GCJ-02: the published formula, 4–13× faster than gcoord (11–26× with WebAssembly); the inverse is accurate to 3e-12°
   (gcoord: 1e-6°).
+- Web Mercator (EPSG:3857): within three ulps of an exact reference up to the poles; no clamping at ±85.05°.
 - No per-point allocations in the batch APIs; optional output buffers, in-place conversion.
 - No dependencies, ESM-only, tree-shakeable. Node ≥ 20 and modern browsers.
 
@@ -15,7 +16,7 @@ npm install fast-proj
 ```
 
 ```ts
-import { GCJ02, tmerc, utm, utmFor } from 'fast-proj';
+import { GCJ02, tmerc, utm, utmFor, webMercator } from 'fast-proj';
 import { lineString } from 'fast-proj/geojson';
 
 const zone33 = utm({ zone: 33 }); // or utm(utmFor(lon, lat))
@@ -27,13 +28,14 @@ map.getSource('track').setData(lineString(xy)); // MapLibre
 const gk = tmerc({ centralMeridian: 117, falseEasting: 500000 }); // Gauss-Krüger, CM 117E
 utm({ zone: 50, geographic: GCJ02 }).toLonLatInterleaved(xy, xy); // UTM -> GCJ-02 for AMap/Tencent basemaps
 GCJ02.fromWgs84Interleaved(lonlat, lonlat); // WGS84 -> GCJ-02, in place
+webMercator().fromLonLatInterleaved(lonlat, lonlat); // lon/lat -> EPSG:3857 x/y (on GCJ-02 lon/lat: AMap tiles)
 
 import { loadWasm } from 'fast-proj/wasm'; // opt-in, ~31 kB
 const wasm = await loadWasm();
 wasm.utm({ zone: 33 }).toLonLatInterleaved(xy, xy);
 ```
 
-Valid domain: within ~45° of the central meridian (accuracy above holds to 30°); points 90° or more away give `NaN`.
+Transverse Mercator's valid domain: within ~45° of the central meridian (accuracy above holds to 30°); points 90° or more away give `NaN`.
 Output longitudes are in [-180, 180]. Output buffers may be the input itself but must not otherwise overlap it.
 
 **[API reference](https://github.com/cdcxd/fast-proj/blob/main/docs/api.md)** ·

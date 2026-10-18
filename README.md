@@ -12,9 +12,9 @@ Rust/WebAssembly SIMD backend for large batches.
 npm install fast-proj
 ```
 
-| package                           | contents                                                           | docs                                                                                            |
-| --------------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| [`fast-proj`](packages/fast-proj) | UTM and transverse Mercator ↔ WGS84, GCJ-02, GeoJSON helpers, wasm | [API](docs/api.md) · [from proj4](docs/proj4.md) · [changelog](packages/fast-proj/CHANGELOG.md) |
+| package                           | contents                                                                         | docs                                                                                            |
+| --------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| [`fast-proj`](packages/fast-proj) | UTM, transverse Mercator and Web Mercator ↔ WGS84, GCJ-02, GeoJSON helpers, wasm | [API](docs/api.md) · [from proj4](docs/proj4.md) · [changelog](packages/fast-proj/CHANGELOG.md) |
 
 ## Performance
 

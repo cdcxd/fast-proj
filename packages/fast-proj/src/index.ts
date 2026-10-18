@@ -4,3 +4,4 @@ export { type TransverseMercatorOptions, tmerc } from './tmerc.js';
 export type { Geographic, Projection, TransverseMercator, Utm } from './types.js';
 export { type UtmOptions, utm } from './utm.js';
 export { utmFor, utmZoneFor } from './zone.js';
+export { type WebMercatorOptions, webMercator } from './webmerc.js';

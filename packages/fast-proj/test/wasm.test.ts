@@ -6,7 +6,7 @@ import vm from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
 import { LAT_MAX, LAT_MIN, LON_MAX, LON_MIN } from '../src/gcj02-constants.js';
 import { fusers } from '../src/geographic.js';
-import { GCJ02, gcj02, tmerc as jsTmerc, utm } from '../src/index.js';
+import { GCJ02, gcj02, tmerc as jsTmerc, utm, webMercator } from '../src/index.js';
 import type { Geographic, Projection } from '../src/types.js';
 import { loadWasm, type WasmContext } from '../src/wasm.js';
 
@@ -174,6 +174,40 @@ describe('loadWasm', () => {
     const lon = [116.391, 105.004];
     const lat = [39.907, 30];
     expect(ctx.gcj02().toWgs84(lon, lat)).toEqual(gcj02().toWgs84(lon, lat));
+  });
+
+  it('runs webMercator in wasm, and in JavaScript for modules without its kernels', async () => {
+    const names = WebAssembly.Module.exports(await WebAssembly.compile(readFileSync(url))).map((e) => e.name);
+    expect(names).toEqual(expect.arrayContaining(['wm_forward_batch', 'wm_inverse_batch']));
+    const module = await WebAssembly.compile(readFileSync(url));
+    const instantiate = WebAssembly.instantiate;
+    const spy = vi.spyOn(WebAssembly, 'instantiate').mockImplementation((async (m: WebAssembly.Module) => {
+      const { wm_forward_batch: _f, wm_inverse_batch: _i, ...exports } = (await instantiate(m, {})).exports;
+      return { exports };
+    }) as typeof WebAssembly.instantiate);
+    const old = await loadWasm({ source: module }).finally(() => spy.mockRestore());
+    expect(old.backend).toBe('wasm');
+    const lon = [116.391, -73.98, 179.9];
+    const lat = [39.907, 40.75, -85];
+    expect(old.webMercator().fromLonLat(lon, lat)).toEqual(webMercator().fromLonLat(lon, lat));
+    expect(() => old.webMercator({ radius: 1 } as never)).toThrow(TypeError);
+    old.dispose();
+  });
+
+  it('composes webMercator with its own wasm gcj02 and throws once disposed', async () => {
+    const ctx = await loadWasm({ source: url });
+    const g = ctx.gcj02();
+    const p = ctx.webMercator({ geographic: g });
+    const x = [12958000, 13530000];
+    const y = [4852000, 3640000];
+    const w = ctx.webMercator().toLonLat(x, y);
+    expect(p.toLonLat(x, y)).toEqual(g.fromWgs84(w.lon, w.lat));
+    const m = ctx.webMercator();
+    ctx.dispose();
+    expect(() => ctx.webMercator()).toThrow(/dispose/);
+    expect(() => m.toLonLat(x, y)).toThrow(/disposed/);
+    expect(() => m.fromLonLatPoint(0, 0)).toThrow(/disposed/);
+    expect(() => p.toLonLatInterleaved([x[0]!, y[0]!])).toThrow(/disposed/);
   });
 
   it('fuses a projection with its own wasm gcj02 into one wasm call', async () => {
