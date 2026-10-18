@@ -307,9 +307,10 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
 - `webMercator` (0.4) returns a new frozen `Projection` per call, like `tmerc`; there is no `WebMercator` subtype yet, so
   one with readonly properties can be added later. It doesn't clamp at ±85.05° (a rendering decision that would break
   round trips) and gives `NaN` at the poles, where `tan(pi/2)` rounds to a finite but meaningless 1.6e16. Poleward of
-  45° both kernels start from the colatitude, which is exact there: φ in radians loses digits near π/2 (about 640 m of
-  y at 89.9999999999°), so y stays within three ulps up to the poles. The wasm kernel (`wm_forward_batch` /
-  `wm_inverse_batch`) writes asinh(tan φ) as log1p of one quotient of positive terms, and sinh(y/R) as a Taylor series
-  below 1/4 and from exp above; y agrees with JavaScript within 7.5e-9 m below 2^25 m, the inherent rounding of y/R
+  45° both kernels start from the colatitude, which is exact there: φ in radians loses digits near π/2 (about 100 m of
+  y at 89.9999999999°), so y stays within three ulps (five in wasm) up to the poles. The wasm kernel
+  (`wm_forward_batch` / `wm_inverse_batch`) writes asinh(tan φ) as 2 atanh(t), t = tan(φ/2): the log series in t up to
+  19.4°, else log1p(2t / (1 - t)) with the rounding of its 1 + u compensated (a plain `vlog1p` reached six ulps). It
+  takes sinh(y/R) as a Taylor series below 1/4 and from exp above; y agrees with JavaScript within 7.5e-9 m below 2^25 m, the inherent rounding of y/R
   scaled by R. It measured 1.3–2.1× the JavaScript kernel's batch methods (Node, Bun, Chromium). Its composition with GCJ-02 runs the
   two passes; a fused kernel waits for a measured gain.

@@ -7,7 +7,7 @@ and WGS84 ↔ GCJ-02 for maps of China, with typed-array APIs and an optional We
   ≈6e-9 m / 1.3e-13° vs proj4.
 - GCJ-02: the published formula, 4–13× faster than gcoord (11–26× with WebAssembly); the inverse is accurate to 3e-12°
   (gcoord: 1e-6°).
-- Web Mercator (EPSG:3857): within three ulps of an exact reference up to the poles; no clamping at ±85.05°.
+- Web Mercator (EPSG:3857): within three ulps (five in wasm) of an exact reference up to the poles; no clamping at ±85.05°.
 - No per-point allocations in the batch APIs; optional output buffers, in-place conversion.
 - No dependencies, ESM-only, tree-shakeable. Node ≥ 20 and modern browsers.
 
@@ -30,7 +30,7 @@ utm({ zone: 50, geographic: GCJ02 }).toLonLatInterleaved(xy, xy); // UTM -> GCJ-
 GCJ02.fromWgs84Interleaved(lonlat, lonlat); // WGS84 -> GCJ-02, in place
 webMercator().fromLonLatInterleaved(lonlat, lonlat); // lon/lat -> EPSG:3857 x/y (on GCJ-02 lon/lat: AMap tiles)
 
-import { loadWasm } from 'fast-proj/wasm'; // opt-in, ~31 kB
+import { loadWasm } from 'fast-proj/wasm'; // opt-in, ~53 kB
 const wasm = await loadWasm();
 wasm.utm({ zone: 33 }).toLonLatInterleaved(xy, xy);
 ```

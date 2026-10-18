@@ -1,17 +1,18 @@
 //! f64x2 Web Mercator (EPSG:3857) kernel — the vector twin of src/webmerc.ts.
 //!
-//! - forward: y = R asinh(tan phi) as log1p(tan phi + sec phi - 1), from one sincos of the latitude, or of the
+//! - forward: y = R asinh(tan phi) as 2 R atanh(tan(phi / 2)), from one sincos of the half latitude, or of the half
 //!   colatitude poleward of 45 degrees (exact there; the TS kernel does the same);
 //! - inverse: phi = atan(sinh(y / R)), sinh from a Taylor series below |y / R| = 1/4 and from exp above, clamped at
 //!   |y / R| = 40, where atan already rounds to pi/2.
 
 use crate::kernel::{reduce_lon, D2R, R2D};
+use crate::math::L;
 use core::arch::wasm32::{
     f64x2, f64x2_abs, f64x2_add, f64x2_div, f64x2_extract_lane, f64x2_gt, f64x2_lt, f64x2_mul, f64x2_pmin,
     f64x2_splat, f64x2_sub, i64x2_splat, v128, v128_and, v128_any_true, v128_bitselect, v128_or,
 };
 
-use crate::simd::{load_pair, store_pair, vatan_q, vexp_eo, vlog1p_eo, vsincos_eo};
+use crate::simd::{load_pair, store_pair, vatan_q, poly_eo, vexp_eo, vlog_eo, vsincos_eo};
 
 /// The WGS84 semi-major axis, the sphere's radius.
 pub const R: f64 = 6378137.0;
@@ -51,16 +52,29 @@ pub fn forward2(lon: v128, lat: v128) -> (v128, v128) {
     let ok = v128_and(f64x2_lt(alat, spl(90.0)), finite(lon));
     let x = f64x2_mul(reduce(lon), spl(K));
 
+    // asinh(tan phi) = 2 atanh(t), t = tan(phi / 2): the log series in t while t is inside its fit domain (|t| <=
+    // 0.1716, phi <= 19.47 degrees), else log1p(u) with u = 2t / (1 - t) = tan phi + sec phi - 1 > 0.4.
+    let series = f64x2_lt(alat, spl(19.4));
     let polar = f64x2_gt(alat, spl(45.0));
     let ang = v128_bitselect(f64x2_sub(spl(90.0), alat), alat, polar);
-    let (s, c) = vsincos_eo(f64x2_mul(ang, spl(D2R)));
-    // asinh(tan phi) = log1p(u), u = tan phi + sec phi - 1, as one quotient of positive terms: s (1 + c + s) /
-    // (c (1 + c)) from the latitude, (1 + c - s) / s from the colatitude.
-    let n_eq = f64x2_mul(s, f64x2_add(f64x2_add(spl(1.0), c), s));
-    let d_eq = f64x2_mul(c, f64x2_add(spl(1.0), c));
-    let n_po = f64x2_sub(f64x2_add(spl(1.0), c), s);
-    let u = f64x2_div(v128_bitselect(n_po, n_eq, polar), v128_bitselect(s, d_eq, polar));
-    let y = f64x2_mul(copysign(vlog1p_eo(u), lat), spl(R));
+    let (s, c) = vsincos_eo(f64x2_mul(ang, spl(D2R / 2.0)));
+    let (s0, s1) = (f64x2_extract_lane::<0>(series), f64x2_extract_lane::<1>(series));
+    let mut r = spl(0.0);
+    if s0 != 0.0 || s1 != 0.0 {
+        let t = f64x2_div(s, c);
+        let t2 = f64x2_mul(t, t);
+        r = f64x2_add(f64x2_add(t, t), f64x2_mul(f64x2_mul(spl(2.0), t2), f64x2_mul(t, poly_eo(t2, &L))));
+    }
+    if s0 == 0.0 || s1 == 0.0 {
+        // u = 2s / (c - s) from the half latitude, (c - s) / s from the half colatitude (exact poleward of 45
+        // degrees); log(1 + u) with the rounding of 1 + u compensated.
+        let cs = f64x2_sub(c, s);
+        let u = f64x2_div(v128_bitselect(cs, f64x2_add(s, s), polar), v128_bitselect(s, cs, polar));
+        let q = f64x2_add(spl(1.0), u);
+        let big = f64x2_add(vlog_eo(q), f64x2_div(f64x2_sub(u, f64x2_sub(q, spl(1.0))), q));
+        r = v128_bitselect(r, big, series);
+    }
+    let y = f64x2_mul(copysign(r, lat), spl(R));
 
     let nan = spl(f64::NAN);
     (v128_bitselect(x, nan, ok), v128_bitselect(y, nan, ok))

@@ -218,6 +218,12 @@ pub fn vlog(x: v128) -> v128 {
     vlog_p::<false>(x)
 }
 
+/// `vlog` with `poly_eo`.
+#[inline(always)]
+pub fn vlog_eo(x: v128) -> v128 {
+    vlog_p::<true>(x)
+}
+
 #[inline(always)]
 fn vlog_p<const EO: bool>(x: v128) -> v128 {
     let e_i = i64x2_sub(

@@ -16,15 +16,16 @@ const ulp = (v: number) => 2 ** (Math.floor(Math.log2(Math.abs(v))) - 52);
 const backendTol = (v: number) => (Math.abs(v) < 2 ** 25 ? 7.5e-9 : 2 * ulp(v));
 const same = (a: ArrayLike<number>, b: ArrayLike<number>) => expect(Array.from(a)).toEqual(Array.from(b));
 
-describe.each(backends)('$name backend webMercator', ({ webMercator }) => {
+describe.each(backends)('$name backend webMercator', ({ name, webMercator }) => {
   const w = webMercator();
 
-  it('matches a 40-digit reference within 3 ulps (x within 4e-9 m) and 3e-14 degrees', () => {
+  it('matches a 40-digit reference within 3 ulps, 5 in wasm (x within 4e-9 m), and 3e-14 degrees', () => {
+    const yUlps = name === 'js' ? 3 : 5;
     const [lon, lat, x, y] = [0, 1, 2, 3].map((k) => ref.forward.map((r) => r[k]!));
     const got = w.fromLonLat(lon!, lat!);
     for (let i = 0; i < lon!.length; i++) {
       expect(Math.abs(got.x[i]! - x![i]!)).toBeLessThanOrEqual(Math.max(4e-9, ulp(x![i]!)));
-      expect(Math.abs(got.y[i]! - y![i]!), `lat ${lat![i]}`).toBeLessThanOrEqual(3 * ulp(y![i]!));
+      expect(Math.abs(got.y[i]! - y![i]!), `lat ${lat![i]}`).toBeLessThanOrEqual(yUlps * ulp(y![i]!));
     }
     const [xs, ys, lons, lats] = [0, 1, 2, 3].map((k) => ref.inverse.map((r) => r[k]!));
     const back = w.toLonLat(xs!, ys!);
@@ -67,7 +68,9 @@ describe.each(backends)('$name backend webMercator', ({ webMercator }) => {
   });
 
   it('keeps signed zeros', () => {
-    for (const r of [w.fromLonLat([-0, 0], [-0, 0]), w.fromLonLat([-0, 0, -0], [-0, 0, -0])]) {
+    const inter = w.fromLonLatInterleaved([-0, -0, 0, 0, -0, -0]);
+    const pairs = { x: [inter[0], inter[2]], y: [inter[1], inter[3]] };
+    for (const r of [w.fromLonLat([-0, 0], [-0, 0]), w.fromLonLat([-0, 0, -0], [-0, 0, -0]), pairs]) {
       expect(Object.is(r.x[0], -0) && Object.is(r.y[0], -0)).toBe(true);
       expect(Object.is(r.x[1], 0) && Object.is(r.y[1], 0)).toBe(true);
     }
@@ -111,10 +114,10 @@ describe.each(backends)('$name backend webMercator', ({ webMercator }) => {
     const b = js.fromLonLat(lon, lat);
     const inter = w.fromLonLatInterleaved(Float64Array.from({ length: 2 * n }, (_, k) => (k & 1 ? lat : lon)[k >> 1]!));
     for (let i = 0; i < n; i++) {
+      expect(a.x[i]).toBe(b.x[i]);
+      expect(inter[2 * i]).toBe(b.x[i]);
       for (const [p, q] of <[number, number][]>[
-        [a.x[i]!, b.x[i]!],
         [a.y[i]!, b.y[i]!],
-        [inter[2 * i]!, b.x[i]!],
         [inter[2 * i + 1]!, b.y[i]!],
       ]) {
         expect(Math.abs(p - q)).toBeLessThanOrEqual(backendTol(q));
@@ -145,6 +148,11 @@ describe.each(backends)('$name backend webMercator', ({ webMercator }) => {
     const got = p.toLonLat(x, y);
     same(got.lon, exp.lon);
     same(got.lat, exp.lat);
+    const fwd = p.fromLonLat(got.lon, got.lat);
+    const wgs2 = GCJ02.toWgs84(got.lon, got.lat);
+    const exp2 = w.fromLonLat(wgs2.lon, wgs2.lat);
+    same(fwd.x, exp2.x);
+    same(fwd.y, exp2.y);
   });
 
   it('validates options and freezes the converter', () => {

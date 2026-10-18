@@ -304,7 +304,7 @@ export function wasmContext(exports: Exports): WasmContext {
       const ex = open();
       const [p, g] = parseWebMercator(o);
       // A module older than 0.4.0 has no Web Mercator kernels: the JavaScript one, guarded.
-      if (!ex.wm_forward_batch || !ex.wm_inverse_batch) return guarded(jsWebMercator(o), () => !e);
+      if (!ex.wm_forward_batch || !ex.wm_inverse_batch) return guarded(withGeographic(p, g), () => !e);
       return withGeographic(buildProjection(p, wmFwd, wmInv), g, live);
     },
     gcj02: (o) => {

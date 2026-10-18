@@ -27,6 +27,7 @@ def main():
     rng = random.Random(3857)
     lonlat = [(0.0, 0.0), (180.0, 0.0), (-180.0, 0.0), (0.0, 85.0511287798066), (0.0, -85.0511287798066)]
     lonlat += [(0.0, 1e-300), (0.0, 1e-9), (179.999999, 89.999999), (-0.5, -89.9999999999)]
+    lonlat += [(0.0, 15.93384416308254), (0.0, 33.84106466892382)]  # six and five ulps from earlier wasm kernels
     for _ in range(400):
         lonlat.append((rng.uniform(-180, 180), rng.uniform(-85.06, 85.06)))
     for _ in range(100):
