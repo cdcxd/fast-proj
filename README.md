@@ -12,9 +12,9 @@ Rust/WebAssembly SIMD backend for large batches.
 npm install fast-proj
 ```
 
-| package                           | contents                                                           | docs                                                                                            |
-| --------------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| [`fast-proj`](packages/fast-proj) | UTM and transverse Mercator ↔ WGS84, GCJ-02, GeoJSON helpers, wasm | [API](docs/api.md) · [from proj4](docs/proj4.md) · [changelog](packages/fast-proj/CHANGELOG.md) |
+| package                           | contents                                                                         | docs                                                                                            |
+| --------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| [`fast-proj`](packages/fast-proj) | UTM, transverse Mercator and Web Mercator ↔ WGS84, GCJ-02, GeoJSON helpers, wasm | [API](docs/api.md) · [from proj4](docs/proj4.md) · [changelog](packages/fast-proj/CHANGELOG.md) |
 
 ## Performance
 
@@ -47,6 +47,15 @@ UTM zone 50 with `geographic: GCJ02` against proj4 + gcoord:
 |              | WebAssembly | **23.0×** | **15.7×** |    **17.4×** |
 | GCJ-02 → UTM | JavaScript  | **10.8×** |  **9.3×** |     **6.7×** |
 |              | WebAssembly | **16.2×** | **11.9×** |    **14.7×** |
+
+Web Mercator (EPSG:3857) against proj4:
+
+| Operation            | Backend     |   Node 24 |  Bun 1.4 | Chromium 156 |
+| -------------------- | ----------- | --------: | -------: | -----------: |
+| WGS84 → Web Mercator | JavaScript  |  **7.8×** | **1.9×** |     **5.0×** |
+|                      | WebAssembly | **13.9×** | **3.0×** |    **10.8×** |
+| Web Mercator → WGS84 | JavaScript  |  **9.9×** | **2.4×** |     **6.7×** |
+|                      | WebAssembly | **17.2×** | **3.3×** |    **13.4×** |
 
 Timings vary with hardware, runtime and dataset. See the [full benchmark and reproduction commands](packages/fast-proj/README.md#benchmark).
 

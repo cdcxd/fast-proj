@@ -10,8 +10,9 @@
 import { checkOptions } from './checks.js';
 import type { Gcj02Options } from './gcj02.js';
 import type { TransverseMercatorOptions } from './tmerc.js';
-import type { Geographic, TransverseMercator, Utm } from './types.js';
+import type { Geographic, Projection, TransverseMercator, Utm } from './types.js';
 import type { UtmOptions } from './utm.js';
+import type { WebMercatorOptions } from './webmerc.js';
 import { type Exports, jsContext, wasmContext } from './wasm-context.js';
 
 type Loadable = URL | string | ArrayBuffer | ArrayBufferView;
@@ -42,6 +43,7 @@ export interface WasmContext extends Disposable {
   readonly backend: WasmBackend;
   tmerc(options: TransverseMercatorOptions): TransverseMercator;
   utm(options: UtmOptions): Utm;
+  webMercator(options?: WebMercatorOptions): Projection;
   /**
    * Batch methods run the wasm kernel in `'passthrough'` mode; `'transform'` mode, single points, and the `js`
    * backend run the JavaScript kernel. As the `geographic` of this context's `tmerc`/`utm`, x/y -> GCJ-02 runs as one

@@ -6,8 +6,9 @@ import { checkEven, checkOut, checkSame } from './checks.js';
 import { buildGcj02, gcj02Mode } from './gcj02.js';
 import { type FusedInverse, fusers, tmInverses, withGeographic } from './geographic.js';
 import { parseTmerc, tmerc as jsTmerc } from './tmerc.js';
-import type { Geographic, TransverseMercator } from './types.js';
+import type { Geographic, Projection, TransverseMercator } from './types.js';
 import { parseUtm, utm as jsUtm } from './utm.js';
+import { parseWebMercator, webMercator as jsWebMercator } from './webmerc.js';
 import type { WasmContext } from './wasm.js';
 
 // centralMeridian, scaleFactor, falseEasting, falseNorthing, a, f
@@ -24,6 +25,9 @@ export interface Exports {
   gcj_inverse_batch?(lon: number, lat: number, outLon: number, outLat: number, n: number): void;
   // x/y -> GCJ-02 (passthrough) in one pass; absent from builds without simd128 and from modules older than 0.3.2.
   tm_gcj_batch?(x: number, y: number, lon: number, lat: number, n: number, ...params: TmParams): void;
+  // Absent from builds without simd128 and from modules older than 0.4.0.
+  wm_forward_batch?(lon: number, lat: number, x: number, y: number, n: number): void;
+  wm_inverse_batch?(x: number, y: number, lon: number, lat: number, n: number): void;
 }
 
 const CAP = 1 << 16;
@@ -65,6 +69,7 @@ export function jsContext(): WasmContext {
     backend: 'js',
     tmerc: (o) => (open(), live(jsTmerc(o))),
     utm: (o) => (open(), live(jsUtm(o))),
+    webMercator: (o) => (open(), live(jsWebMercator(o))),
     gcj02: (o) => {
       open();
       const mode = gcj02Mode(o);
@@ -159,6 +164,14 @@ export function wasmContext(exports: Exports): WasmContext {
     const [lon0, k0, falseEasting, falseNorthing, a, f] = params(js);
     const fwd: Kernel = (ex, m) => ex.tm_forward_batch(pa, pb, pc, pd, m, lon0, k0, falseEasting, falseNorthing, a, f);
     const inv: Kernel = (ex, m) => ex.tm_inverse_batch(pa, pb, pc, pd, m, lon0, k0, falseEasting, falseNorthing, a, f);
+    return buildProjection(js, fwd, inv);
+  }
+
+  const wmFwd: Kernel = (ex, m) => ex.wm_forward_batch!(pa, pb, pc, pd, m);
+  const wmInv: Kernel = (ex, m) => ex.wm_inverse_batch!(pa, pb, pc, pd, m);
+
+  // The batch methods of `js` on the wasm kernels `fwd` and `inv`.
+  function buildProjection<T extends Projection>(js: T, fwd: Kernel, inv: Kernel): T {
     return {
       ...js,
       toLonLat(x, y, lon, lat) {
@@ -286,6 +299,13 @@ export function wasmContext(exports: Exports): WasmContext {
       open();
       const [p, g] = parseUtm(o);
       return withGeographic(buildTmerc(p), g, live, fuse(p, g));
+    },
+    webMercator: (o) => {
+      const ex = open();
+      const [p, g] = parseWebMercator(o);
+      // A module older than 0.4.0 has no Web Mercator kernels: the JavaScript one, guarded.
+      if (!ex.wm_forward_batch || !ex.wm_inverse_batch) return guarded(withGeographic(p, g), () => !e);
+      return withGeographic(buildProjection(p, wmFwd, wmInv), g, live);
     },
     gcj02: (o) => {
       const ex = open();
