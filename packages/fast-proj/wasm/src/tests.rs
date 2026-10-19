@@ -124,7 +124,8 @@ fn scalar_kernel_sphere_and_flattening_edges() {
     }
 }
 
-fn gcj_fixture(key: &str) -> Vec<(f64, f64, f64, f64)> {
+/// (lon, lat, references): one reference, or every exact inverse where the formula folds over near longitude 105.
+fn gcj_fixture(key: &str) -> Vec<(f64, f64, Vec<(f64, f64)>)> {
     let raw = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../test/fixtures/gcj02.json"
@@ -136,22 +137,25 @@ fn gcj_fixture(key: &str) -> Vec<(f64, f64, f64, f64)> {
         .unwrap()
         .iter()
         .map(|p| {
+            let p = p.as_array().unwrap();
             let f = |i: usize| {
                 p[i].as_f64()
                     .or_else(|| p[i].as_str().and_then(|s| s.parse().ok()))
                     .unwrap()
             };
-            (f(0), f(1), f(2), f(3))
+            (f(0), f(1), (2..p.len()).step_by(2).map(|i| (f(i), f(i + 1))).collect())
         })
         .collect()
 }
 
-fn gcj_max_error(rows: &[(f64, f64, f64, f64)], g: impl Fn(f64, f64) -> (f64, f64)) -> f64 {
-    rows.iter().fold(0.0, |m, &(lon, lat, rlon, rlat)| {
-        let (l, p) = g(lon, lat);
+fn gcj_max_error(rows: &[(f64, f64, Vec<(f64, f64)>)], g: impl Fn(f64, f64) -> (f64, f64)) -> f64 {
+    rows.iter().fold(0.0, |m, (lon, lat, refs)| {
+        let (l, p) = g(*lon, *lat);
         assert!(l.is_finite() && p.is_finite(), "non-finite result at {lon}, {lat}");
-        m.max((l - rlon).abs() * lat.to_radians().cos())
-            .max((p - rlat).abs())
+        let e = refs.iter().fold(f64::INFINITY, |e, &(rlon, rlat)| {
+            e.min(((l - rlon).abs() * lat.to_radians().cos()).max((p - rlat).abs()))
+        });
+        m.max(e)
     })
 }
 

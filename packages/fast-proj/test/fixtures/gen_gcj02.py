@@ -54,7 +54,9 @@ def inverse(glon, glat):
 
 
 def inverse_cusp(glon, glat):
-    best = None
+    """All exact inverses, by longitude. West of 105 the sqrt(|x|) term folds the formula over: within about
+    (0.1 / (a cos(lat)) * 180 / pi)^2 = 2.6e-12 degrees of 105 (at 55.8) a point can have three."""
+    roots = []
     with mp.workdps(60):
         for s in (1, -1):
 
@@ -63,15 +65,15 @@ def inverse_cusp(glon, glat):
                 d = offset(lon, lat, t)
                 return [lon + d[0] - glon, lat + d[1] - glat]
 
-            for t0 in (mpf("0.01"), mpf("1e-4"), mpf("1e-6")):
-                t, lat = findroot(f, (t0, glat - mpf("0.001")), tol=mpf(10) ** -100, verify=False, maxsteps=40)
+            for t0 in ("0.01", "1e-4", "1e-6", "1e-7", "3e-7", "1.2e-6", "1.6e-6", "2e-6"):
+                t, lat = findroot(f, (mpf(t0), glat - mpf("0.001")), tol=mpf(10) ** -100, verify=False, maxsteps=40)
                 r = f(t, lat)
-                res = abs(r[0]) + abs(r[1])
-                if t >= 0 and res < mpf(10) ** -45 and (best is None or res < best[0]):
-                    best = (res, 105 + s * t * t, lat)
-    if best is None:
+                lon = 105 + s * t * t
+                if t >= 0 and abs(r[0]) + abs(r[1]) < mpf(10) ** -45 and all(abs(lon - w[0]) > 1e-30 for w in roots):
+                    roots.append([lon, lat])
+    if not roots:
         raise RuntimeError("no convergence")
-    return [best[1], best[2]]
+    return sorted(roots)
 
 
 random.seed(2026)
@@ -100,13 +102,18 @@ for lon, lat in inputs:
     w = inverse(mpf(lon), mpf(lat))
     inv.append([lon, lat, s(w[0]), s(w[1])])
 
-# GCJ-02 points whose exact inverse lies within 1e-15 to 1e-1 degrees of longitude 105
+# GCJ-02 points whose exact inverse lies within 1e-15 to 1e-1 degrees of longitude 105, and within the fold; rows
+# list every exact inverse
 for e in range(-15, 0, 2):
     for sgn in (1, -1):
         for lat in (1.0, 35.0, 55.8):
             g = forward(mpf(105.0 + sgn * 10.0**e * random.uniform(1, 9)), mpf(lat))
             gl, ga = float(g[0]), float(g[1])
-            w = inverse_cusp(mpf(gl), mpf(ga))
-            inv.append([gl, ga, s(w[0]), s(w[1])])
+            inv.append([gl, ga] + [s(v) for w in inverse_cusp(mpf(gl), mpf(ga)) for v in w])
+for x in ("3e-15", "1e-13", "-1e-13", "-5e-13", "-1e-12", "-2e-12"):
+    for lat in (1.0, 35.0, 55.8):
+        g = forward(105 + mpf(x), mpf(lat))
+        gl, ga = float(g[0]), float(g[1])
+        inv.append([gl, ga] + [s(v) for w in inverse_cusp(mpf(gl), mpf(ga)) for v in w])
 
 print(json.dumps({"fromWgs84": fwd, "toWgs84": inv}))
