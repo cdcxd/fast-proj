@@ -196,11 +196,11 @@ faster than the wasm two passes in Node, Bun and Chromium (32-37% faster than 0.
 context detects its own GCJ-02 converter by identity; another context's, a JavaScript projection with a wasm GCJ-02
 (or the reverse), and modules without the export run the two passes. Single points run the JavaScript fused kernel.
 GCJ-02 -> x/y stays two wasm calls: a spike of one export (`vgcj`'s inverse, then the f64x2 tmerc forward, per pair;
-bit-identical to the two calls) measured -2% to +2% against them for 10k points in Node, Bun and Chromium, and added
+bit-identical to the two calls) measured -6% to +2% against them for 10k points in Node, Bun and Chromium, and added
 3.9 kB. The two kernels are nearly all of the time (the GCJ-02 Newton steps 0.72 ms, the forward 0.46 ms), the saved
-copy and crossing 0.01-0.03 ms. Sharing trigonometry is what the JavaScript spike above measured: the offset's
-longitude angle is 3 (lon - 105)°, not the forward's, and its latitude sin/cos is of the iterate before the last
-Newton step.
+copy and crossing 0.01-0.03 ms. The only shareable trigonometry is what the JavaScript spike above measured: the
+offset's longitude angle is 3 (lon - 105)°, not the forward's, and its latitude sin/cos is of the iterate before the
+last Newton step. Rotating that pair by the last correction into the forward's latitude measured 3-7% faster.
 
 The wasm inverse is latency-bound: its chain of sincos/exp, then atan of the conformal latitude, then the phi - chi
 series leaves the SIMD units idle. So the inverse takes shallower forms of those (`vsincos_eo`, `vexp_eo`, `poly6_eo`:
