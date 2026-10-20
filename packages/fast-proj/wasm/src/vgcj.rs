@@ -14,7 +14,7 @@ use core::arch::wasm32::{
 };
 
 use crate::math::{C, S};
-use crate::simd::{load_pair, poly, store_pair, vsincos};
+use crate::simd::{load_pair, poly_eo, store_pair, vsincos_eo};
 
 #[inline]
 fn spl(x: f64) -> v128 {
@@ -64,7 +64,7 @@ fn triple_c(a: v128) -> v128 {
 #[inline]
 fn small_sincos(r: v128) -> (v128, v128) {
     let t = mul(r, r);
-    (add(r, mul(t, mul(r, poly(t, &S)))), add(spl(1.0), mul(t, poly(t, &C))))
+    (add(r, mul(t, mul(r, poly_eo(t, &S)))), add(spl(1.0), mul(t, poly_eo(t, &C))))
 }
 
 /// The offset and, with `J`, the Newton matrix I + J: (ox, oy, ja, jb, jc, jd), without the sqrt(|x|) term's
@@ -207,7 +207,7 @@ pub fn forward_batch(lon: &[f64], lat: &[f64], olon: &mut [f64], olat: &mut [f64
         }
         let x = sub(l, spl(105.0));
         let y = sub(p, spl(35.0));
-        let (s, c) = vsincos(mul(x, spl(KX)));
+        let (s, c) = vsincos_eo(mul(x, spl(KX)));
         let (u, v) = small_sincos(mul(y, spl(KY)));
         let [ox, oy, ..] = offset::<false>(x, y, s, c, u, v, CUSP);
         store_pair(v128_bitselect(add(l, ox), l, inbox), olon, i);
@@ -289,7 +289,7 @@ pub fn inverse_batch(lon: &[f64], lat: &[f64], olon: &mut [f64], olat: &mut [f64
             i += 2;
             continue;
         }
-        let (s, c) = vsincos(mul(sub(l, spl(105.0)), spl(KX)));
+        let (s, c) = vsincos_eo(mul(sub(l, spl(105.0)), spl(KX)));
         let (u, v) = small_sincos(mul(sub(p, spl(35.0)), spl(KY)));
         let zero = spl(0.0);
         let mut w = step(l, p, W { wx: l, wy: p, s, c, u, v, dx: zero, dy: zero }, CUSP);

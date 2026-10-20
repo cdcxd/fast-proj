@@ -176,7 +176,10 @@ interface Gcj02Options {
 - **Accuracy.** `fromWgs84` is within one ulp (1.6e-14°) of a 40-digit evaluation of the formula. The formula has no
   closed-form inverse; `toWgs84` takes two Newton steps, up to six within 1e-4° of longitude 105° (where the formula
   has a √|x| cusp), and is within 3e-12° (about 0.3 µm; longitude errors scaled by the cosine of latitude) of the exact
-  inverse. gcoord's inverse stops at about 1e-6° (0.1 m), and coordtransform's one-step inverse is off by up to 3e-5°
+  inverse. Just west of 105° the cusp folds the formula over: WGS84 longitudes up to 2.6e-12° west of 105° (at
+  latitude 55.8°, less further south) map onto GCJ-02 longitudes within about 6e-13° of the fold's tip (105.0054° at
+  latitude 55.8°, 105.0021° at 1°). A point there can have three exact inverses, and `toWgs84` is within 3e-12° of one
+  of them. gcoord's inverse stops at about 1e-6° (0.1 m), and coordtransform's one-step inverse is off by up to 3e-5°
   (3 m).
 - **`'transform'` near the poles and the antimeridian.** `toWgs84` iterates until converged. Up to latitude ±89° it
   round-trips within 1e-11° (longitude errors scaled by the cosine of latitude), except within 1e-4° of longitude

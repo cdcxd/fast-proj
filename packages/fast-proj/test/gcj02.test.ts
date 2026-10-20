@@ -7,11 +7,16 @@ import fixture from './fixtures/gcj02.json';
 
 const cosd = (deg: number) => Math.cos((deg * Math.PI) / 180);
 
+// Rows are (lon, lat, references): one reference, or every exact inverse where the formula folds over near 105.
 function maxError(rows: (string | number)[][], f: (lon: number, lat: number) => [number, number]) {
   let max = 0;
-  for (const [lon, lat, rlon, rlat] of rows as [number, number, string, string][]) {
+  for (const [lon, lat, ...refs] of rows as [number, number, ...string[]][]) {
     const [l, p] = f(lon, lat);
-    max = Math.max(max, Math.abs(l - Number(rlon)) * cosd(lat), Math.abs(p - Number(rlat)));
+    let e = Infinity;
+    for (let i = 0; i < refs.length; i += 2) {
+      e = Math.min(e, Math.max(Math.abs(l - Number(refs[i])) * cosd(lat), Math.abs(p - Number(refs[i + 1]))));
+    }
+    max = Math.max(max, e);
   }
   return max;
 }
