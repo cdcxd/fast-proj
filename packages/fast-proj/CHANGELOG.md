@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0
+
+### Minor Changes
+
+- 8c307b8: Add `webMercator()`, Web Mercator (EPSG:3857), in both backends (`loadWasm().webMercator()` runs a wasm kernel). Within three ulps (five in wasm) of an exact reference up to the poles; latitudes beyond ±85.05° are not clamped, and the poles give `NaN`. Takes the `geographic` option like `tmerc`/`utm`; see the API docs for placing points on AMap/Tencent tiles, which are Web Mercator of GCJ-02 coordinates.
+
+### Patch Changes
+
+- ae084dc: `loadWasm()`: the batch `fromLonLat` methods of `tmerc`/`utm` are 17–24% faster in Node, Bun and Chromium. Results move by a few ulp and stay within the documented 4e-9 m of the JavaScript backend.
+- bb28a39: `loadWasm()`: the batch GCJ-02 conversions are faster in Node, Bun and Chromium: `fromWgs84` by 5–11%, `toWgs84` by 3–8%, GCJ-02 `fromLonLat` by 1–3%. The docs now note that the formula folds over just west of longitude 105°: GCJ-02 points within about 6e-13° of the fold's tip (105.0054° at latitude 55.8°) can have three exact WGS84 inverses, up to 2.6e-12° west of 105°; `toWgs84` is within 3e-12° of one of them.
+
 ## 0.3.2
 
 ### Patch Changes
