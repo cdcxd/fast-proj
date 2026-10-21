@@ -65,25 +65,25 @@ the other is expected. Nothing in the projection types is UTM-specific: `webMerc
 `Projection` and take the same `geographic` option.
 
 ```ts
-// An output buffer, or a new Float64Array<ArrayBuffer> (`New`) where one may be undefined. Each batch method is
+// An output buffer, or a new Float64Array<ArrayBuffer> where one may be undefined. Each batch method is
 // overloaded on how many buffers are passed, so a buffer typed by an explicit type argument can't be left out.
 type Out = Float64Array | undefined;
-type New = Float64Array<ArrayBuffer>;
-type Output<T extends Out> = Exclude<T, undefined> | (undefined extends T ? New : never);
+type OnArrayBuffer = Float64Array<ArrayBuffer>;
+type Output<T extends Out> = Exclude<T, undefined> | (undefined extends T ? OnArrayBuffer : never);
 type Arr = ArrayLike<number>;
 
 // projected x/y (metres) <-> lon/lat on `geographic`, WGS84 when unset
 interface Projection {
   readonly geographic?: Geographic;
-  toLonLat(x: Arr, y: Arr): { lon: New; lat: New };
-  toLonLat<A extends Out>(x: Arr, y: Arr, lon: A): { lon: Output<A>; lat: New };
+  toLonLat(x: Arr, y: Arr): { lon: OnArrayBuffer; lat: OnArrayBuffer };
+  toLonLat<A extends Out>(x: Arr, y: Arr, lon: A): { lon: Output<A>; lat: OnArrayBuffer };
   toLonLat<A extends Out, B extends Out>(x: Arr, y: Arr, lon: A, lat: B): { lon: Output<A>; lat: Output<B> };
-  fromLonLat(lon: Arr, lat: Arr): { x: New; y: New };
-  fromLonLat<A extends Out>(lon: Arr, lat: Arr, x: A): { x: Output<A>; y: New };
+  fromLonLat(lon: Arr, lat: Arr): { x: OnArrayBuffer; y: OnArrayBuffer };
+  fromLonLat<A extends Out>(lon: Arr, lat: Arr, x: A): { x: Output<A>; y: OnArrayBuffer };
   fromLonLat<A extends Out, B extends Out>(lon: Arr, lat: Arr, x: A, y: B): { x: Output<A>; y: Output<B> };
-  toLonLatInterleaved(xy: Arr): New;
+  toLonLatInterleaved(xy: Arr): OnArrayBuffer;
   toLonLatInterleaved<T extends Out>(xy: Arr, out: T): Output<T>;
-  fromLonLatInterleaved(lonlat: Arr): New;
+  fromLonLatInterleaved(lonlat: Arr): OnArrayBuffer;
   fromLonLatInterleaved<T extends Out>(lonlat: Arr, out: T): Output<T>;
   toLonLatPoint(x: number, y: number): [lon: number, lat: number];
   fromLonLatPoint(lon: number, lat: number): [x: number, y: number];

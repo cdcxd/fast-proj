@@ -260,33 +260,41 @@ describe('root rules', () => {
   });
 
   it('types new output arrays as ArrayBuffer-backed and keeps the type of given ones', () => {
-    type Fresh = Float64Array<ArrayBuffer>;
-    type Shared = Float64Array<SharedArrayBuffer>;
+    type OnArrayBuffer = Float64Array<ArrayBuffer>;
+    type OnSharedArrayBuffer = Float64Array<SharedArrayBuffer>;
     const p = jsUtm({ zone: 33 });
     const shared = new Float64Array(new SharedArrayBuffer(16));
-    const maybe = undefined as Shared | undefined;
-    expectTypeOf(p.toLonLatInterleaved([500000, 0])).toEqualTypeOf<Fresh>();
-    expectTypeOf(p.toLonLatInterleaved([500000, 0], shared)).toEqualTypeOf<Shared>();
-    expectTypeOf(p.toLonLatInterleaved([500000, 0], undefined)).toEqualTypeOf<Fresh>();
+    const maybe = undefined as OnSharedArrayBuffer | undefined;
+    expectTypeOf(p.toLonLatInterleaved([500000, 0])).toEqualTypeOf<OnArrayBuffer>();
+    expectTypeOf(p.toLonLatInterleaved([500000, 0], shared)).toEqualTypeOf<OnSharedArrayBuffer>();
+    expectTypeOf(p.toLonLatInterleaved([500000, 0], undefined)).toEqualTypeOf<OnArrayBuffer>();
     // A buffer that may be absent may come back as a new array.
     const r0 = p.toLonLatInterleaved([500000, 0], maybe);
-    expectTypeOf(r0).toEqualTypeOf<Shared | Fresh>();
+    expectTypeOf(r0).toEqualTypeOf<OnSharedArrayBuffer | OnArrayBuffer>();
     expect(r0.buffer).toBeInstanceOf(ArrayBuffer);
-    expectTypeOf(p.toLonLat([500000], [0])).toEqualTypeOf<{ lon: Fresh; lat: Fresh }>();
-    expectTypeOf(GCJ02.fromWgs84([116], [39], shared)).toEqualTypeOf<{ lon: Shared; lat: Fresh }>();
-    expectTypeOf(GCJ02.toWgs84([116], [39], undefined, maybe)).toEqualTypeOf<{ lon: Fresh; lat: Shared | Fresh }>();
+    expectTypeOf(p.toLonLat([500000], [0])).toEqualTypeOf<{ lon: OnArrayBuffer; lat: OnArrayBuffer }>();
+    expectTypeOf(GCJ02.fromWgs84([116], [39], shared)).toEqualTypeOf<{
+      lon: OnSharedArrayBuffer;
+      lat: OnArrayBuffer;
+    }>();
+    expectTypeOf(GCJ02.toWgs84([116], [39], undefined, maybe)).toEqualTypeOf<{
+      lon: OnArrayBuffer;
+      lat: OnSharedArrayBuffer | OnArrayBuffer;
+    }>();
     // An explicitly typed buffer must be given.
     // @ts-expect-error
-    p.toLonLatInterleaved<Shared>([500000, 0]);
+    p.toLonLatInterleaved<OnSharedArrayBuffer>([500000, 0]);
     // @ts-expect-error
-    p.toLonLat<Shared, Shared>([500000], [0], shared);
+    p.toLonLat<OnSharedArrayBuffer, OnSharedArrayBuffer>([500000], [0], shared);
     // @ts-expect-error
-    GCJ02.fromWgs84Interleaved<Shared>([116, 39]);
+    GCJ02.fromWgs84Interleaved<OnSharedArrayBuffer>([116, 39]);
     // @ts-expect-error
-    GCJ02.toWgs84<Shared>([116], [39]);
-    expectTypeOf(p.toLonLat<Shared, Shared | undefined>([500000], [0], shared, maybe)).toEqualTypeOf<{
-      lon: Shared;
-      lat: Shared | Fresh;
+    GCJ02.toWgs84<OnSharedArrayBuffer>([116], [39]);
+    expectTypeOf(
+      p.toLonLat<OnSharedArrayBuffer, OnSharedArrayBuffer | undefined>([500000], [0], shared, maybe),
+    ).toEqualTypeOf<{
+      lon: OnSharedArrayBuffer;
+      lat: OnSharedArrayBuffer | OnArrayBuffer;
     }>();
     // A BlobPart must be ArrayBuffer-backed.
     expect(new Blob([p.fromLonLatInterleaved([15, 52])]).size).toBe(16);
