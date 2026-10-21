@@ -763,33 +763,33 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
   }
 
   const g = Object.freeze({
-    toWgs84(lon, lat, outLon, outLat) {
+    toWgs84(lon, lat, outLon?, outLat?) {
       const n = lon.length;
       checkSame(n, lat.length, 'lon and lat');
-      outLon = output(outLon, n, 'outLon');
-      outLat = output(outLat, n, 'outLat');
-      toWgs84Batch(lon, lat, outLon, outLat, 0, 1, n);
-      return { lon: outLon, lat: outLat };
+      const oLon = output(outLon, n, 'outLon'),
+        oLat = output(outLat, n, 'outLat');
+      toWgs84Batch(lon, lat, oLon, oLat, 0, 1, n);
+      return { lon: oLon, lat: oLat };
     },
-    fromWgs84(lon, lat, outLon, outLat) {
+    fromWgs84(lon, lat, outLon?, outLat?) {
       const n = lon.length;
       checkSame(n, lat.length, 'lon and lat');
-      outLon = output(outLon, n, 'outLon');
-      outLat = output(outLat, n, 'outLat');
-      fromWgs84Batch(lon, lat, outLon, outLat, 0, 1, n);
-      return { lon: outLon, lat: outLat };
+      const oLon = output(outLon, n, 'outLon'),
+        oLat = output(outLat, n, 'outLat');
+      fromWgs84Batch(lon, lat, oLon, oLat, 0, 1, n);
+      return { lon: oLon, lat: oLat };
     },
-    toWgs84Interleaved(lonlat, out) {
+    toWgs84Interleaved(lonlat, outBuf?) {
       const n = lonlat.length;
       checkEven(n);
-      out = output(out, n, 'out');
+      const out = output(outBuf, n, 'out');
       toWgs84Batch(lonlat, lonlat, out, out, 1, 2, n);
       return out;
     },
-    fromWgs84Interleaved(lonlat, out) {
+    fromWgs84Interleaved(lonlat, outBuf?) {
       const n = lonlat.length;
       checkEven(n);
-      out = output(out, n, 'out');
+      const out = output(outBuf, n, 'out');
       fromWgs84Batch(lonlat, lonlat, out, out, 1, 2, n);
       return out;
     },

@@ -8,6 +8,17 @@ import type { Ellipsoid } from './ellipsoid.js';
  * long as the input. An output buffer may be the corresponding input itself (in place), but must not otherwise
  * overlap an input. Interleaved input must have an even length. Points outside the valid domain give `NaN`.
  */
+/** An optional output buffer. */
+export type Out = Float64Array | undefined;
+
+/**
+ * What a batch method returns for output buffer `T`: the buffer itself, or a new `Float64Array<ArrayBuffer>` when it
+ * may be absent.
+ */
+export type Output<T extends Out> = NoInfer<
+  Exclude<T, undefined> | (undefined extends T ? Float64Array<ArrayBuffer> : never)
+>;
+
 export interface Projection {
   /**
    * The geographic system of this projection's longitude/latitude; unset means WGS84. x/y stay on the grid of the
@@ -16,26 +27,21 @@ export interface Projection {
    */
   readonly geographic?: Geographic;
   /** x/y arrays in metres -> longitude/latitude arrays in degrees. */
-  toLonLat<A extends Float64Array = Float64Array<ArrayBuffer>, B extends Float64Array = Float64Array<ArrayBuffer>>(
+  toLonLat<A extends Out = undefined, B extends Out = undefined>(
     x: ArrayLike<number>,
     y: ArrayLike<number>,
-    lon?: A,
-    lat?: B,
-  ): { lon: NoInfer<A>; lat: NoInfer<B> };
+    ...out: [] | [lon: A] | [lon: A, lat: B]
+  ): { lon: Output<A>; lat: Output<B> };
   /** Longitude/latitude arrays in degrees -> x/y arrays in metres. */
-  fromLonLat<A extends Float64Array = Float64Array<ArrayBuffer>, B extends Float64Array = Float64Array<ArrayBuffer>>(
+  fromLonLat<A extends Out = undefined, B extends Out = undefined>(
     lon: ArrayLike<number>,
     lat: ArrayLike<number>,
-    x?: A,
-    y?: B,
-  ): { x: NoInfer<A>; y: NoInfer<B> };
+    ...out: [] | [x: A] | [x: A, y: B]
+  ): { x: Output<A>; y: Output<B> };
   /** Interleaved [x0, y0, x1, y1, ...] -> interleaved [lon0, lat0, ...]. */
-  toLonLatInterleaved<T extends Float64Array = Float64Array<ArrayBuffer>>(xy: ArrayLike<number>, out?: T): NoInfer<T>;
+  toLonLatInterleaved<T extends Out = undefined>(xy: ArrayLike<number>, ...out: [] | [out: T]): Output<T>;
   /** Interleaved [lon0, lat0, ...] -> interleaved [x0, y0, ...]. */
-  fromLonLatInterleaved<T extends Float64Array = Float64Array<ArrayBuffer>>(
-    lonlat: ArrayLike<number>,
-    out?: T,
-  ): NoInfer<T>;
+  fromLonLatInterleaved<T extends Out = undefined>(lonlat: ArrayLike<number>, ...out: [] | [out: T]): Output<T>;
   toLonLatPoint(x: number, y: number): [lon: number, lat: number];
   fromLonLatPoint(lon: number, lat: number): [x: number, y: number];
 }
@@ -46,29 +52,21 @@ export interface Projection {
  */
 export interface Geographic {
   /** This system's longitude/latitude arrays -> WGS84 longitude/latitude arrays. */
-  toWgs84<A extends Float64Array = Float64Array<ArrayBuffer>, B extends Float64Array = Float64Array<ArrayBuffer>>(
+  toWgs84<A extends Out = undefined, B extends Out = undefined>(
     lon: ArrayLike<number>,
     lat: ArrayLike<number>,
-    outLon?: A,
-    outLat?: B,
-  ): { lon: NoInfer<A>; lat: NoInfer<B> };
+    ...out: [] | [outLon: A] | [outLon: A, outLat: B]
+  ): { lon: Output<A>; lat: Output<B> };
   /** WGS84 longitude/latitude arrays -> this system's longitude/latitude arrays. */
-  fromWgs84<A extends Float64Array = Float64Array<ArrayBuffer>, B extends Float64Array = Float64Array<ArrayBuffer>>(
+  fromWgs84<A extends Out = undefined, B extends Out = undefined>(
     lon: ArrayLike<number>,
     lat: ArrayLike<number>,
-    outLon?: A,
-    outLat?: B,
-  ): { lon: NoInfer<A>; lat: NoInfer<B> };
+    ...out: [] | [outLon: A] | [outLon: A, outLat: B]
+  ): { lon: Output<A>; lat: Output<B> };
   /** Interleaved [lon0, lat0, ...] in this system -> interleaved WGS84. */
-  toWgs84Interleaved<T extends Float64Array = Float64Array<ArrayBuffer>>(
-    lonlat: ArrayLike<number>,
-    out?: T,
-  ): NoInfer<T>;
+  toWgs84Interleaved<T extends Out = undefined>(lonlat: ArrayLike<number>, ...out: [] | [out: T]): Output<T>;
   /** Interleaved WGS84 [lon0, lat0, ...] -> interleaved in this system. */
-  fromWgs84Interleaved<T extends Float64Array = Float64Array<ArrayBuffer>>(
-    lonlat: ArrayLike<number>,
-    out?: T,
-  ): NoInfer<T>;
+  fromWgs84Interleaved<T extends Out = undefined>(lonlat: ArrayLike<number>, ...out: [] | [out: T]): Output<T>;
   toWgs84Point(lon: number, lat: number): [lon: number, lat: number];
   fromWgs84Point(lon: number, lat: number): [lon: number, lat: number];
 }

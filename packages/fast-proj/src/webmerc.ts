@@ -81,33 +81,33 @@ function sphericalMercator(): Projection {
   }
 
   return {
-    toLonLat(x, y, lon, lat) {
+    toLonLat(x, y, lonBuf?, latBuf?) {
       const n = x.length;
       checkSame(n, y.length, 'x and y');
-      lon = output(lon, n, 'lon');
-      lat = output(lat, n, 'lat');
+      const lon = output(lonBuf, n, 'lon'),
+        lat = output(latBuf, n, 'lat');
       inverseBatch(x, y, lon, lat, 0, 1, n);
       return { lon, lat };
     },
-    fromLonLat(lon, lat, x, y) {
+    fromLonLat(lon, lat, xBuf?, yBuf?) {
       const n = lon.length;
       checkSame(n, lat.length, 'lon and lat');
-      x = output(x, n, 'x');
-      y = output(y, n, 'y');
+      const x = output(xBuf, n, 'x'),
+        y = output(yBuf, n, 'y');
       forwardBatch(lon, lat, x, y, 0, 1, n);
       return { x, y };
     },
-    toLonLatInterleaved(xy, out) {
+    toLonLatInterleaved(xy, outBuf?) {
       const n = xy.length;
       checkEven(n);
-      out = output(out, n, 'out');
+      const out = output(outBuf, n, 'out');
       inverseBatch(xy, xy, out, out, 1, 2, n);
       return out;
     },
-    fromLonLatInterleaved(lonlat, out) {
+    fromLonLatInterleaved(lonlat, outBuf?) {
       const n = lonlat.length;
       checkEven(n);
-      out = output(out, n, 'out');
+      const out = output(outBuf, n, 'out');
       forwardBatch(lonlat, lonlat, out, out, 1, 2, n);
       return out;
     },

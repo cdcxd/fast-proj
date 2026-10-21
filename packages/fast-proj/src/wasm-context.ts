@@ -174,33 +174,33 @@ export function wasmContext(exports: Exports): WasmContext {
   function buildProjection<T extends Projection>(js: T, fwd: Kernel, inv: Kernel): T {
     return {
       ...js,
-      toLonLat(x, y, lon, lat) {
+      toLonLat(x, y, lonBuf?, latBuf?) {
         const n = x.length;
         checkSame(n, y.length, 'x and y');
-        lon = output(lon, n, 'lon');
-        lat = output(lat, n, 'lat');
+        const lon = output(lonBuf, n, 'lon'),
+          lat = output(latBuf, n, 'lat');
         run(inv, x, y, lon, lat);
         return { lon, lat };
       },
-      fromLonLat(lon, lat, x, y) {
+      fromLonLat(lon, lat, xBuf?, yBuf?) {
         const n = lon.length;
         checkSame(n, lat.length, 'lon and lat');
-        x = output(x, n, 'x');
-        y = output(y, n, 'y');
+        const x = output(xBuf, n, 'x'),
+          y = output(yBuf, n, 'y');
         run(fwd, lon, lat, x, y);
         return { x, y };
       },
-      toLonLatInterleaved(xy, out) {
+      toLonLatInterleaved(xy, outBuf?) {
         const n = xy.length;
         checkEven(n);
-        out = output(out, n, 'out');
+        const out = output(outBuf, n, 'out');
         runInterleaved(inv, xy, out);
         return out;
       },
-      fromLonLatInterleaved(lonlat, out) {
+      fromLonLatInterleaved(lonlat, outBuf?) {
         const n = lonlat.length;
         checkEven(n);
-        out = output(out, n, 'out');
+        const out = output(outBuf, n, 'out');
         runInterleaved(fwd, lonlat, out);
         return out;
       },
@@ -229,33 +229,33 @@ export function wasmContext(exports: Exports): WasmContext {
 
   function buildGcj(js: Geographic): Geographic {
     return (wasmGcj = Object.freeze({
-      toWgs84(lon, lat, outLon, outLat) {
+      toWgs84(lon, lat, outLon?, outLat?) {
         const n = lon.length;
         checkSame(n, lat.length, 'lon and lat');
-        outLon = output(outLon, n, 'outLon');
-        outLat = output(outLat, n, 'outLat');
-        run(gcjInv, lon, lat, outLon, outLat);
-        return { lon: outLon, lat: outLat };
+        const oLon = output(outLon, n, 'outLon'),
+          oLat = output(outLat, n, 'outLat');
+        run(gcjInv, lon, lat, oLon, oLat);
+        return { lon: oLon, lat: oLat };
       },
-      fromWgs84(lon, lat, outLon, outLat) {
+      fromWgs84(lon, lat, outLon?, outLat?) {
         const n = lon.length;
         checkSame(n, lat.length, 'lon and lat');
-        outLon = output(outLon, n, 'outLon');
-        outLat = output(outLat, n, 'outLat');
-        run(gcjFwd, lon, lat, outLon, outLat);
-        return { lon: outLon, lat: outLat };
+        const oLon = output(outLon, n, 'outLon'),
+          oLat = output(outLat, n, 'outLat');
+        run(gcjFwd, lon, lat, oLon, oLat);
+        return { lon: oLon, lat: oLat };
       },
-      toWgs84Interleaved(lonlat, out) {
+      toWgs84Interleaved(lonlat, outBuf?) {
         const n = lonlat.length;
         checkEven(n);
-        out = output(out, n, 'out');
+        const out = output(outBuf, n, 'out');
         runInterleaved(gcjInv, lonlat, out);
         return out;
       },
-      fromWgs84Interleaved(lonlat, out) {
+      fromWgs84Interleaved(lonlat, outBuf?) {
         const n = lonlat.length;
         checkEven(n);
-        out = output(out, n, 'out');
+        const out = output(outBuf, n, 'out');
         runInterleaved(gcjFwd, lonlat, out);
         return out;
       },
