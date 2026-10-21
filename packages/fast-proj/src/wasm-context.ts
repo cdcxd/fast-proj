@@ -2,11 +2,11 @@
  * The converters of a loadWasm() context: wasm-backed ones over a fixed 64 Ki-point workspace, or the JavaScript ones
  * guarded against use after dispose(). wasm.ts loads the module and picks one.
  */
-import { checkEven, checkOut, checkSame } from './checks.js';
+import { checkEven, checkSame, output } from './checks.js';
 import { buildGcj02, gcj02Mode } from './gcj02.js';
 import { type FusedInverse, fusers, tmInverses, withGeographic } from './geographic.js';
 import { parseTmerc, tmerc as jsTmerc } from './tmerc.js';
-import type { Geographic, Projection, TransverseMercator } from './types.js';
+import type { Geographic, Impl, Projection, TransverseMercator } from './types.js';
 import { parseUtm, utm as jsUtm } from './utm.js';
 import { parseWebMercator, webMercator as jsWebMercator } from './webmerc.js';
 import type { WasmContext } from './wasm.js';
@@ -174,46 +174,40 @@ export function wasmContext(exports: Exports): WasmContext {
   function buildProjection<T extends Projection>(js: T, fwd: Kernel, inv: Kernel): T {
     return {
       ...js,
-      toLonLat(x, y, lon, lat) {
+      toLonLat(x, y, lonBuf?, latBuf?) {
         const n = x.length;
         checkSame(n, y.length, 'x and y');
-        if (lon) checkOut(lon, n, 'lon');
-        else lon = new Float64Array(n);
-        if (lat) checkOut(lat, n, 'lat');
-        else lat = new Float64Array(n);
+        const lon = output(lonBuf, n, 'lon'),
+          lat = output(latBuf, n, 'lat');
         run(inv, x, y, lon, lat);
         return { lon, lat };
       },
-      fromLonLat(lon, lat, x, y) {
+      fromLonLat(lon, lat, xBuf?, yBuf?) {
         const n = lon.length;
         checkSame(n, lat.length, 'lon and lat');
-        if (x) checkOut(x, n, 'x');
-        else x = new Float64Array(n);
-        if (y) checkOut(y, n, 'y');
-        else y = new Float64Array(n);
+        const x = output(xBuf, n, 'x'),
+          y = output(yBuf, n, 'y');
         run(fwd, lon, lat, x, y);
         return { x, y };
       },
-      toLonLatInterleaved(xy, out) {
+      toLonLatInterleaved(xy, outBuf?) {
         const n = xy.length;
         checkEven(n);
-        if (out) checkOut(out, n, 'out');
-        else out = new Float64Array(n);
+        const out = output(outBuf, n, 'out');
         runInterleaved(inv, xy, out);
         return out;
       },
-      fromLonLatInterleaved(lonlat, out) {
+      fromLonLatInterleaved(lonlat, outBuf?) {
         const n = lonlat.length;
         checkEven(n);
-        if (out) checkOut(out, n, 'out');
-        else out = new Float64Array(n);
+        const out = output(outBuf, n, 'out');
         runInterleaved(fwd, lonlat, out);
         return out;
       },
       // A single point costs more to pass into wasm than to compute; the JavaScript kernel handles it.
       toLonLatPoint: (x, y) => (live(), js.toLonLatPoint(x, y)),
       fromLonLatPoint: (lon, lat) => (live(), js.fromLonLatPoint(lon, lat)),
-    };
+    } satisfies Impl<Projection>;
   }
 
   // x/y -> this context's wasm GCJ-02 in one call, for a projection composed with it; single points run the
@@ -235,45 +229,39 @@ export function wasmContext(exports: Exports): WasmContext {
 
   function buildGcj(js: Geographic): Geographic {
     return (wasmGcj = Object.freeze({
-      toWgs84(lon, lat, outLon, outLat) {
+      toWgs84(lon, lat, outLon?, outLat?) {
         const n = lon.length;
         checkSame(n, lat.length, 'lon and lat');
-        if (outLon) checkOut(outLon, n, 'outLon');
-        else outLon = new Float64Array(n);
-        if (outLat) checkOut(outLat, n, 'outLat');
-        else outLat = new Float64Array(n);
-        run(gcjInv, lon, lat, outLon, outLat);
-        return { lon: outLon, lat: outLat };
+        const oLon = output(outLon, n, 'outLon'),
+          oLat = output(outLat, n, 'outLat');
+        run(gcjInv, lon, lat, oLon, oLat);
+        return { lon: oLon, lat: oLat };
       },
-      fromWgs84(lon, lat, outLon, outLat) {
+      fromWgs84(lon, lat, outLon?, outLat?) {
         const n = lon.length;
         checkSame(n, lat.length, 'lon and lat');
-        if (outLon) checkOut(outLon, n, 'outLon');
-        else outLon = new Float64Array(n);
-        if (outLat) checkOut(outLat, n, 'outLat');
-        else outLat = new Float64Array(n);
-        run(gcjFwd, lon, lat, outLon, outLat);
-        return { lon: outLon, lat: outLat };
+        const oLon = output(outLon, n, 'outLon'),
+          oLat = output(outLat, n, 'outLat');
+        run(gcjFwd, lon, lat, oLon, oLat);
+        return { lon: oLon, lat: oLat };
       },
-      toWgs84Interleaved(lonlat, out) {
+      toWgs84Interleaved(lonlat, outBuf?) {
         const n = lonlat.length;
         checkEven(n);
-        if (out) checkOut(out, n, 'out');
-        else out = new Float64Array(n);
+        const out = output(outBuf, n, 'out');
         runInterleaved(gcjInv, lonlat, out);
         return out;
       },
-      fromWgs84Interleaved(lonlat, out) {
+      fromWgs84Interleaved(lonlat, outBuf?) {
         const n = lonlat.length;
         checkEven(n);
-        if (out) checkOut(out, n, 'out');
-        else out = new Float64Array(n);
+        const out = output(outBuf, n, 'out');
         runInterleaved(gcjFwd, lonlat, out);
         return out;
       },
       toWgs84Point: (lon, lat) => (live(), js.toWgs84Point(lon, lat)),
       fromWgs84Point: (lon, lat) => (live(), js.fromWgs84Point(lon, lat)),
-    } satisfies Geographic));
+    } satisfies Impl<Geographic>));
   }
 
   // One converter per mode, as for the root gcj02().

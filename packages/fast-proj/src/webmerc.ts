@@ -5,9 +5,9 @@
  *   from the colatitude poleward of 45 degrees, accurate near the poles;
  * - inverse: lambda = x / R, phi = atan(sinh(y / R)), the Gudermannian.
  */
-import { checkEven, checkOptions, checkOut, checkSame } from './checks.js';
+import { checkEven, checkOptions, checkSame, output } from './checks.js';
 import { checkGeographic, withGeographic } from './geographic.js';
-import type { Geographic, Projection } from './types.js';
+import type { Geographic, Impl, Projection } from './types.js';
 
 export interface WebMercatorOptions {
   /** Geographic system of `toLonLat`/`fromLonLat`. Default WGS84. */
@@ -81,39 +81,33 @@ function sphericalMercator(): Projection {
   }
 
   return {
-    toLonLat(x, y, lon, lat) {
+    toLonLat(x, y, lonBuf?, latBuf?) {
       const n = x.length;
       checkSame(n, y.length, 'x and y');
-      if (lon) checkOut(lon, n, 'lon');
-      else lon = new Float64Array(n);
-      if (lat) checkOut(lat, n, 'lat');
-      else lat = new Float64Array(n);
+      const lon = output(lonBuf, n, 'lon'),
+        lat = output(latBuf, n, 'lat');
       inverseBatch(x, y, lon, lat, 0, 1, n);
       return { lon, lat };
     },
-    fromLonLat(lon, lat, x, y) {
+    fromLonLat(lon, lat, xBuf?, yBuf?) {
       const n = lon.length;
       checkSame(n, lat.length, 'lon and lat');
-      if (x) checkOut(x, n, 'x');
-      else x = new Float64Array(n);
-      if (y) checkOut(y, n, 'y');
-      else y = new Float64Array(n);
+      const x = output(xBuf, n, 'x'),
+        y = output(yBuf, n, 'y');
       forwardBatch(lon, lat, x, y, 0, 1, n);
       return { x, y };
     },
-    toLonLatInterleaved(xy, out) {
+    toLonLatInterleaved(xy, outBuf?) {
       const n = xy.length;
       checkEven(n);
-      if (out) checkOut(out, n, 'out');
-      else out = new Float64Array(n);
+      const out = output(outBuf, n, 'out');
       inverseBatch(xy, xy, out, out, 1, 2, n);
       return out;
     },
-    fromLonLatInterleaved(lonlat, out) {
+    fromLonLatInterleaved(lonlat, outBuf?) {
       const n = lonlat.length;
       checkEven(n);
-      if (out) checkOut(out, n, 'out');
-      else out = new Float64Array(n);
+      const out = output(outBuf, n, 'out');
       forwardBatch(lonlat, lonlat, out, out, 1, 2, n);
       return out;
     },
@@ -125,7 +119,7 @@ function sphericalMercator(): Projection {
       wmForward(lon, lat);
       return [rx, ry];
     },
-  };
+  } satisfies Impl<Projection>;
 }
 
 // Batch loops as in tmerc.ts: (o1, step) = (0, 1) for separate arrays, (1, 2) interleaved.

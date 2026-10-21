@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { fusers, tmInverses } from '../src/geographic.js';
 import { GCJ02, GRS80, WGS84, gcj02, tmerc as jsTmerc, utm as jsUtm, utmFor, utmZoneFor } from '../src/index.js';
 import type { Geographic, Projection } from '../src/index.js';
@@ -257,6 +257,47 @@ describe('root rules', () => {
     expect(gcj02({ outsideChina: 'transform' })).toBe(gcj02({ outsideChina: 'transform' }));
     expect(GCJ02.fromWgs84Point(116.391, 39.907)).toEqual(gcj02().fromWgs84Point(116.391, 39.907));
     expect(GCJ02.fromWgs84Point(10, 50)).toEqual([10, 50]);
+  });
+
+  it('types new output arrays as ArrayBuffer-backed and keeps the type of given ones', () => {
+    type OnArrayBuffer = Float64Array<ArrayBuffer>;
+    type OnSharedArrayBuffer = Float64Array<SharedArrayBuffer>;
+    const p = jsUtm({ zone: 33 });
+    const shared = new Float64Array(new SharedArrayBuffer(16));
+    const maybe = undefined as OnSharedArrayBuffer | undefined;
+    expectTypeOf(p.toLonLatInterleaved([500000, 0])).toEqualTypeOf<OnArrayBuffer>();
+    expectTypeOf(p.toLonLatInterleaved([500000, 0], shared)).toEqualTypeOf<OnSharedArrayBuffer>();
+    expectTypeOf(p.toLonLatInterleaved([500000, 0], undefined)).toEqualTypeOf<OnArrayBuffer>();
+    // A buffer that may be absent may come back as a new array.
+    const r0 = p.toLonLatInterleaved([500000, 0], maybe);
+    expectTypeOf(r0).toEqualTypeOf<OnSharedArrayBuffer | OnArrayBuffer>();
+    expect(r0.buffer).toBeInstanceOf(ArrayBuffer);
+    expectTypeOf(p.toLonLat([500000], [0])).toEqualTypeOf<{ lon: OnArrayBuffer; lat: OnArrayBuffer }>();
+    expectTypeOf(GCJ02.fromWgs84([116], [39], shared)).toEqualTypeOf<{
+      lon: OnSharedArrayBuffer;
+      lat: OnArrayBuffer;
+    }>();
+    expectTypeOf(GCJ02.toWgs84([116], [39], undefined, maybe)).toEqualTypeOf<{
+      lon: OnArrayBuffer;
+      lat: OnSharedArrayBuffer | OnArrayBuffer;
+    }>();
+    // An explicitly typed buffer must be given.
+    // @ts-expect-error
+    p.toLonLatInterleaved<OnSharedArrayBuffer>([500000, 0]);
+    // @ts-expect-error
+    p.toLonLat<OnSharedArrayBuffer, OnSharedArrayBuffer>([500000], [0], shared);
+    // @ts-expect-error
+    GCJ02.fromWgs84Interleaved<OnSharedArrayBuffer>([116, 39]);
+    // @ts-expect-error
+    GCJ02.toWgs84<OnSharedArrayBuffer>([116], [39]);
+    expectTypeOf(
+      p.toLonLat<OnSharedArrayBuffer, OnSharedArrayBuffer | undefined>([500000], [0], shared, maybe),
+    ).toEqualTypeOf<{
+      lon: OnSharedArrayBuffer;
+      lat: OnSharedArrayBuffer | OnArrayBuffer;
+    }>();
+    // A BlobPart must be ArrayBuffer-backed.
+    expect(new Blob([p.fromLonLatInterleaved([15, 52])]).size).toBe(16);
   });
 
   it('zone helpers separate type and range errors', () => {

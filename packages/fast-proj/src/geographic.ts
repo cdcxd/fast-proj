@@ -1,5 +1,5 @@
-import { checkEven, checkOut, checkSame } from './checks.js';
-import type { Geographic, Projection } from './types.js';
+import { checkEven, checkSame, output } from './checks.js';
+import type { Geographic, Impl, Projection } from './types.js';
 
 const METHODS = [
   'toWgs84',
@@ -87,57 +87,55 @@ export function withGeographic<T extends Projection>(
   return Object.freeze({
     ...p,
     geographic: g,
-    toLonLat(x, y, lon, lat) {
+    toLonLat(x, y, lonBuf?, latBuf?) {
       check();
       const n = x.length;
+      checkSame(n, y.length, 'x and y');
+      const lon = output(lonBuf, n, 'lon'),
+        lat = output(latBuf, n, 'lat');
       if (f) {
-        checkSame(n, y.length, 'x and y');
-        if (lon) checkOut(lon, n, 'lon');
-        else lon = new Float64Array(n);
-        if (lat) checkOut(lat, n, 'lat');
-        else lat = new Float64Array(n);
         f.batch(x, y, lon, lat, 0, 1, n);
         return { lon, lat };
       }
-      const r = p.toLonLat(x, y, lon, lat);
-      const lo = head(r.lon, n),
-        la = head(r.lat, n);
+      p.toLonLat(x, y, lon, lat);
+      const lo = head(lon, n),
+        la = head(lat, n);
       g.fromWgs84(lo, la, lo, la);
-      return r;
+      return { lon, lat };
     },
-    fromLonLat(lon, lat, x, y) {
+    fromLonLat(lon, lat, xBuf?, yBuf?) {
       check();
       const n = lon.length;
       checkSame(n, lat.length, 'lon and lat');
-      if (x) checkOut(x, n, 'x');
-      else x = new Float64Array(n);
-      if (y) checkOut(y, n, 'y');
-      else y = new Float64Array(n);
+      const x = output(xBuf, n, 'x'),
+        y = output(yBuf, n, 'y');
       g.toWgs84(lon, lat, x, y);
       const xs = head(x, n),
         ys = head(y, n);
       p.fromLonLat(xs, ys, xs, ys);
       return { x, y };
     },
-    toLonLatInterleaved(xy, out) {
+    toLonLatInterleaved(xy, outBuf?) {
       check();
+      const n = xy.length;
+      checkEven(n);
+      const out = output(outBuf, n, 'out');
       if (f) {
-        const n = xy.length;
-        checkEven(n);
-        if (out) checkOut(out, n, 'out');
-        else out = new Float64Array(n);
         f.batch(xy, xy, out, out, 1, 2, n);
         return out;
       }
-      out = p.toLonLatInterleaved(xy, out);
-      const o = head(out, xy.length);
+      p.toLonLatInterleaved(xy, out);
+      const o = head(out, n);
       g.fromWgs84Interleaved(o, o);
       return out;
     },
-    fromLonLatInterleaved(lonlat, out) {
+    fromLonLatInterleaved(lonlat, outBuf?) {
       check();
-      out = g.toWgs84Interleaved(lonlat, out);
-      const o = head(out, lonlat.length);
+      const n = lonlat.length;
+      checkEven(n);
+      const out = output(outBuf, n, 'out');
+      g.toWgs84Interleaved(lonlat, out);
+      const o = head(out, n);
       p.fromLonLatInterleaved(o, o);
       return out;
     },
@@ -152,5 +150,5 @@ export function withGeographic<T extends Projection>(
       const [l, b] = g.toWgs84Point(lon, lat);
       return p.fromLonLatPoint(l, b);
     },
-  } satisfies Projection);
+  } satisfies Impl<Projection>);
 }
