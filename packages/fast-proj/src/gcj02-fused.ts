@@ -2,6 +2,7 @@
  * x/y on a JavaScript transverse Mercator -> GCJ-02 in one pass: tmerc's inverse fused with GCJ-02's fromWgs84, copied
  * in from both by scripts/inline.ts. gcj02.ts registers the builder for its converters.
  */
+import { KC1, KC2, KC3, KC4, KC5, KC6, KS1, KS2, KS3, KS4, KS5, KS6 } from './poly.js';
 import * as K from './gcj02-constants.js';
 import type { FusedInverse, TmInverse } from './geographic.js';
 
@@ -50,12 +51,36 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
       const xi = (y - fn) * invKA;
       const eta = (x - fe) * invKA;
 
-      const s1 = Math.sin(xi);
-      const c1x = Math.cos(xi);
-      const e = Math.exp(eta);
-      const ie = 1 / e;
-      const ch1 = 0.5 * (e + ie);
-      const sh1 = 0.5 * (e - ie);
+      let s1, c1x;
+      if (xi > -1.5707963267948966 && xi < 1.5707963267948966) {
+        const hx = 0.5 * xi;
+        const z = hx * hx;
+        const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
+        const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+        s1 = xi === 0 ? xi : 2 * sn * cs;
+        c1x = (cs - sn) * (cs + sn);
+      } else {
+        s1 = Math.sin(xi);
+        c1x = Math.cos(xi);
+      }
+      let ch1, sh1;
+      if (eta > -0.35 && eta < 0.35) {
+        const w = eta * eta;
+        sh1 =
+          eta +
+          eta * w * (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w / 6227020800)))));
+        ch1 =
+          1 +
+          w *
+            (1 / 2 +
+              w *
+                (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600 + w / 87178291200))))));
+      } else {
+        const e = Math.exp(eta);
+        const ie = 1 / e;
+        ch1 = 0.5 * (e + ie);
+        sh1 = 0.5 * (e - ie);
+      }
       const s2 = 2 * s1 * c1x;
       const c2x = c1x * c1x - s1 * s1;
       const ch = ch1 * ch1 + sh1 * sh1;
@@ -226,12 +251,39 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
             const xi = (y - fn) * invKA;
             const eta = (x - fe) * invKA;
 
-            const s1 = Math.sin(xi);
-            const c1x = Math.cos(xi);
-            const e = Math.exp(eta);
-            const ie = 1 / e;
-            const ch1 = 0.5 * (e + ie);
-            const sh1 = 0.5 * (e - ie);
+            let s1, c1x;
+            if (xi > -1.5707963267948966 && xi < 1.5707963267948966) {
+              const hx = 0.5 * xi;
+              const z = hx * hx;
+              const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
+              const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+              s1 = xi === 0 ? xi : 2 * sn * cs;
+              c1x = (cs - sn) * (cs + sn);
+            } else {
+              s1 = Math.sin(xi);
+              c1x = Math.cos(xi);
+            }
+            let ch1, sh1;
+            if (eta > -0.35 && eta < 0.35) {
+              const w = eta * eta;
+              sh1 =
+                eta +
+                eta *
+                  w *
+                  (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w / 6227020800)))));
+              ch1 =
+                1 +
+                w *
+                  (1 / 2 +
+                    w *
+                      (1 / 24 +
+                        w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600 + w / 87178291200))))));
+            } else {
+              const e = Math.exp(eta);
+              const ie = 1 / e;
+              ch1 = 0.5 * (e + ie);
+              sh1 = 0.5 * (e - ie);
+            }
             const s2 = 2 * s1 * c1x;
             const c2x = c1x * c1x - s1 * s1;
             const ch = ch1 * ch1 + sh1 * sh1;

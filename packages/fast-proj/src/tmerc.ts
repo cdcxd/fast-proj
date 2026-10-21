@@ -16,6 +16,7 @@ import { type Ellipsoid, WGS84, checkEllipsoid, tmSeries } from './ellipsoid.js'
 import { checkEven, checkNumber, checkOptions, checkSame, output } from './checks.js';
 import { checkGeographic, tmInverses, withGeographic } from './geographic.js';
 import type { Geographic, Impl, TransverseMercator } from './types.js';
+import { KC1, KC2, KC3, KC4, KC5, KC6, KS1, KS2, KS3, KS4, KS5, KS6 } from './poly.js';
 
 export interface TransverseMercatorOptions {
   /** Degrees, in [-180, 180]. */
@@ -134,8 +135,18 @@ export function transverseMercator(
     }
     const lam = lonDeg * D2R - lon0;
 
-    const sp = Math.sin(phi);
-    const cp = Math.cos(phi);
+    let sp, cp;
+    if (phi > -1.5707963267948966 && phi < 1.5707963267948966) {
+      const hx = 0.5 * phi;
+      const z = hx * hx;
+      const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
+      const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+      sp = phi === 0 ? phi : 2 * sn * cs;
+      cp = (cs - sn) * (cs + sn);
+    } else {
+      sp = Math.sin(phi);
+      cp = Math.cos(phi);
+    }
     const p = 2 - 4 * sp * sp;
     const q1 = cp0 + p * (cp1 + p * (cp2 + p * (cp3 + p * (c5 + p * c6))));
     const dchi = 2 * sp * cp * q1;
@@ -145,8 +156,18 @@ export function transverseMercator(
     const sc = sp * cd + cp * sd;
     const cc = cp * cd - sp * sd;
 
-    const sl = Math.sin(lam);
-    const cl = Math.cos(lam);
+    let sl, cl;
+    if (lam > -0.8 && lam < 0.8) {
+      const hx = 0.5 * lam;
+      const z = hx * hx;
+      const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
+      const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+      sl = lam === 0 ? lam : 2 * sn * cs;
+      cl = (cs - sn) * (cs + sn);
+    } else {
+      sl = Math.sin(lam);
+      cl = Math.cos(lam);
+    }
     if (!(cl > 1e-15)) {
       rx = NaN;
       ry = NaN;
@@ -196,12 +217,37 @@ export function transverseMercator(
     const xi = (y - fn) * invKA;
     const eta = (x - fe) * invKA;
 
-    const s1 = Math.sin(xi);
-    const c1x = Math.cos(xi);
-    const e = Math.exp(eta);
-    const ie = 1 / e;
-    const ch1 = 0.5 * (e + ie);
-    const sh1 = 0.5 * (e - ie);
+    let s1, c1x;
+    if (xi > -1.5707963267948966 && xi < 1.5707963267948966) {
+      // sin, cos of xi / 2 (|xi / 2| < pi / 4), then double angles.
+      const hx = 0.5 * xi;
+      const z = hx * hx;
+      const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
+      const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+      // xi = 0 keeps its sign.
+      s1 = xi === 0 ? xi : 2 * sn * cs;
+      c1x = (cs - sn) * (cs + sn);
+    } else {
+      s1 = Math.sin(xi);
+      c1x = Math.cos(xi);
+    }
+    let ch1, sh1;
+    if (eta > -0.35 && eta < 0.35) {
+      const w = eta * eta;
+      sh1 =
+        eta +
+        eta * w * (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w / 6227020800)))));
+      ch1 =
+        1 +
+        w *
+          (1 / 2 +
+            w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600 + w / 87178291200))))));
+    } else {
+      const e = Math.exp(eta);
+      const ie = 1 / e;
+      ch1 = 0.5 * (e + ie);
+      sh1 = 0.5 * (e - ie);
+    }
     const s2 = 2 * s1 * c1x;
     const c2x = c1x * c1x - s1 * s1;
     const ch = ch1 * ch1 + sh1 * sh1;
@@ -274,12 +320,37 @@ export function transverseMercator(
         const xi = (y - fn) * invKA;
         const eta = (x - fe) * invKA;
 
-        const s1 = Math.sin(xi);
-        const c1x = Math.cos(xi);
-        const e = Math.exp(eta);
-        const ie = 1 / e;
-        const ch1 = 0.5 * (e + ie);
-        const sh1 = 0.5 * (e - ie);
+        let s1, c1x;
+        if (xi > -1.5707963267948966 && xi < 1.5707963267948966) {
+          const hx = 0.5 * xi;
+          const z = hx * hx;
+          const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
+          const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+          s1 = xi === 0 ? xi : 2 * sn * cs;
+          c1x = (cs - sn) * (cs + sn);
+        } else {
+          s1 = Math.sin(xi);
+          c1x = Math.cos(xi);
+        }
+        let ch1, sh1;
+        if (eta > -0.35 && eta < 0.35) {
+          const w = eta * eta;
+          sh1 =
+            eta +
+            eta * w * (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w / 6227020800)))));
+          ch1 =
+            1 +
+            w *
+              (1 / 2 +
+                w *
+                  (1 / 24 +
+                    w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600 + w / 87178291200))))));
+        } else {
+          const e = Math.exp(eta);
+          const ie = 1 / e;
+          ch1 = 0.5 * (e + ie);
+          sh1 = 0.5 * (e - ie);
+        }
         const s2 = 2 * s1 * c1x;
         const c2x = c1x * c1x - s1 * s1;
         const ch = ch1 * ch1 + sh1 * sh1;
@@ -354,8 +425,18 @@ export function transverseMercator(
         }
         const lam = lonDeg * D2R - lon0;
 
-        const sp = Math.sin(phi);
-        const cp = Math.cos(phi);
+        let sp, cp;
+        if (phi > -1.5707963267948966 && phi < 1.5707963267948966) {
+          const hx = 0.5 * phi;
+          const z = hx * hx;
+          const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
+          const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+          sp = phi === 0 ? phi : 2 * sn * cs;
+          cp = (cs - sn) * (cs + sn);
+        } else {
+          sp = Math.sin(phi);
+          cp = Math.cos(phi);
+        }
         const p = 2 - 4 * sp * sp;
         const q1 = cp0 + p * (cp1 + p * (cp2 + p * (cp3 + p * (c5 + p * c6))));
         const dchi = 2 * sp * cp * q1;
@@ -365,8 +446,18 @@ export function transverseMercator(
         const sc = sp * cd + cp * sd;
         const cc = cp * cd - sp * sd;
 
-        const sl = Math.sin(lam);
-        const cl = Math.cos(lam);
+        let sl, cl;
+        if (lam > -0.8 && lam < 0.8) {
+          const hx = 0.5 * lam;
+          const z = hx * hx;
+          const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
+          const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+          sl = lam === 0 ? lam : 2 * sn * cs;
+          cl = (cs - sn) * (cs + sn);
+        } else {
+          sl = Math.sin(lam);
+          cl = Math.cos(lam);
+        }
         if (!(cl > 1e-15)) {
           outA[j] = NaN;
           outB[j + o1] = NaN;
