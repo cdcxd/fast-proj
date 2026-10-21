@@ -275,6 +275,19 @@ describe('root rules', () => {
     expectTypeOf(p.toLonLat([500000], [0])).toEqualTypeOf<{ lon: Fresh; lat: Fresh }>();
     expectTypeOf(GCJ02.fromWgs84([116], [39], shared)).toEqualTypeOf<{ lon: Shared; lat: Fresh }>();
     expectTypeOf(GCJ02.toWgs84([116], [39], undefined, maybe)).toEqualTypeOf<{ lon: Fresh; lat: Shared | Fresh }>();
+    // An explicitly typed buffer must be given.
+    // @ts-expect-error
+    p.toLonLatInterleaved<Shared>([500000, 0]);
+    // @ts-expect-error
+    p.toLonLat<Shared, Shared>([500000], [0], shared);
+    // @ts-expect-error
+    GCJ02.fromWgs84Interleaved<Shared>([116, 39]);
+    // @ts-expect-error
+    GCJ02.toWgs84<Shared>([116], [39]);
+    expectTypeOf(p.toLonLat<Shared, Shared | undefined>([500000], [0], shared, maybe)).toEqualTypeOf<{
+      lon: Shared;
+      lat: Shared | Fresh;
+    }>();
     // A BlobPart must be ArrayBuffer-backed.
     expect(new Blob([p.fromLonLatInterleaved([15, 52])]).size).toBe(16);
   });

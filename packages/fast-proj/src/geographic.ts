@@ -1,5 +1,5 @@
 import { checkEven, checkSame, output } from './checks.js';
-import type { Geographic, Projection } from './types.js';
+import type { Geographic, Impl, Projection } from './types.js';
 
 const METHODS = [
   'toWgs84',
@@ -150,5 +150,5 @@ export function withGeographic<T extends Projection>(
       const [l, b] = g.toWgs84Point(lon, lat);
       return p.fromLonLatPoint(l, b);
     },
-  } satisfies Projection);
+  } satisfies Impl<Projection>);
 }

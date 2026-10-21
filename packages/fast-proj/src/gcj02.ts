@@ -11,7 +11,7 @@ import { checkEven, checkOptions, checkSame, output } from './checks.js';
 import { fuser } from './gcj02-fused.js';
 import * as K from './gcj02-constants.js';
 import { fusers } from './geographic.js';
-import type { Geographic } from './types.js';
+import type { Geographic, Impl } from './types.js';
 
 // Bound here, not imported: V8 reads a module's own consts faster than imported ones (fromWgs84 12% in Node).
 const C35 = K.C35;
@@ -801,7 +801,7 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
       fromWgs84(lon, lat);
       return [rx, ry];
     },
-  } satisfies Geographic);
+  } satisfies Impl<Geographic>);
   fusers.set(g, fuser(mode));
   return g;
 }

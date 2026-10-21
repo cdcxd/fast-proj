@@ -15,7 +15,7 @@
 import { type Ellipsoid, WGS84, checkEllipsoid, tmSeries } from './ellipsoid.js';
 import { checkEven, checkNumber, checkOptions, checkSame, output } from './checks.js';
 import { checkGeographic, tmInverses, withGeographic } from './geographic.js';
-import type { Geographic, TransverseMercator } from './types.js';
+import type { Geographic, Impl, TransverseMercator } from './types.js';
 
 export interface TransverseMercatorOptions {
   /** Degrees, in [-180, 180]. */
@@ -408,7 +408,7 @@ export function transverseMercator(
     }
   }
 
-  const converter: TransverseMercator = {
+  const converter: Impl<TransverseMercator> = {
     centralMeridian: lon0Deg,
     scaleFactor: k0,
     falseEasting: fe,

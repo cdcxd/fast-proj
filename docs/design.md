@@ -65,43 +65,36 @@ the other is expected. Nothing in the projection types is UTM-specific: `webMerc
 `Projection` and take the same `geographic` option.
 
 ```ts
-// An output buffer, or a new Float64Array<ArrayBuffer> where one may be absent.
+// An output buffer, or a new Float64Array<ArrayBuffer> (`New`) where one may be undefined. Each batch method is
+// overloaded on how many buffers are passed, so a buffer typed by an explicit type argument can't be left out.
 type Out = Float64Array | undefined;
-type Output<T extends Out> = NoInfer<Exclude<T, undefined> | (undefined extends T ? Float64Array<ArrayBuffer> : never)>;
+type New = Float64Array<ArrayBuffer>;
+type Output<T extends Out> = Exclude<T, undefined> | (undefined extends T ? New : never);
+type Arr = ArrayLike<number>;
 
 // projected x/y (metres) <-> lon/lat on `geographic`, WGS84 when unset
 interface Projection {
   readonly geographic?: Geographic;
-  toLonLat<A extends Out = undefined, B extends Out = undefined>(
-    x: ArrayLike<number>,
-    y: ArrayLike<number>,
-    ...out: [] | [lon: A] | [lon: A, lat: B]
-  ): { lon: Output<A>; lat: Output<B> };
-  fromLonLat<A extends Out = undefined, B extends Out = undefined>(
-    lon: ArrayLike<number>,
-    lat: ArrayLike<number>,
-    ...out: [] | [x: A] | [x: A, y: B]
-  ): { x: Output<A>; y: Output<B> };
-  toLonLatInterleaved<T extends Out = undefined>(xy: ArrayLike<number>, ...out: [] | [out: T]): Output<T>;
-  fromLonLatInterleaved<T extends Out = undefined>(lonlat: ArrayLike<number>, ...out: [] | [out: T]): Output<T>;
+  toLonLat(x: Arr, y: Arr): { lon: New; lat: New };
+  toLonLat<A extends Out>(x: Arr, y: Arr, lon: A): { lon: Output<A>; lat: New };
+  toLonLat<A extends Out, B extends Out>(x: Arr, y: Arr, lon: A, lat: B): { lon: Output<A>; lat: Output<B> };
+  fromLonLat(lon: Arr, lat: Arr): { x: New; y: New };
+  fromLonLat<A extends Out>(lon: Arr, lat: Arr, x: A): { x: Output<A>; y: New };
+  fromLonLat<A extends Out, B extends Out>(lon: Arr, lat: Arr, x: A, y: B): { x: Output<A>; y: Output<B> };
+  toLonLatInterleaved(xy: Arr): New;
+  toLonLatInterleaved<T extends Out>(xy: Arr, out: T): Output<T>;
+  fromLonLatInterleaved(lonlat: Arr): New;
+  fromLonLatInterleaved<T extends Out>(lonlat: Arr, out: T): Output<T>;
   toLonLatPoint(x: number, y: number): [lon: number, lat: number];
   fromLonLatPoint(lon: number, lat: number): [x: number, y: number];
 }
 
-// this system's lon/lat <-> hub lon/lat
+// this system's lon/lat <-> hub lon/lat; the batch methods are overloaded as in Projection
 interface Geographic {
-  toWgs84<A extends Out = undefined, B extends Out = undefined>(
-    lon: ArrayLike<number>,
-    lat: ArrayLike<number>,
-    ...out: [] | [outLon: A] | [outLon: A, outLat: B]
-  ): { lon: Output<A>; lat: Output<B> };
-  fromWgs84<A extends Out = undefined, B extends Out = undefined>(
-    lon: ArrayLike<number>,
-    lat: ArrayLike<number>,
-    ...out: [] | [outLon: A] | [outLon: A, outLat: B]
-  ): { lon: Output<A>; lat: Output<B> };
-  toWgs84Interleaved<T extends Out = undefined>(lonlat: ArrayLike<number>, ...out: [] | [out: T]): Output<T>;
-  fromWgs84Interleaved<T extends Out = undefined>(lonlat: ArrayLike<number>, ...out: [] | [out: T]): Output<T>;
+  toWgs84<A extends Out, B extends Out>(lon: Arr, lat: Arr, outLon: A, outLat: B): { lon: Output<A>; lat: Output<B> };
+  fromWgs84<A extends Out, B extends Out>(lon: Arr, lat: Arr, outLon: A, outLat: B): { lon: Output<A>; lat: Output<B> };
+  toWgs84Interleaved<T extends Out>(lonlat: Arr, out: T): Output<T>;
+  fromWgs84Interleaved<T extends Out>(lonlat: Arr, out: T): Output<T>;
   toWgs84Point(lon: number, lat: number): [lon: number, lat: number];
   fromWgs84Point(lon: number, lat: number): [lon: number, lat: number];
 }

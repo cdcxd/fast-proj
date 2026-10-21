@@ -7,7 +7,7 @@
  */
 import { checkEven, checkOptions, checkSame, output } from './checks.js';
 import { checkGeographic, withGeographic } from './geographic.js';
-import type { Geographic, Projection } from './types.js';
+import type { Geographic, Impl, Projection } from './types.js';
 
 export interface WebMercatorOptions {
   /** Geographic system of `toLonLat`/`fromLonLat`. Default WGS84. */
@@ -119,7 +119,7 @@ function sphericalMercator(): Projection {
       wmForward(lon, lat);
       return [rx, ry];
     },
-  };
+  } satisfies Impl<Projection>;
 }
 
 // Batch loops as in tmerc.ts: (o1, step) = (0, 1) for separate arrays, (1, 2) interleaved.

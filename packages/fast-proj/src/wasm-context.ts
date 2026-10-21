@@ -6,7 +6,7 @@ import { checkEven, checkSame, output } from './checks.js';
 import { buildGcj02, gcj02Mode } from './gcj02.js';
 import { type FusedInverse, fusers, tmInverses, withGeographic } from './geographic.js';
 import { parseTmerc, tmerc as jsTmerc } from './tmerc.js';
-import type { Geographic, Projection, TransverseMercator } from './types.js';
+import type { Geographic, Impl, Projection, TransverseMercator } from './types.js';
 import { parseUtm, utm as jsUtm } from './utm.js';
 import { parseWebMercator, webMercator as jsWebMercator } from './webmerc.js';
 import type { WasmContext } from './wasm.js';
@@ -207,7 +207,7 @@ export function wasmContext(exports: Exports): WasmContext {
       // A single point costs more to pass into wasm than to compute; the JavaScript kernel handles it.
       toLonLatPoint: (x, y) => (live(), js.toLonLatPoint(x, y)),
       fromLonLatPoint: (lon, lat) => (live(), js.fromLonLatPoint(lon, lat)),
-    };
+    } satisfies Impl<Projection>;
   }
 
   // x/y -> this context's wasm GCJ-02 in one call, for a projection composed with it; single points run the
@@ -261,7 +261,7 @@ export function wasmContext(exports: Exports): WasmContext {
       },
       toWgs84Point: (lon, lat) => (live(), js.toWgs84Point(lon, lat)),
       fromWgs84Point: (lon, lat) => (live(), js.fromWgs84Point(lon, lat)),
-    } satisfies Geographic));
+    } satisfies Impl<Geographic>));
   }
 
   // One converter per mode, as for the root gcj02().

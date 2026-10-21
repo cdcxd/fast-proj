@@ -205,7 +205,7 @@ Every `Projection` has the methods below. A `Geographic` has the same set with l
 Inputs may be any array-like of numbers (`number[]`, `Float64Array`, `Float32Array`, ...). Outputs are new
 `Float64Array`s, typed `Float64Array<ArrayBuffer>` so they can go to a `Blob`, a `fetch` body or WebGL, unless output
 buffers are passed, in which case those buffers are filled and returned with their own type (a buffer typed as possibly
-`undefined` gives the union of the two). The output shapes `{ lon, lat }` and `{ x, y }` are stable.
+`undefined` gives the union of the two; one typed by an explicit type argument must be passed). The output shapes `{ lon, lat }` and `{ x, y }` are stable.
 
 Converters are frozen plain objects; their methods don't use `this` and can be destructured.
 
