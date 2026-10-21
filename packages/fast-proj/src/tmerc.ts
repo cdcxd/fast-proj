@@ -135,12 +135,15 @@ export function transverseMercator(
     }
     const lam = lonDeg * D2R - lon0;
 
+    // sin, cos by double angles from half the angle (|phi / 2| < pi / 4); lam within 0.8 rad, where the doubled cos
+    // keeps its relative accuracy, as wide as UTM ever needs.
     let sp, cp;
     if (phi > -1.5707963267948966 && phi < 1.5707963267948966) {
       const hx = 0.5 * phi;
       const z = hx * hx;
       const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
       const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+      // 0 keeps its sign.
       sp = phi === 0 ? phi : 2 * sn * cs;
       cp = (cs - sn) * (cs + sn);
     } else {
@@ -162,6 +165,7 @@ export function transverseMercator(
       const z = hx * hx;
       const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
       const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+      // 0 keeps its sign.
       sl = lam === 0 ? lam : 2 * sn * cs;
       cl = (cs - sn) * (cs + sn);
     } else {
@@ -237,11 +241,7 @@ export function transverseMercator(
       sh1 =
         eta +
         eta * w * (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w / 6227020800)))));
-      ch1 =
-        1 +
-        w *
-          (1 / 2 +
-            w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600 + w / 87178291200))))));
+      ch1 = 1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w / 479001600)))));
     } else {
       const e = Math.exp(eta);
       const ie = 1 / e;
@@ -338,13 +338,7 @@ export function transverseMercator(
           sh1 =
             eta +
             eta * w * (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w / 6227020800)))));
-          ch1 =
-            1 +
-            w *
-              (1 / 2 +
-                w *
-                  (1 / 24 +
-                    w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600 + w / 87178291200))))));
+          ch1 = 1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w / 479001600)))));
         } else {
           const e = Math.exp(eta);
           const ie = 1 / e;

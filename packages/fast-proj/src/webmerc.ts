@@ -1,10 +1,11 @@
 /**
  * Web Mercator (EPSG:3857): the spherical Mercator on a sphere of radius WGS84.a, applied to WGS84 longitude/latitude.
  *
- * - forward: x = R lambda, y = R asinh(tan phi), equal to R ln tan(pi/4 + phi/2) but accurate near the equator, and
- *   from the colatitude poleward of 45 degrees, accurate near the poles;
+ * - forward: x = R lambda, y = R ln tan(pi/4 + phi/2) from sin and cos of phi/2, with log1p near the equator, and from
+ *   the colatitude poleward of 45 degrees, accurate near the poles;
  * - inverse: lambda = x / R, phi = atan(sinh(y / R)), the Gudermannian.
  */
+import { KC1, KC2, KC3, KC4, KC5, KC6, KS1, KS2, KS3, KS4, KS5, KS6 } from './poly.js';
 import { checkEven, checkOptions, checkSame, output } from './checks.js';
 import { checkGeographic, withGeographic } from './geographic.js';
 import type { Geographic, Impl, Projection } from './types.js';
@@ -54,12 +55,21 @@ function sphericalMercator(): Projection {
       else if (lonDeg < -180) lonDeg += 360;
     }
     rx = K * lonDeg;
-    // Poleward of 45, from the colatitude, which is exact there: phi in radians would lose digits as it nears pi/2.
+    // y = R ln tan(pi/4 + phi/2) = R ln((c + s) / (c - s)) for s, c = sin, cos(phi/2): log1p for the accuracy near the
+    // equator; poleward of 45, R ln(c' / s') from half the colatitude, which is exact there (phi in radians would lose
+    // digits as it nears pi/2).
     const alat = Math.abs(latDeg);
+    const hx = 0.5 * D2R * (alat <= 45 ? latDeg : 90 - alat);
+    const z = hx * hx;
+    const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
+    const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+    // latDeg = 0 keeps its sign.
     ry =
       alat <= 45
-        ? R * Math.asinh(Math.tan(latDeg * D2R))
-        : R * Math.sign(latDeg) * Math.asinh(1 / Math.tan((90 - alat) * D2R));
+        ? latDeg === 0
+          ? latDeg
+          : R * Math.log1p((2 * sn) / (cs - sn))
+        : R * Math.sign(latDeg) * Math.log(cs / sn);
   }
 
   // @kernel
@@ -181,10 +191,16 @@ function forwardBatch(
       }
       outA[j] = K * lonDeg;
       const alat = Math.abs(latDeg);
+      const hx = 0.5 * D2R * (alat <= 45 ? latDeg : 90 - alat);
+      const z = hx * hx;
+      const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
+      const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
       outB[j + o1] =
         alat <= 45
-          ? R * Math.asinh(Math.tan(latDeg * D2R))
-          : R * Math.sign(latDeg) * Math.asinh(1 / Math.tan((90 - alat) * D2R));
+          ? latDeg === 0
+            ? latDeg
+            : R * Math.log1p((2 * sn) / (cs - sn))
+          : R * Math.sign(latDeg) * Math.log(cs / sn);
     }
     // @end
   }

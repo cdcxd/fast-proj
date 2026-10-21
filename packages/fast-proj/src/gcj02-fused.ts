@@ -69,12 +69,7 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
         sh1 =
           eta +
           eta * w * (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w / 6227020800)))));
-        ch1 =
-          1 +
-          w *
-            (1 / 2 +
-              w *
-                (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600 + w / 87178291200))))));
+        ch1 = 1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w / 479001600)))));
       } else {
         const e = Math.exp(eta);
         const ie = 1 / e;
@@ -272,12 +267,7 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
                   w *
                   (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w / 6227020800)))));
               ch1 =
-                1 +
-                w *
-                  (1 / 2 +
-                    w *
-                      (1 / 24 +
-                        w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600 + w / 87178291200))))));
+                1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w / 479001600)))));
             } else {
               const e = Math.exp(eta);
               const ie = 1 / e;
