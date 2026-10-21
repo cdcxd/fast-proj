@@ -42,6 +42,7 @@
       "types": "./dist/wasm.d.ts",
       "default": "./dist/wasm.js"
     },
+    "./fast-proj.wasm": "./dist/fast-proj.wasm",
     "./package.json": "./package.json"
   },
   "publishConfig": {

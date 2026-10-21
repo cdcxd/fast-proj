@@ -1,4 +1,4 @@
-import { checkEven, checkOut, checkSame } from './checks.js';
+import { checkEven, checkSame, output } from './checks.js';
 import type { Geographic, Projection } from './types.js';
 
 const METHODS = [
@@ -92,10 +92,8 @@ export function withGeographic<T extends Projection>(
       const n = x.length;
       if (f) {
         checkSame(n, y.length, 'x and y');
-        if (lon) checkOut(lon, n, 'lon');
-        else lon = new Float64Array(n);
-        if (lat) checkOut(lat, n, 'lat');
-        else lat = new Float64Array(n);
+        lon = output(lon, n, 'lon');
+        lat = output(lat, n, 'lat');
         f.batch(x, y, lon, lat, 0, 1, n);
         return { lon, lat };
       }
@@ -109,10 +107,8 @@ export function withGeographic<T extends Projection>(
       check();
       const n = lon.length;
       checkSame(n, lat.length, 'lon and lat');
-      if (x) checkOut(x, n, 'x');
-      else x = new Float64Array(n);
-      if (y) checkOut(y, n, 'y');
-      else y = new Float64Array(n);
+      x = output(x, n, 'x');
+      y = output(y, n, 'y');
       g.toWgs84(lon, lat, x, y);
       const xs = head(x, n),
         ys = head(y, n);
@@ -124,8 +120,7 @@ export function withGeographic<T extends Projection>(
       if (f) {
         const n = xy.length;
         checkEven(n);
-        if (out) checkOut(out, n, 'out');
-        else out = new Float64Array(n);
+        out = output(out, n, 'out');
         f.batch(xy, xy, out, out, 1, 2, n);
         return out;
       }

@@ -5,7 +5,7 @@
  *   from the colatitude poleward of 45 degrees, accurate near the poles;
  * - inverse: lambda = x / R, phi = atan(sinh(y / R)), the Gudermannian.
  */
-import { checkEven, checkOptions, checkOut, checkSame } from './checks.js';
+import { checkEven, checkOptions, checkSame, output } from './checks.js';
 import { checkGeographic, withGeographic } from './geographic.js';
 import type { Geographic, Projection } from './types.js';
 
@@ -84,36 +84,30 @@ function sphericalMercator(): Projection {
     toLonLat(x, y, lon, lat) {
       const n = x.length;
       checkSame(n, y.length, 'x and y');
-      if (lon) checkOut(lon, n, 'lon');
-      else lon = new Float64Array(n);
-      if (lat) checkOut(lat, n, 'lat');
-      else lat = new Float64Array(n);
+      lon = output(lon, n, 'lon');
+      lat = output(lat, n, 'lat');
       inverseBatch(x, y, lon, lat, 0, 1, n);
       return { lon, lat };
     },
     fromLonLat(lon, lat, x, y) {
       const n = lon.length;
       checkSame(n, lat.length, 'lon and lat');
-      if (x) checkOut(x, n, 'x');
-      else x = new Float64Array(n);
-      if (y) checkOut(y, n, 'y');
-      else y = new Float64Array(n);
+      x = output(x, n, 'x');
+      y = output(y, n, 'y');
       forwardBatch(lon, lat, x, y, 0, 1, n);
       return { x, y };
     },
     toLonLatInterleaved(xy, out) {
       const n = xy.length;
       checkEven(n);
-      if (out) checkOut(out, n, 'out');
-      else out = new Float64Array(n);
+      out = output(out, n, 'out');
       inverseBatch(xy, xy, out, out, 1, 2, n);
       return out;
     },
     fromLonLatInterleaved(lonlat, out) {
       const n = lonlat.length;
       checkEven(n);
-      if (out) checkOut(out, n, 'out');
-      else out = new Float64Array(n);
+      out = output(out, n, 'out');
       forwardBatch(lonlat, lonlat, out, out, 1, 2, n);
       return out;
     },

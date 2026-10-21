@@ -7,8 +7,7 @@ import { loadWasm } from 'fast-proj/wasm';
 ```
 
 ESM-only, `sideEffects: false`: unused converters are removed by tree-shaking. Node ≥ 20 and modern browsers;
-the `fast-proj/wasm` types need TypeScript ≥ 5.2 (`Disposable`). All
-angles are in degrees, all distances in metres.
+the types need TypeScript ≥ 5.7 (`Float64Array<ArrayBuffer>`). All angles are in degrees, all distances in metres.
 
 Factories reject unknown option keys (own enumerable keys, including ones set to `undefined`). Errors are `TypeError`
 for a wrong type (including unknown options) and `RangeError` for a value out of range; using a disposed wasm context
@@ -204,7 +203,8 @@ Every `Projection` has the methods below. A `Geographic` has the same set with l
 | `fromLonLatPoint(lon, lat)`           | one point                     | `[x, y]`                                       |
 
 Inputs may be any array-like of numbers (`number[]`, `Float64Array`, `Float32Array`, ...). Outputs are new
-`Float64Array`s unless output buffers are passed, in which case those buffers are filled and returned. The output
+`Float64Array`s, typed `Float64Array<ArrayBuffer>` so they can go to a `Blob`, a `fetch` body or WebGL, unless output
+buffers are passed, in which case those buffers are filled and returned with their own type. The output
 shapes `{ lon, lat }` and `{ x, y }` are stable.
 
 Converters are frozen plain objects; their methods don't use `this` and can be destructured.
@@ -303,6 +303,8 @@ wasm.dispose(); // or: using wasm = await loadWasm();
 - **Loading.** By default the module is `fast-proj.wasm` next to `wasm.js`, resolved with `new URL('./fast-proj.wasm',
   import.meta.url)`. Vite and webpack 5 copy the asset; on Node and Bun it is read from disk. With a bundler that
   doesn't handle the pattern (esbuild), pass `source`: a URL you serve, the bytes, or a compiled `WebAssembly.Module`.
+  The package exports the module as `fast-proj/fast-proj.wasm`, so you can import its URL, e.g.
+  `import url from 'fast-proj/fast-proj.wasm'` with esbuild's `--loader:.wasm=file`, or resolve its path on Node.
 - **Backend.** `wasm` normally (the module uses wasm SIMD). `js` when WebAssembly or wasm SIMD (Safari before 16.4) is unavailable, including
   when a `source` is given that can't compile without SIMD or is a non-SIMD build; the context's converters then run
   the JavaScript backend, which measured as fast as a scalar wasm build.

@@ -7,7 +7,7 @@
  * with the Jacobian from the same multiple-angle values, converge to ~1e-12 degrees, and after the first step the two
  * pairs are rotated by the step rather than recomputed.
  */
-import { checkEven, checkOptions, checkOut, checkSame } from './checks.js';
+import { checkEven, checkOptions, checkSame, output } from './checks.js';
 import { fuser } from './gcj02-fused.js';
 import * as K from './gcj02-constants.js';
 import { fusers } from './geographic.js';
@@ -766,36 +766,30 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
     toWgs84(lon, lat, outLon, outLat) {
       const n = lon.length;
       checkSame(n, lat.length, 'lon and lat');
-      if (outLon) checkOut(outLon, n, 'outLon');
-      else outLon = new Float64Array(n);
-      if (outLat) checkOut(outLat, n, 'outLat');
-      else outLat = new Float64Array(n);
+      outLon = output(outLon, n, 'outLon');
+      outLat = output(outLat, n, 'outLat');
       toWgs84Batch(lon, lat, outLon, outLat, 0, 1, n);
       return { lon: outLon, lat: outLat };
     },
     fromWgs84(lon, lat, outLon, outLat) {
       const n = lon.length;
       checkSame(n, lat.length, 'lon and lat');
-      if (outLon) checkOut(outLon, n, 'outLon');
-      else outLon = new Float64Array(n);
-      if (outLat) checkOut(outLat, n, 'outLat');
-      else outLat = new Float64Array(n);
+      outLon = output(outLon, n, 'outLon');
+      outLat = output(outLat, n, 'outLat');
       fromWgs84Batch(lon, lat, outLon, outLat, 0, 1, n);
       return { lon: outLon, lat: outLat };
     },
     toWgs84Interleaved(lonlat, out) {
       const n = lonlat.length;
       checkEven(n);
-      if (out) checkOut(out, n, 'out');
-      else out = new Float64Array(n);
+      out = output(out, n, 'out');
       toWgs84Batch(lonlat, lonlat, out, out, 1, 2, n);
       return out;
     },
     fromWgs84Interleaved(lonlat, out) {
       const n = lonlat.length;
       checkEven(n);
-      if (out) checkOut(out, n, 'out');
-      else out = new Float64Array(n);
+      out = output(out, n, 'out');
       fromWgs84Batch(lonlat, lonlat, out, out, 1, 2, n);
       return out;
     },

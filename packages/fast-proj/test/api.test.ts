@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { fusers, tmInverses } from '../src/geographic.js';
 import { GCJ02, GRS80, WGS84, gcj02, tmerc as jsTmerc, utm as jsUtm, utmFor, utmZoneFor } from '../src/index.js';
 import type { Geographic, Projection } from '../src/index.js';
@@ -257,6 +257,18 @@ describe('root rules', () => {
     expect(gcj02({ outsideChina: 'transform' })).toBe(gcj02({ outsideChina: 'transform' }));
     expect(GCJ02.fromWgs84Point(116.391, 39.907)).toEqual(gcj02().fromWgs84Point(116.391, 39.907));
     expect(GCJ02.fromWgs84Point(10, 50)).toEqual([10, 50]);
+  });
+
+  it('types new output arrays as ArrayBuffer-backed and keeps the type of given ones', () => {
+    const p = jsUtm({ zone: 33 });
+    expectTypeOf(p.toLonLat([500000], [0]).lon).toEqualTypeOf<Float64Array<ArrayBuffer>>();
+    const shared = new Float64Array(new SharedArrayBuffer(16));
+    expectTypeOf(p.toLonLatInterleaved([500000, 0], shared)).toEqualTypeOf<Float64Array<SharedArrayBuffer>>();
+    const r = GCJ02.fromWgs84([116], [39], shared);
+    expectTypeOf(r.lon).toEqualTypeOf<Float64Array<SharedArrayBuffer>>();
+    expectTypeOf(r.lat).toEqualTypeOf<Float64Array<ArrayBuffer>>();
+    // A BlobPart must be ArrayBuffer-backed.
+    expect(new Blob([p.fromLonLatInterleaved([15, 52])]).size).toBe(16);
   });
 
   it('zone helpers separate type and range errors', () => {

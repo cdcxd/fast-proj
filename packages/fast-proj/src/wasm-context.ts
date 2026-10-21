@@ -2,7 +2,7 @@
  * The converters of a loadWasm() context: wasm-backed ones over a fixed 64 Ki-point workspace, or the JavaScript ones
  * guarded against use after dispose(). wasm.ts loads the module and picks one.
  */
-import { checkEven, checkOut, checkSame } from './checks.js';
+import { checkEven, checkSame, output } from './checks.js';
 import { buildGcj02, gcj02Mode } from './gcj02.js';
 import { type FusedInverse, fusers, tmInverses, withGeographic } from './geographic.js';
 import { parseTmerc, tmerc as jsTmerc } from './tmerc.js';
@@ -177,36 +177,30 @@ export function wasmContext(exports: Exports): WasmContext {
       toLonLat(x, y, lon, lat) {
         const n = x.length;
         checkSame(n, y.length, 'x and y');
-        if (lon) checkOut(lon, n, 'lon');
-        else lon = new Float64Array(n);
-        if (lat) checkOut(lat, n, 'lat');
-        else lat = new Float64Array(n);
+        lon = output(lon, n, 'lon');
+        lat = output(lat, n, 'lat');
         run(inv, x, y, lon, lat);
         return { lon, lat };
       },
       fromLonLat(lon, lat, x, y) {
         const n = lon.length;
         checkSame(n, lat.length, 'lon and lat');
-        if (x) checkOut(x, n, 'x');
-        else x = new Float64Array(n);
-        if (y) checkOut(y, n, 'y');
-        else y = new Float64Array(n);
+        x = output(x, n, 'x');
+        y = output(y, n, 'y');
         run(fwd, lon, lat, x, y);
         return { x, y };
       },
       toLonLatInterleaved(xy, out) {
         const n = xy.length;
         checkEven(n);
-        if (out) checkOut(out, n, 'out');
-        else out = new Float64Array(n);
+        out = output(out, n, 'out');
         runInterleaved(inv, xy, out);
         return out;
       },
       fromLonLatInterleaved(lonlat, out) {
         const n = lonlat.length;
         checkEven(n);
-        if (out) checkOut(out, n, 'out');
-        else out = new Float64Array(n);
+        out = output(out, n, 'out');
         runInterleaved(fwd, lonlat, out);
         return out;
       },
@@ -238,36 +232,30 @@ export function wasmContext(exports: Exports): WasmContext {
       toWgs84(lon, lat, outLon, outLat) {
         const n = lon.length;
         checkSame(n, lat.length, 'lon and lat');
-        if (outLon) checkOut(outLon, n, 'outLon');
-        else outLon = new Float64Array(n);
-        if (outLat) checkOut(outLat, n, 'outLat');
-        else outLat = new Float64Array(n);
+        outLon = output(outLon, n, 'outLon');
+        outLat = output(outLat, n, 'outLat');
         run(gcjInv, lon, lat, outLon, outLat);
         return { lon: outLon, lat: outLat };
       },
       fromWgs84(lon, lat, outLon, outLat) {
         const n = lon.length;
         checkSame(n, lat.length, 'lon and lat');
-        if (outLon) checkOut(outLon, n, 'outLon');
-        else outLon = new Float64Array(n);
-        if (outLat) checkOut(outLat, n, 'outLat');
-        else outLat = new Float64Array(n);
+        outLon = output(outLon, n, 'outLon');
+        outLat = output(outLat, n, 'outLat');
         run(gcjFwd, lon, lat, outLon, outLat);
         return { lon: outLon, lat: outLat };
       },
       toWgs84Interleaved(lonlat, out) {
         const n = lonlat.length;
         checkEven(n);
-        if (out) checkOut(out, n, 'out');
-        else out = new Float64Array(n);
+        out = output(out, n, 'out');
         runInterleaved(gcjInv, lonlat, out);
         return out;
       },
       fromWgs84Interleaved(lonlat, out) {
         const n = lonlat.length;
         checkEven(n);
-        if (out) checkOut(out, n, 'out');
-        else out = new Float64Array(n);
+        out = output(out, n, 'out');
         runInterleaved(gcjFwd, lonlat, out);
         return out;
       },

@@ -1,11 +1,13 @@
 // Imports the built package through its `exports` (package self-reference). Run after `bun run build`.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 import { GCJ02, GRS80, WGS84, gcj02, tmerc, utm, utmFor, utmZoneFor } from 'fast-proj';
 import { latLngs, lineString } from 'fast-proj/geojson';
 import { loadWasm } from 'fast-proj/wasm';
 
-const pkg = createRequire(import.meta.url)('fast-proj/package.json');
+const require = createRequire(import.meta.url);
+const pkg = require('fast-proj/package.json');
 assert.equal(pkg.name, 'fast-proj');
 assert.equal(typeof GRS80.a, 'number');
 assert.equal(Object.isFrozen(WGS84), true);
@@ -33,4 +35,7 @@ assert.equal(ctx.backend, 'wasm');
 const [wl] = ctx.utm({ zone: 33 }).toLonLatPoint(500000, 5761038.212590415);
 assert.ok(Math.abs(wl - 15) < 1e-12);
 ctx.dispose();
+const own = await loadWasm({ source: pathToFileURL(require.resolve('fast-proj/fast-proj.wasm')) });
+assert.equal(own.backend, 'wasm');
+own.dispose();
 console.log(`smoke ok (Node ${process.version}, ${ctx.backend})`);

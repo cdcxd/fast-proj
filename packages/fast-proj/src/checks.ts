@@ -1,5 +1,8 @@
-export function checkOut(out: ArrayLike<number>, n: number, name: string): void {
+/** `out` once its length is checked, or a new array of n when it is not given. */
+export function output<T extends Float64Array>(out: T | undefined, n: number, name: string): T {
+  if (!out) return new Float64Array(n) as T;
   if (out.length < n) throw new RangeError(`fast-proj: ${name} has length ${out.length}, needs at least ${n}`);
+  return out;
 }
 
 export function checkEven(n: number): void {
