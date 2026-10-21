@@ -290,6 +290,13 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
   markers; `build` fails if a copy is stale. The copies are bit-identical to the kernels and measured 23-37% faster for
   `utm` and 28-89% for `gcj02` (Node, Bun, Chromium): engines don't keep a called kernel's closure results in registers.
   A per-point function writing to the output array or a `Float64Array(2)` scratch gained 0-4% on JavaScriptCore.
+- Since 0.5 the JavaScript kernels take sin/cos from fdlibm's kernel polynomials (`src/poly.ts`) on half the angle,
+  then double (no quadrant branches while |angle| < π/2, which covers φ, ξ, UTM's λ and GCJ-02's x·π/60), falling back
+  to `Math` outside; the TM inverse takes sinh/cosh of η from their series for |η| < 0.35 instead of `Math.exp`. A
+  `Math.sin` + `Math.cos` pair costs about 38 ns in Chromium 153–156, 17 ns in Bun and 20 ns in Node 24, the polynomials
+  about 18–20 ns in all three: batch calls got 15–54% faster in Chromium and 7–35% in Bun, and 0–10% slower in Node.
+  Results moved by a few ulps; cos 2x = (c - s)(c + s) is accurate in absolute terms only near ±π/2, so λ keeps the
+  polynomials within 0.8 rad only.
 - The wasm converters' single-point methods run the JavaScript kernel: one point costs more to pass into wasm than to
   compute.
 - Re-entrant calls into a context (from array-like getters) throw; `dispose()` during a call throws.
@@ -307,7 +314,9 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
   one with readonly properties can be added later. It doesn't clamp at ±85.05° (a rendering decision that would break
   round trips) and gives `NaN` at the poles, where `tan(pi/2)` rounds to a finite but meaningless 1.6e16. Poleward of
   45° both kernels start from the colatitude, which is exact there: φ in radians loses digits near π/2 (about 100 m of
-  y at 89.9999999999°), so y stays within three ulps (five in wasm) up to the poles. The wasm kernel
+  y at 89.9999999999°), so y stays within four ulps (five in wasm) up to the poles. Since 0.5 the JavaScript kernel
+  takes R ln((c + s) / (c - s)) from polynomial s, c = sin, cos(φ/2) (log1p near the equator; R ln(c / s) of half the
+  colatitude poleward) instead of asinh(tan φ): about half the time in Chromium and Bun, for 3.9 ulps instead of 2.6. The wasm kernel
   (`wm_forward_batch` / `wm_inverse_batch`) writes asinh(tan φ) as 2 atanh(t), t = tan(φ/2): the log series in t up to
   19.4°, else log1p(2t / (1 - t)) with the rounding of its 1 + u compensated (a plain `vlog1p` reached six ulps). It
   takes sinh(y/R) as a Taylor series below 1/4 and from exp above; y agrees with JavaScript within 7.5e-9 m below 2^25 m, the inherent rounding of y/R

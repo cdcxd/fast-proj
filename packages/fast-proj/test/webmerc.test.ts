@@ -19,8 +19,8 @@ const same = (a: ArrayLike<number>, b: ArrayLike<number>) => expect(Array.from(a
 describe.each(backends)('$name backend webMercator', ({ name, webMercator }) => {
   const w = webMercator();
 
-  it('matches a 40-digit reference within 3 ulps, 5 in wasm (x within 4e-9 m), and 3e-14 degrees', () => {
-    const yUlps = name === 'js' ? 3 : 5;
+  it('matches a 40-digit reference within 4 ulps, 5 in wasm (x within 4e-9 m), and 3e-14 degrees', () => {
+    const yUlps = name === 'js' ? 4 : 5;
     const [lon, lat, x, y] = [0, 1, 2, 3].map((k) => ref.forward.map((r) => r[k]!));
     const got = w.fromLonLat(lon!, lat!);
     for (let i = 0; i < lon!.length; i++) {

@@ -135,7 +135,7 @@ interface WebMercatorOptions {
   gives ±180 exactly. Latitude saturates at ±90° for large finite |y|. Beyond about 2.4e8 m it is exactly ±90°, which
   `fromLonLat` maps to `NaN`.
 - **Non-finite input.** `NaN` and `Infinity` give `NaN`.
-- **Accuracy.** x is within 4e-9 m of a 40-digit reference. y is within three ulps of it in JavaScript and five in
+- **Accuracy.** x is within 4e-9 m of a 40-digit reference. y is within four ulps of it in JavaScript and five in
   WebAssembly (relative 1.2e-15), including near the poles. The inverse is within 3e-14° for |x| ≤ πR; x of a repeated
   world adds the rounding of x / R in degrees (5.6e-14° at x = 1e8 m). Agrees with proj4's EPSG:3857 within 1e-8 m.
 - **Errors.** Throws `TypeError` for an unknown option or a `geographic` without the six methods.
