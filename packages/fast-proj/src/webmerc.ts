@@ -221,37 +221,52 @@ function inverseBatch(
         outB[j + o1] = NaN;
         continue;
       }
-      let lon = x / K;
+      let lon = x / 111319.49079327358;
       if (lon > 180 || lon < -180) {
         lon %= 360;
         if (lon > 180) lon -= 360;
         else if (lon < -180) lon += 360;
       }
       outA[j] = lon;
-      let v = Math.abs(y / R);
+      let v = Math.abs(y / 6378137);
       if (v > 40) v = 40;
-      const k = Math.round(v * LOG2E);
-      const r = v - k * LN2_HI - k * LN2_LO;
+      const k = Math.round(v * Math.LOG2E);
+      const r = v - k * 0.6931471803691238 - k * 1.9082149292705877e-10;
       const r2 = r * r;
-      const qe = KE0 + r2 * (KE2 + r2 * (KE4 + r2 * (KE6 + r2 * KE8)));
-      const qo = KE1 + r2 * (KE3 + r2 * (KE5 + r2 * (KE7 + r2 * KE9)));
+      const qe =
+        0.5000000000000001 +
+        r2 *
+          (0.04166666666662416 +
+            r2 * (0.0013888888917198588 + r2 * (0.000024801521319879672 + r2 * 2.762007691611333e-7)));
+      const qo =
+        0.1666666666666667 +
+        r2 *
+          (0.008333333333326141 +
+            r2 * (0.00019841269874802173 + r2 * (0.000002755725542387984 + r2 * 2.510520706464424e-8)));
       const s = POW2[k]!;
       const m = s * (r + r2 * (qe + r * qo)) + (s - 1);
       let num = m;
       let den = m + 2;
       let g = 0;
-      if (m > den * TAN_PI_8) {
-        num = m - den * TAN_PI_8;
-        den += m * TAN_PI_8;
-        g = PI_4;
+      if (m > den * 0.41421356237309503) {
+        num = m - den * 0.41421356237309503;
+        den += m * 0.41421356237309503;
+        g = 0.7853981633974483;
       }
       const u = num / den;
       const t = u * u;
       const t2 = t * t;
-      const ae = KA0 + t2 * (KA2 + t2 * (KA4 + t2 * (KA6 + t2 * KA8)));
-      const ao = KA1 + t2 * (KA3 + t2 * (KA5 + t2 * (KA7 + t2 * KA9)));
+      const ae =
+        -0.3333333333333325 +
+        t2 *
+          (-0.14285714266539506 +
+            t2 * (-0.09090853344129342 + t2 * (-0.06649743882366685 + t2 * -0.04485655846626989)));
+      const ao =
+        0.19999999999901275 +
+        t2 *
+          (0.11111109662900268 + t2 * (0.07691068361407245 + t2 * (0.05737080629289906 + t2 * 0.022780530526983894)));
       g += 2 * (u + u * t * (ae + t * ao));
-      outB[j + o1] = (g < PI_2 ? g : PI_2) * Math.sign(y) * R2D;
+      outB[j + o1] = (g < 1.5707963267948966 ? g : 1.5707963267948966) * Math.sign(y) * 57.29577951308232;
     }
     // @end
   }
@@ -281,18 +296,37 @@ function forwardBatch(
         if (lonDeg > 180) lonDeg -= 360;
         else if (lonDeg < -180) lonDeg += 360;
       }
-      outA[j] = K * lonDeg;
+      outA[j] = 111319.49079327358 * lonDeg;
       const alat = Math.abs(latDeg);
-      const hx = 0.5 * D2R * (alat <= 45 ? latDeg : 90 - alat);
+      const hx = 0.5 * 0.017453292519943295 * (alat <= 45 ? latDeg : 90 - alat);
       const z = hx * hx;
-      const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
-      const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+      const sn =
+        hx +
+        hx *
+          z *
+          (-0.16666666666666632 +
+            z *
+              (0.00833333333332249 +
+                z *
+                  (-0.0001984126982985795 +
+                    z * (0.0000027557313707070068 + z * (-2.5050760253406863e-8 + z * 1.58969099521155e-10)))));
+      const cs =
+        1 -
+        0.5 * z +
+        z *
+          z *
+          (0.0416666666666666 +
+            z *
+              (-0.001388888888887411 +
+                z *
+                  (0.00002480158728947673 +
+                    z * (-2.7557314351390663e-7 + z * (2.087572321298175e-9 + z * -1.1359647557788195e-11)))));
       outB[j + o1] =
         alat <= 45
           ? latDeg === 0
             ? latDeg
-            : R * Math.log1p((2 * sn) / (cs - sn))
-          : R * Math.sign(latDeg) * Math.log(cs / sn);
+            : 6378137 * Math.log1p((2 * sn) / (cs - sn))
+          : 6378137 * Math.sign(latDeg) * Math.log(cs / sn);
     }
     // @end
   }

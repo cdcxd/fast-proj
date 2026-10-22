@@ -254,8 +254,8 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
       const u60 = 2 * u30 * v30;
       const u180 = u60 * (3 - 4 * u60 * u60);
 
-      const sp = u1 * C35 + v1 * S35;
-      const cp = v1 * C35 - u1 * S35;
+      const sp = u1 * 0.8191520442889918 + v1 * 0.573576436351046;
+      const cp = v1 * 0.8191520442889918 - u1 * 0.573576436351046;
 
       const r = Math.sqrt(Math.abs(x));
       const common = (40 / 3) * (s360 + s120);
@@ -283,13 +283,13 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
         (80 / 3) * s20 +
         100 * s5 +
         200 * s2;
-      const m = 1 - EE * sp * sp;
+      const m = 1 - 0.006693421622965943 * sp * sp;
       const sm = Math.sqrt(m);
       const qcm = 1 / (cp * m);
       const icp = m * qcm;
-      const fLon = KLON * sm * icp;
+      const fLon = 0.000008983000733443498 * sm * icp;
       offLon = dLon * fLon;
-      offLat = dLat * KLAT * m * sm;
+      offLat = dLat * 0.000009043532912185927 * m * sm;
     }
     // @end
     if (!all) {
@@ -463,8 +463,8 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
       const u60 = 2 * u30 * v30;
       const u180 = u60 * (3 - 4 * u60 * u60);
 
-      const sp = u1 * C35 + v1 * S35;
-      const cp = v1 * C35 - u1 * S35;
+      const sp = u1 * 0.8191520442889918 + v1 * 0.573576436351046;
+      const cp = v1 * 0.8191520442889918 - u1 * 0.573576436351046;
 
       const r = Math.sqrt(Math.abs(x));
       const common = (40 / 3) * (s360 + s120);
@@ -492,13 +492,13 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
         (80 / 3) * s20 +
         100 * s5 +
         200 * s2;
-      const m = 1 - EE * sp * sp;
+      const m = 1 - 0.006693421622965943 * sp * sp;
       const sm = Math.sqrt(m);
       const qcm = 1 / (cp * m);
       const icp = m * qcm;
-      const fLon = KLON * sm * icp;
+      const fLon = 0.000008983000733443498 * sm * icp;
       offLon = dLon * fLon;
-      offLat = dLat * KLAT * m * sm;
+      offLat = dLat * 0.000009043532912185927 * m * sm;
       // @end
       // Jacobian of the offset in degrees per degree, from the copy's multiple-angle values. sm / cp and m * sm vary
       // with latitude too: d(sm / cp) = (sm / cp) (t - em), d(m * sm) = -3 m * sm * em, per degree.
@@ -587,21 +587,59 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
         const y0 = lat - 35;
         let s: number, c: number, u: number, v: number;
         if (x0 > -30 && x0 < 30 && y0 > -45 && y0 < 45) {
-          const hx = 0.5 * KX * x0;
+          const hx = 0.5 * 0.05235987755982988 * x0;
           const z = hx * hx;
-          const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
-          const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+          const sn =
+            hx +
+            hx *
+              z *
+              (-0.16666666666666632 +
+                z *
+                  (0.00833333333332249 +
+                    z *
+                      (-0.0001984126982985795 +
+                        z * (0.0000027557313707070068 + z * (-2.5050760253406863e-8 + z * 1.58969099521155e-10)))));
+          const cs =
+            1 -
+            0.5 * z +
+            z *
+              z *
+              (0.0416666666666666 +
+                z *
+                  (-0.001388888888887411 +
+                    z *
+                      (0.00002480158728947673 +
+                        z * (-2.7557314351390663e-7 + z * (2.087572321298175e-9 + z * -1.1359647557788195e-11)))));
           s = 2 * sn * cs;
           c = (cs - sn) * (cs + sn);
-          const hy = KY * y0;
+          const hy = 0.017453292519943295 * y0;
           const t = hy * hy;
-          u = hy + hy * t * (KS1 + t * (KS2 + t * (KS3 + t * (KS4 + t * (KS5 + t * KS6)))));
-          v = 1 - 0.5 * t + t * t * (KC1 + t * (KC2 + t * (KC3 + t * (KC4 + t * (KC5 + t * KC6)))));
+          u =
+            hy +
+            hy *
+              t *
+              (-0.16666666666666632 +
+                t *
+                  (0.00833333333332249 +
+                    t *
+                      (-0.0001984126982985795 +
+                        t * (0.0000027557313707070068 + t * (-2.5050760253406863e-8 + t * 1.58969099521155e-10)))));
+          v =
+            1 -
+            0.5 * t +
+            t *
+              t *
+              (0.0416666666666666 +
+                t *
+                  (-0.001388888888887411 +
+                    t *
+                      (0.00002480158728947673 +
+                        t * (-2.7557314351390663e-7 + t * (2.087572321298175e-9 + t * -1.1359647557788195e-11)))));
         } else {
-          s = Math.sin(x0 * KX);
-          c = Math.cos(x0 * KX);
-          u = Math.sin(y0 * KY);
-          v = Math.cos(y0 * KY);
+          s = Math.sin(x0 * 0.05235987755982988);
+          c = Math.cos(x0 * 0.05235987755982988);
+          u = Math.sin(y0 * 0.017453292519943295);
+          v = Math.cos(y0 * 0.017453292519943295);
         }
         let wx = lon;
         let wy = lat;
@@ -640,8 +678,8 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
           const u60 = 2 * u30 * v30;
           const u180 = u60 * (3 - 4 * u60 * u60);
 
-          const sp = u1 * C35 + v1 * S35;
-          const cp = v1 * C35 - u1 * S35;
+          const sp = u1 * 0.8191520442889918 + v1 * 0.573576436351046;
+          const cp = v1 * 0.8191520442889918 - u1 * 0.573576436351046;
 
           const r = Math.sqrt(Math.abs(x));
           const common = (40 / 3) * (s360 + s120);
@@ -669,25 +707,41 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
             (80 / 3) * s20 +
             100 * s5 +
             200 * s2;
-          const m = 1 - EE * sp * sp;
+          const m = 1 - 0.006693421622965943 * sp * sp;
           const sm = Math.sqrt(m);
           const qcm = 1 / (cp * m);
           const icp = m * qcm;
-          const fLon = KLON * sm * icp;
+          const fLon = 0.000008983000733443498 * sm * icp;
           offLon = dLon * fLon;
-          offLat = dLat * KLAT * m * sm;
+          offLat = dLat * 0.000009043532912185927 * m * sm;
           const c120 = 1 - 2 * s60 * s60;
           const c360 = c120 * (4 * c120 * c120 - 3);
           const v60 = 1 - 2 * u30 * u30;
           const v180 = v60 * (4 * v60 * v60 - 3);
-          const dr = Math.abs(x) > (k === 1 ? CUSP : DERIV_CUT) ? (x > 0 ? 0.05 : -0.05) / r : 0;
-          const dCommon = JS360 * c360 + JS120 * c120;
-          const dLonX = 1 + 0.2 * x + 0.1 * y + dr + dCommon + JS60 * c60 + JS20 * c20 + JS5 * c5 + JS2 * c2;
+          const dr = Math.abs(x) > (k === 1 ? CUSP : 1e-10) ? (x > 0 ? 0.05 : -0.05) / r : 0;
+          const dCommon = 251.32741228718345 * c360 + 83.7758040957278 * c120;
+          const dLonX =
+            1 +
+            0.2 * x +
+            0.1 * y +
+            dr +
+            dCommon +
+            41.8879020478639 * c60 +
+            27.925268031909273 * c20 +
+            26.17993877991494 * c5 +
+            20.94395102393195 * c2;
           const dLatX = 2 + 0.1 * y + 2 * dr + dCommon;
-          const dLatY = 3 + 0.4 * y + 0.1 * x + JU180 * v180 + JU60 * v60 + JU15 * v15 + JU6 * v6;
-          const fLat = KLAT * m * sm;
-          const t = sp * icp * KY;
-          const em = EE * sp * cp * cp * qcm * KY;
+          const dLatY =
+            3 +
+            0.4 * y +
+            0.1 * x +
+            41.88790204786391 * v180 +
+            27.925268031909273 * v60 +
+            27.925268031909273 * v15 +
+            22.340214425527417 * v6;
+          const fLat = 0.000009043532912185927 * m * sm;
+          const t = sp * icp * 0.017453292519943295;
+          const em = 0.006693421622965943 * sp * cp * cp * qcm * 0.017453292519943295;
           const ja = 1 + dLonX * fLon;
           const jb = (2 + 0.1 * x) * fLon + offLon * (t - em);
           const jc = dLatX * fLat;
@@ -700,14 +754,14 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
           wx += dx;
           wy += dy;
           if (
-            k >= STEPS &&
-            (k === CUSP_STEPS ||
-              !(Math.abs(wx - 105) < CUSP) ||
-              (Math.abs(wx - 105) > DERIV_CUT && Math.abs(dx) < CUSP_TOL && Math.abs(dy) < CUSP_TOL))
+            k >= 2 &&
+            (k === 6 ||
+              !(Math.abs(wx - 105) < 0.0001) ||
+              (Math.abs(wx - 105) > 1e-10 && Math.abs(dx) < 1e-13 && Math.abs(dy) < 1e-13))
           )
             break;
-          const d = dx * KX;
-          const e = dy * KY;
+          const d = dx * 0.05235987755982988;
+          const e = dy * 0.017453292519943295;
           const d2 = d * d;
           const e2 = e * e;
           const sd = d * (1 - d2 * (1 / 6));
@@ -755,21 +809,59 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
         const y = lat - 35;
         let sX: number, cX: number, uY: number, vY: number;
         if (x > -30 && x < 30 && y > -45 && y < 45) {
-          const hx = 0.5 * KX * x;
+          const hx = 0.5 * 0.05235987755982988 * x;
           const z = hx * hx;
-          const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
-          const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+          const sn =
+            hx +
+            hx *
+              z *
+              (-0.16666666666666632 +
+                z *
+                  (0.00833333333332249 +
+                    z *
+                      (-0.0001984126982985795 +
+                        z * (0.0000027557313707070068 + z * (-2.5050760253406863e-8 + z * 1.58969099521155e-10)))));
+          const cs =
+            1 -
+            0.5 * z +
+            z *
+              z *
+              (0.0416666666666666 +
+                z *
+                  (-0.001388888888887411 +
+                    z *
+                      (0.00002480158728947673 +
+                        z * (-2.7557314351390663e-7 + z * (2.087572321298175e-9 + z * -1.1359647557788195e-11)))));
           sX = 2 * sn * cs;
           cX = (cs - sn) * (cs + sn);
-          const hy = KY * y;
+          const hy = 0.017453292519943295 * y;
           const t = hy * hy;
-          uY = hy + hy * t * (KS1 + t * (KS2 + t * (KS3 + t * (KS4 + t * (KS5 + t * KS6)))));
-          vY = 1 - 0.5 * t + t * t * (KC1 + t * (KC2 + t * (KC3 + t * (KC4 + t * (KC5 + t * KC6)))));
+          uY =
+            hy +
+            hy *
+              t *
+              (-0.16666666666666632 +
+                t *
+                  (0.00833333333332249 +
+                    t *
+                      (-0.0001984126982985795 +
+                        t * (0.0000027557313707070068 + t * (-2.5050760253406863e-8 + t * 1.58969099521155e-10)))));
+          vY =
+            1 -
+            0.5 * t +
+            t *
+              t *
+              (0.0416666666666666 +
+                t *
+                  (-0.001388888888887411 +
+                    t *
+                      (0.00002480158728947673 +
+                        t * (-2.7557314351390663e-7 + t * (2.087572321298175e-9 + t * -1.1359647557788195e-11)))));
         } else {
-          sX = Math.sin(x * KX);
-          cX = Math.cos(x * KX);
-          uY = Math.sin(y * KY);
-          vY = Math.cos(y * KY);
+          sX = Math.sin(x * 0.05235987755982988);
+          cX = Math.cos(x * 0.05235987755982988);
+          uY = Math.sin(y * 0.017453292519943295);
+          vY = Math.cos(y * 0.017453292519943295);
         }
         {
           const s1 = sX;
@@ -804,8 +896,8 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
           const u60 = 2 * u30 * v30;
           const u180 = u60 * (3 - 4 * u60 * u60);
 
-          const sp = u1 * C35 + v1 * S35;
-          const cp = v1 * C35 - u1 * S35;
+          const sp = u1 * 0.8191520442889918 + v1 * 0.573576436351046;
+          const cp = v1 * 0.8191520442889918 - u1 * 0.573576436351046;
 
           const r = Math.sqrt(Math.abs(x));
           const common = (40 / 3) * (s360 + s120);
@@ -833,13 +925,13 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
             (80 / 3) * s20 +
             100 * s5 +
             200 * s2;
-          const m = 1 - EE * sp * sp;
+          const m = 1 - 0.006693421622965943 * sp * sp;
           const sm = Math.sqrt(m);
           const qcm = 1 / (cp * m);
           const icp = m * qcm;
-          const fLon = KLON * sm * icp;
+          const fLon = 0.000008983000733443498 * sm * icp;
           offLon = dLon * fLon;
-          offLat = dLat * KLAT * m * sm;
+          offLat = dLat * 0.000009043532912185927 * m * sm;
         }
         if (!all) {
           outA[j] = lon + offLon;

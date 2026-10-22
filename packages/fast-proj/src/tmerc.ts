@@ -363,8 +363,27 @@ export function transverseMercator(
         if (xi > -1.5707963267948966 && xi < 1.5707963267948966) {
           const hx = 0.5 * xi;
           const z = hx * hx;
-          const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
-          const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+          const sn =
+            hx +
+            hx *
+              z *
+              (-0.16666666666666632 +
+                z *
+                  (0.00833333333332249 +
+                    z *
+                      (-0.0001984126982985795 +
+                        z * (0.0000027557313707070068 + z * (-2.5050760253406863e-8 + z * 1.58969099521155e-10)))));
+          const cs =
+            1 -
+            0.5 * z +
+            z *
+              z *
+              (0.0416666666666666 +
+                z *
+                  (-0.001388888888887411 +
+                    z *
+                      (0.00002480158728947673 +
+                        z * (-2.7557314351390663e-7 + z * (2.087572321298175e-9 + z * -1.1359647557788195e-11)))));
           s1 = xi === 0 ? xi : 2 * sn * cs;
           c1x = (cs - sn) * (cs + sn);
         } else {
@@ -429,11 +448,11 @@ export function transverseMercator(
         const q1 = dp0 + p * (dp1 + p * (dp2 + p * (dp3 + p * (d5 + p * d6))));
         const phi = chi + ((2 * sx * h) / r2) * q1;
 
-        let lon = (lon0 + lam) * R2D;
+        let lon = (lon0 + lam) * 57.29577951308232;
         if (lon > 180) lon -= 360;
         else if (lon < -180) lon += 360;
         outA[j] = lon;
-        outB[j + o1] = phi * R2D;
+        outB[j + o1] = phi * 57.29577951308232;
       }
       // @end
     }
@@ -458,23 +477,44 @@ export function transverseMercator(
           if (lonDeg > 180) lonDeg -= 360;
           else if (lonDeg < -180) lonDeg += 360;
         }
-        const lam = lonDeg * D2R - lon0;
+        const lam = lonDeg * 0.017453292519943295 - lon0;
 
         let sp, cp;
         const alat = Math.abs(latDeg);
         if (alat < 90) {
-          const hx = 0.5 * D2R * (alat > 45 ? 90 - alat : latDeg);
+          const hx = 0.5 * 0.017453292519943295 * (alat > 45 ? 90 - alat : latDeg);
           const z = hx * hx;
-          const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
+          const sn =
+            hx +
+            hx *
+              z *
+              (-0.16666666666666632 +
+                z *
+                  (0.00833333333332249 +
+                    z *
+                      (-0.0001984126982985795 +
+                        z * (0.0000027557313707070068 + z * (-2.5050760253406863e-8 + z * 1.58969099521155e-10)))));
           const hz = 0.5 * z;
           const w = 1 - hz;
-          const cs = w + (1 - w - hz + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6))))));
+          const cs =
+            w +
+            (1 -
+              w -
+              hz +
+              z *
+                z *
+                (0.0416666666666666 +
+                  z *
+                    (-0.001388888888887411 +
+                      z *
+                        (0.00002480158728947673 +
+                          z * (-2.7557314351390663e-7 + z * (2.087572321298175e-9 + z * -1.1359647557788195e-11))))));
           const dsin = 2 * sn * cs;
           const dcos = (cs - sn) * (cs + sn);
           sp = alat > 45 ? (latDeg < 0 ? -dcos : dcos) : latDeg === 0 ? latDeg : dsin;
           cp = alat > 45 ? dsin : dcos;
         } else {
-          const phi = latDeg * D2R;
+          const phi = latDeg * 0.017453292519943295;
           sp = Math.sin(phi);
           cp = Math.cos(phi);
         }
@@ -491,10 +531,31 @@ export function transverseMercator(
         if (lam > -0.8 && lam < 0.8) {
           const hx = 0.5 * lam;
           const z = hx * hx;
-          const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
+          const sn =
+            hx +
+            hx *
+              z *
+              (-0.16666666666666632 +
+                z *
+                  (0.00833333333332249 +
+                    z *
+                      (-0.0001984126982985795 +
+                        z * (0.0000027557313707070068 + z * (-2.5050760253406863e-8 + z * 1.58969099521155e-10)))));
           const hz = 0.5 * z;
           const w = 1 - hz;
-          const cs = w + (1 - w - hz + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6))))));
+          const cs =
+            w +
+            (1 -
+              w -
+              hz +
+              z *
+                z *
+                (0.0416666666666666 +
+                  z *
+                    (-0.001388888888887411 +
+                      z *
+                        (0.00002480158728947673 +
+                          z * (-2.7557314351390663e-7 + z * (2.087572321298175e-9 + z * -1.1359647557788195e-11))))));
           sl = lam === 0 ? lam : 2 * sn * cs;
           cl = (cs - sn) * (cs + sn);
         } else {

@@ -1,12 +1,16 @@
 // Usage: bun scripts/inline.ts [--check]
 //
 // Expands `// @inline name(args); key = value; ... // @end` regions from the `// @kernel` function `name` in the same
-// file, or in a file before it in FILES (whose closure must then bind the constants the kernel reads). Engines
+// file, or in a file before it in FILES (whose closure must then bind the non-numeric names the kernel reads). Engines
 // optimize a loop with the kernel written out in it much better than one calling a kernel that returns through
 // closure variables (Node and Chromium up to 2×), so the batch loops hold copies and the point methods call the
 // kernel. Options rename identifiers in the copy, parameters included (`rx = out[i]`); `return = ...` replaces a bare
 // `return;` (default `continue;`); `scope = open` leaves out the enclosing block, so code after the region can read
 // the copy's locals. A kernel's own regions are expanded before it is copied. --check fails if a region is stale.
+//
+// Copies also take the kernel's file's module-level numeric constants (`const KS1 = P.KS1;`, `const D2R = Math.PI /
+// 180;`) as literals, a bare `Math.LOG2E` as written: V8 reloads a module const from its context on every use in on-stack-replacement code, which is how a batch
+// loop called a few hundred times runs (up to 1.9x slower in Node; JavaScriptCore folds them either way).
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -15,7 +19,35 @@ import { fileURLToPath } from 'node:url';
 const src = join(dirname(fileURLToPath(import.meta.url)), '../src');
 const FILES = ['tmerc.ts', 'gcj02.ts', 'gcj02-fused.ts', 'webmerc.ts'];
 
-type Kernel = { params: string[]; body: string[] };
+type Kernel = { params: string[]; body: string[]; consts: Map<string, string> };
+
+// The modules the kernels' files bind constants from, under their import names.
+const MODULES = { P: await import(join(src, 'poly.ts')), K: await import(join(src, 'gcj02-constants.ts')) };
+
+// Module-level `const NAME = expr;` lines whose value is a number, each as its shortest round-trip literal.
+function constants(lines: string[]): Map<string, string> {
+  const vals = new Map<string, number>();
+  const bare = new Map<string, string>();
+  for (const l of lines) {
+    const m = /^const (\w+) = ([^;]+);$/.exec(l);
+    if (!m || /\bnew\b|=>|\(\)/.test(m[2]!)) continue;
+    let v: unknown;
+    try {
+      v = Function(
+        ...Object.keys(MODULES),
+        ...vals.keys(),
+        `return (${m[2]});`,
+      )(...Object.values(MODULES), ...vals.values());
+    } catch {
+      continue;
+    }
+    if (typeof v === 'number' && Number.isFinite(v)) {
+      vals.set(m[1]!, v);
+      if (/^Math\.\w+$/.test(m[2]!)) bare.set(m[1]!, m[2]!);
+    }
+  }
+  return new Map([...vals].map(([k, v]) => [k, bare.get(k) ?? String(v)]));
+}
 
 const MARKER = /\/\/\s*@(kernel|inline|end)\b/;
 
@@ -29,13 +61,14 @@ function checkMarkers(lines: string[]): void {
 
 function kernels(lines: string[]): Map<string, Kernel> {
   const found = new Map<string, Kernel>();
+  const consts = constants(lines);
   for (let i = 0; i < lines.length; i++) {
     if (lines[i]!.trim() !== '// @kernel') continue;
     const m = /^(\s*)function (\w+)\(([^)]*)\)(?:: \w+)? \{$/.exec(lines[i + 1]!);
     if (!m) throw new Error(`@kernel at line ${i + 1} is not followed by a one-line function header`);
     const end = lines.indexOf(`${m[1]}}`, i + 2);
     const params = m[3]!.split(',').map((p) => p.split(':')[0]!.trim());
-    found.set(m[2]!, { params, body: lines.slice(i + 2, end) });
+    found.set(m[2]!, { params, body: lines.slice(i + 2, end), consts });
   }
   return found;
 }
@@ -109,6 +142,10 @@ function expand(k: Kernel, name: string, args: string[], opts: [string, string][
     : null;
   // The name each parameter is bound to in the copy.
   const bounds = k.params.map((p) => renames.find(([from]) => from === p)?.[1] ?? p);
+  // Constants the copy doesn't shadow, as literals; a property name or key (`.K`, `K:`) is left alone.
+  const lits = [...k.consts].filter(([c]) => !declared.has(c) && !bounds.includes(c) && !renamed.has(c));
+  const litRe = lits.length ? new RegExp(`(?<![.\\w$])(?:${lits.map(([c]) => c).join('|')})\\b(?!\\s*:)`, 'g') : null;
+  const litOf = new Map(lits);
   k.params.forEach((p, i) => {
     const a = args[i]!;
     const bound = bounds[i]!;
@@ -135,6 +172,7 @@ function expand(k: Kernel, name: string, args: string[], opts: [string, string][
     }
     line = line.replace(/\breturn;/g, exit);
     if (renameRe) line = line.replace(renameRe, (from) => renamed.get(from)!);
+    if (litRe) line = line.replace(litRe, (c) => litOf.get(c)!);
     out.push(line ? pad + line : '');
   }
   if (!open) out.push('}');
