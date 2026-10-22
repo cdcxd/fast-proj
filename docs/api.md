@@ -135,9 +135,9 @@ interface WebMercatorOptions {
   gives ±180 exactly. Latitude saturates at ±90° for large finite |y|. Beyond about 2.4e8 m it is exactly ±90°, which
   `fromLonLat` maps to `NaN`.
 - **Non-finite input.** `NaN` and `Infinity` give `NaN`.
-- **Accuracy.** x is within 4e-9 m of a 40-digit reference. y is within four ulps of it in JavaScript and five in
-  WebAssembly (relative 1.2e-15), including near the poles. The inverse is within 3e-14° for |x| ≤ πR; x of a repeated
-  world adds the rounding of x / R in degrees (5.6e-14° at x = 1e8 m). Agrees with proj4's EPSG:3857 within 1e-8 m.
+- **Accuracy.** x is within 4e-9 m of a 40-digit reference. y is within five ulps of it in both backends (relative
+  1.2e-15), including near the poles. The inverse is within 3e-14° for |x| ≤ πR; x of a repeated world adds the
+  rounding of x / R in degrees (5.6e-14° at x = 1e8 m). Agrees with proj4's EPSG:3857 within 1e-8 m.
 - **Errors.** Throws `TypeError` for an unknown option or a `geographic` without the six methods.
 
 ### Map tiles in China
@@ -326,10 +326,11 @@ wasm.dispose(); // or: using wasm = await loadWasm();
 - **Single points.** `toLonLatPoint`/`fromLonLatPoint` and `toWgs84Point`/`fromWgs84Point` run the JavaScript kernel:
   passing one point into wasm costs more than computing it.
 - **Re-entrancy.** Calling the same context from inside an array-like getter during a batch call throws.
-- **Accuracy contract.** Batch results match the JavaScript backend within 4e-9 m and 6e-14° (longitude differences
-  scaled by cos(latitude)), not bit for bit. Coordinates above 2^25 m (about 33,554 km, such as Gauss–Krüger eastings
-  with a zone prefix) can differ by one ulp of the output, 7.5e-9 m. Web Mercator y comes from y / R and so can
-  differ by up to 7.5e-9 m below 2^25 m (latitude ±89.4°), and by two ulps above.
+- **Accuracy contract.** Batch results match the JavaScript backend within 5e-9 m and 6e-14° (longitude differences
+  scaled by cos(latitude)), not bit for bit. Coordinates above 2^24 m (about 16,777 km, such as northings north of the
+  equator in a southern UTM zone or Gauss–Krüger eastings with a zone prefix) can differ by 7.5e-9 m, two ulps of the
+  output (one above 2^25 m). Web Mercator y comes from y / R and so can differ by up to 7.5e-9 m below 2^25 m
+  (latitude ±89.4°), and by two ulps above.
 - **Composed accuracy.** A projection with a `geographic` system holds the same bound, except where the geographic
   system amplifies a one-ulp difference in the projection's WGS84 result. For GCJ-02 that is:
   - WGS84 longitude within 1e-11° of 105°, the formula's √|x| cusp: one ulp there moves GCJ-02 latitude by about
@@ -348,7 +349,7 @@ wasm.dispose(); // or: using wasm = await loadWasm();
 For `tmerc` and `utm`; see [`webMercator`](#webmercatoroptions) for its own domain and accuracy.
 
 - **Accuracy** for terrestrial ellipsoids, within 30° of the central meridian, all latitudes including the poles: at
-  most 4e-9 m forward (6e-9 m for longitudes near ±180°, where one ulp of the input longitude is already 3e-9 m) and
+  most 5e-9 m forward (6e-9 m for longitudes near ±180°, where one ulp of the input longitude is already 3e-9 m) and
   1e-13° inverse against a 30-digit reference (`packages/fast-proj/test/fixtures`) in all 60 UTM zones, both
   hemispheres, and about 6e-9 m / 1.3e-13° against proj4. Both backends.
 - **Recommended domain:** within ~45° of the central meridian. Accuracy degrades further out, as for any Krüger series

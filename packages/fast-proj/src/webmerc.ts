@@ -5,10 +5,24 @@
  *   the colatitude poleward of 45 degrees, accurate near the poles;
  * - inverse: lambda = x / R, phi = atan(sinh(y / R)), the Gudermannian.
  */
-import { KC1, KC2, KC3, KC4, KC5, KC6, KS1, KS2, KS3, KS4, KS5, KS6 } from './poly.js';
+import * as P from './poly.js';
 import { checkEven, checkOptions, checkSame, output } from './checks.js';
 import { checkGeographic, withGeographic } from './geographic.js';
 import type { Geographic, Impl, Projection } from './types.js';
+
+// Bound here, not imported, as in gcj02.ts.
+const KC1 = P.KC1;
+const KC2 = P.KC2;
+const KC3 = P.KC3;
+const KC4 = P.KC4;
+const KC5 = P.KC5;
+const KC6 = P.KC6;
+const KS1 = P.KS1;
+const KS2 = P.KS2;
+const KS3 = P.KS3;
+const KS4 = P.KS4;
+const KS5 = P.KS5;
+const KS6 = P.KS6;
 
 export interface WebMercatorOptions {
   /** Geographic system of `toLonLat`/`fromLonLat`. Default WGS84. */

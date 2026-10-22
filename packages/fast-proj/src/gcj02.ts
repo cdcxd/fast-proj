@@ -7,7 +7,7 @@
  * with the Jacobian from the same multiple-angle values, converge to ~1e-12 degrees, and after the first step the two
  * pairs are rotated by the step rather than recomputed.
  */
-import { KC1, KC2, KC3, KC4, KC5, KC6, KS1, KS2, KS3, KS4, KS5, KS6 } from './poly.js';
+import * as P from './poly.js';
 import { checkEven, checkOptions, checkSame, output } from './checks.js';
 import { fuser } from './gcj02-fused.js';
 import * as K from './gcj02-constants.js';
@@ -15,6 +15,18 @@ import { fusers } from './geographic.js';
 import type { Geographic, Impl } from './types.js';
 
 // Bound here, not imported: V8 reads a module's own consts faster than imported ones (fromWgs84 12% in Node).
+const KC1 = P.KC1;
+const KC2 = P.KC2;
+const KC3 = P.KC3;
+const KC4 = P.KC4;
+const KC5 = P.KC5;
+const KC6 = P.KC6;
+const KS1 = P.KS1;
+const KS2 = P.KS2;
+const KS3 = P.KS3;
+const KS4 = P.KS4;
+const KS5 = P.KS5;
+const KS6 = P.KS6;
 const C35 = K.C35;
 const EE = K.EE;
 const KLAT = K.KLAT;

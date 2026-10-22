@@ -252,8 +252,8 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
 - Calls after `dispose()` throw. Output arrays are caller-owned and stay valid.
 - Converters take and return caller-owned arrays, so each call copies into the wasm workspace and back. That copy costs
   about 0.17 ns/point. Zero-copy access to wasm memory is a possible later addition; it is not promised.
-- Accuracy contract: wasm results match the JS backend within 4e-9 m and 6e-14° (longitude differences scaled by
-  cos(latitude)), not bit for bit; one ulp of the output (7.5e-9 m) above 2^25 m.
+- Accuracy contract: wasm results match the JS backend within 5e-9 m and 6e-14° (longitude differences scaled by
+  cos(latitude)), not bit for bit; 7.5e-9 m (two ulps of the output, one above 2^25 m) above 2^24 m.
   Composed with GCJ-02 the bound has exceptions where a one-ulp difference in the projection's WGS84 result is
   amplified: the √|x| cusp at longitude 105°, latitudes beyond ±89.9° in `'transform'` mode, and, in `'passthrough'`
   mode, the China box edge (a point on one side per backend). All are inherent to two-pass composition across
@@ -293,10 +293,13 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
 - Since 0.5 the JavaScript kernels take sin/cos from fdlibm's kernel polynomials (`src/poly.ts`) on half the angle,
   then double (no quadrant branches while |angle| < π/2, which covers φ, ξ, UTM's λ and GCJ-02's x·π/60), falling back
   to `Math` outside; the TM inverse takes sinh/cosh of η from their series for |η| < 0.35 instead of `Math.exp`. A
-  `Math.sin` + `Math.cos` pair costs about 38 ns in Chromium 153–156, 17 ns in Bun and 20 ns in Node 24, the polynomials
-  about 18–20 ns in all three: batch calls got 15–54% faster in Chromium and 7–35% in Bun, and 0–10% slower in Node.
-  Results moved by a few ulps; cos 2x = (c - s)(c + s) is accurate in absolute terms only near ±π/2, so λ keeps the
-  polynomials within 0.8 rad only.
+  `Math.sin` + `Math.cos` pair costs about 38 ns in Chromium 153–156, 17 ns in Bun and 20 ns in Node 24, the
+  polynomials about 18–20 ns in all three: batch calls got 15–62% faster in Chromium and 4–38% in Bun, and in Node
+  between 8% faster and 7% slower. The coefficients are bound as module consts, not imported (V8 reads imported
+  bindings slower: GCJ-02 forward 29% in Chromium). Results moved by a few ulps; cos 2x = (c - s)(c + s) is accurate
+  in absolute terms only near ±π/2, so the TM forward starts from the colatitude poleward of 45° (cos φ from the
+  doubled sine) and compensates the rounding of 1 - z/2, and λ keeps the polynomials within 0.8 rad only. Without
+  these the forward reached 5.6e-9 m at 78°; with them it is within 4.7e-9 m, as is wasm.
 - The wasm converters' single-point methods run the JavaScript kernel: one point costs more to pass into wasm than to
   compute.
 - Re-entrant calls into a context (from array-like getters) throw; `dispose()` during a call throws.
@@ -310,15 +313,16 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
   `'transform'` mode iterates until converged instead and gives `NaN` where it doesn't. That per-point step count
   doesn't fit the fixed-step f64x2 kernel, so it stays JavaScript; the kernel masks the extra steps near 105° per lane,
   so each point takes the steps the JavaScript loop would.
-- `webMercator` (0.4) returns a new frozen `Projection` per call, like `tmerc`; there is no `WebMercator` subtype yet, so
-  one with readonly properties can be added later. It doesn't clamp at ±85.05° (a rendering decision that would break
-  round trips) and gives `NaN` at the poles, where `tan(pi/2)` rounds to a finite but meaningless 1.6e16. Poleward of
-  45° both kernels start from the colatitude, which is exact there: φ in radians loses digits near π/2 (about 100 m of
-  y at 89.9999999999°), so y stays within four ulps (five in wasm) up to the poles. Since 0.5 the JavaScript kernel
+- `webMercator` (0.4) returns a new frozen `Projection` per call, like `tmerc`; there is no `WebMercator` subtype yet,
+  so one with readonly properties can be added later. It doesn't clamp at ±85.05° (a rendering decision that would
+  break round trips) and gives `NaN` at the poles, where `tan(pi/2)` rounds to a finite but meaningless 1.6e16.
+  Poleward of 45° both kernels start from the colatitude, which is exact there: φ in radians loses digits near π/2
+  (about 100 m of y at 89.9999999999°), so y stays within five ulps up to the poles. Since 0.5 the JavaScript kernel
   takes R ln((c + s) / (c - s)) from polynomial s, c = sin, cos(φ/2) (log1p near the equator; R ln(c / s) of half the
-  colatitude poleward) instead of asinh(tan φ): about half the time in Chromium and Bun, for 3.9 ulps instead of 2.6. The wasm kernel
-  (`wm_forward_batch` / `wm_inverse_batch`) writes asinh(tan φ) as 2 atanh(t), t = tan(φ/2): the log series in t up to
-  19.4°, else log1p(2t / (1 - t)) with the rounding of its 1 + u compensated (a plain `vlog1p` reached six ulps). It
-  takes sinh(y/R) as a Taylor series below 1/4 and from exp above; y agrees with JavaScript within 7.5e-9 m below 2^25 m, the inherent rounding of y/R
-  scaled by R. It measured 1.3–2.1× the JavaScript kernel's batch methods (Node, Bun, Chromium). Its composition with GCJ-02 runs the
-  two passes; a fused kernel waits for a measured gain.
+  colatitude poleward) instead of asinh(tan φ): about half the time in Chromium and Bun, for five ulps instead of
+  three. The wasm kernel (`wm_forward_batch` / `wm_inverse_batch`) writes asinh(tan φ) as 2 atanh(t), t = tan(φ/2):
+  the log series in t up to 19.4°, else log1p(2t / (1 - t)) with the rounding of its 1 + u compensated (a plain
+  `vlog1p` reached six ulps). It takes sinh(y/R) as a Taylor series below 1/4 and from exp above; y agrees with
+  JavaScript within 7.5e-9 m below 2^25 m, the inherent rounding of y/R scaled by R. It measured 1.3–2.1× the
+  JavaScript kernel's batch methods (Node, Bun, Chromium). Its composition with GCJ-02 runs the two passes; a fused
+  kernel waits for a measured gain.

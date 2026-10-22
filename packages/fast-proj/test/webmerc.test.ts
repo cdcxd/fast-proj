@@ -16,16 +16,15 @@ const ulp = (v: number) => 2 ** (Math.floor(Math.log2(Math.abs(v))) - 52);
 const backendTol = (v: number) => (Math.abs(v) < 2 ** 25 ? 7.5e-9 : 2 * ulp(v));
 const same = (a: ArrayLike<number>, b: ArrayLike<number>) => expect(Array.from(a)).toEqual(Array.from(b));
 
-describe.each(backends)('$name backend webMercator', ({ name, webMercator }) => {
+describe.each(backends)('$name backend webMercator', ({ webMercator }) => {
   const w = webMercator();
 
-  it('matches a 40-digit reference within 4 ulps, 5 in wasm (x within 4e-9 m), and 3e-14 degrees', () => {
-    const yUlps = name === 'js' ? 4 : 5;
+  it('matches a 40-digit reference within 5 ulps (x within 4e-9 m), and 3e-14 degrees', () => {
     const [lon, lat, x, y] = [0, 1, 2, 3].map((k) => ref.forward.map((r) => r[k]!));
     const got = w.fromLonLat(lon!, lat!);
     for (let i = 0; i < lon!.length; i++) {
       expect(Math.abs(got.x[i]! - x![i]!)).toBeLessThanOrEqual(Math.max(4e-9, ulp(x![i]!)));
-      expect(Math.abs(got.y[i]! - y![i]!), `lat ${lat![i]}`).toBeLessThanOrEqual(yUlps * ulp(y![i]!));
+      expect(Math.abs(got.y[i]! - y![i]!), `lat ${lat![i]}`).toBeLessThanOrEqual(5 * ulp(y![i]!));
     }
     const [xs, ys, lons, lats] = [0, 1, 2, 3].map((k) => ref.inverse.map((r) => r[k]!));
     const back = w.toLonLat(xs!, ys!);

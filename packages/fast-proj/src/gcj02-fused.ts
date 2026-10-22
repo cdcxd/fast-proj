@@ -2,11 +2,23 @@
  * x/y on a JavaScript transverse Mercator -> GCJ-02 in one pass: tmerc's inverse fused with GCJ-02's fromWgs84, copied
  * in from both by scripts/inline.ts. gcj02.ts registers the builder for its converters.
  */
-import { KC1, KC2, KC3, KC4, KC5, KC6, KS1, KS2, KS3, KS4, KS5, KS6 } from './poly.js';
+import * as P from './poly.js';
 import * as K from './gcj02-constants.js';
 import type { FusedInverse, TmInverse } from './geographic.js';
 
 // Bound here, not imported, as in gcj02.ts.
+const KC1 = P.KC1;
+const KC2 = P.KC2;
+const KC3 = P.KC3;
+const KC4 = P.KC4;
+const KC5 = P.KC5;
+const KC6 = P.KC6;
+const KS1 = P.KS1;
+const KS2 = P.KS2;
+const KS3 = P.KS3;
+const KS4 = P.KS4;
+const KS5 = P.KS5;
+const KS6 = P.KS6;
 const C35 = K.C35;
 const EE = K.EE;
 const KLAT = K.KLAT;

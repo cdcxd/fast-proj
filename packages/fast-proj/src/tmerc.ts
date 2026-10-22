@@ -16,7 +16,21 @@ import { type Ellipsoid, WGS84, checkEllipsoid, tmSeries } from './ellipsoid.js'
 import { checkEven, checkNumber, checkOptions, checkSame, output } from './checks.js';
 import { checkGeographic, tmInverses, withGeographic } from './geographic.js';
 import type { Geographic, Impl, TransverseMercator } from './types.js';
-import { KC1, KC2, KC3, KC4, KC5, KC6, KS1, KS2, KS3, KS4, KS5, KS6 } from './poly.js';
+import * as P from './poly.js';
+
+// Bound here, not imported, as in gcj02.ts.
+const KC1 = P.KC1;
+const KC2 = P.KC2;
+const KC3 = P.KC3;
+const KC4 = P.KC4;
+const KC5 = P.KC5;
+const KC6 = P.KC6;
+const KS1 = P.KS1;
+const KS2 = P.KS2;
+const KS3 = P.KS3;
+const KS4 = P.KS4;
+const KS5 = P.KS5;
+const KS6 = P.KS6;
 
 export interface TransverseMercatorOptions {
   /** Degrees, in [-180, 180]. */
@@ -125,7 +139,6 @@ export function transverseMercator(
 
   // @kernel
   function forward(lonDeg: number, latDeg: number): void {
-    const phi = latDeg * D2R;
     // Whole turns first, exactly (% is exact): in radians their rounding error exceeds the NaN cutoff below.
     // The Rust kernels reduce the same way, so all backends agree, including on ±180.
     if (lonDeg > 180 || lonDeg < -180) {
@@ -135,18 +148,26 @@ export function transverseMercator(
     }
     const lam = lonDeg * D2R - lon0;
 
-    // sin, cos by double angles from half the angle (|phi / 2| < pi / 4); lam within 0.8 rad, where the doubled cos
-    // keeps its relative accuracy, as wide as UTM ever needs.
+    // sin, cos by double angles from half the angle (|phi / 2| < pi / 4), with the rounding of 1 - z/2 compensated
+    // (FreeBSD's k_cos form): these feed atan(sin chi / (cos chi cos lam)), whose error is y's. Poleward of 45 degrees
+    // from half the colatitude (exact in degrees there), as the doubled cos is accurate only to a few 1e-16 absolute.
+    // lam within 0.8 rad, where the doubled cos keeps its relative accuracy, as wide as UTM ever needs.
     let sp, cp;
-    if (phi > -1.5707963267948966 && phi < 1.5707963267948966) {
-      const hx = 0.5 * phi;
+    const alat = Math.abs(latDeg);
+    if (alat < 90) {
+      const hx = 0.5 * D2R * (alat > 45 ? 90 - alat : latDeg);
       const z = hx * hx;
       const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
-      const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+      const hz = 0.5 * z;
+      const w = 1 - hz;
+      const cs = w + (1 - w - hz + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6))))));
+      const dsin = 2 * sn * cs;
+      const dcos = (cs - sn) * (cs + sn);
       // 0 keeps its sign.
-      sp = phi === 0 ? phi : 2 * sn * cs;
-      cp = (cs - sn) * (cs + sn);
+      sp = alat > 45 ? (latDeg < 0 ? -dcos : dcos) : latDeg === 0 ? latDeg : dsin;
+      cp = alat > 45 ? dsin : dcos;
     } else {
+      const phi = latDeg * D2R;
       sp = Math.sin(phi);
       cp = Math.cos(phi);
     }
@@ -164,7 +185,9 @@ export function transverseMercator(
       const hx = 0.5 * lam;
       const z = hx * hx;
       const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
-      const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+      const hz = 0.5 * z;
+      const w = 1 - hz;
+      const cs = w + (1 - w - hz + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6))))));
       // 0 keeps its sign.
       sl = lam === 0 ? lam : 2 * sn * cs;
       cl = (cs - sn) * (cs + sn);
@@ -411,7 +434,6 @@ export function transverseMercator(
       {
         let lonDeg = a[j]!;
         const latDeg = b[j + o1]!;
-        const phi = latDeg * D2R;
         if (lonDeg > 180 || lonDeg < -180) {
           lonDeg %= 360;
           if (lonDeg > 180) lonDeg -= 360;
@@ -420,14 +442,20 @@ export function transverseMercator(
         const lam = lonDeg * D2R - lon0;
 
         let sp, cp;
-        if (phi > -1.5707963267948966 && phi < 1.5707963267948966) {
-          const hx = 0.5 * phi;
+        const alat = Math.abs(latDeg);
+        if (alat < 90) {
+          const hx = 0.5 * D2R * (alat > 45 ? 90 - alat : latDeg);
           const z = hx * hx;
           const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
-          const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
-          sp = phi === 0 ? phi : 2 * sn * cs;
-          cp = (cs - sn) * (cs + sn);
+          const hz = 0.5 * z;
+          const w = 1 - hz;
+          const cs = w + (1 - w - hz + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6))))));
+          const dsin = 2 * sn * cs;
+          const dcos = (cs - sn) * (cs + sn);
+          sp = alat > 45 ? (latDeg < 0 ? -dcos : dcos) : latDeg === 0 ? latDeg : dsin;
+          cp = alat > 45 ? dsin : dcos;
         } else {
+          const phi = latDeg * D2R;
           sp = Math.sin(phi);
           cp = Math.cos(phi);
         }
@@ -445,7 +473,9 @@ export function transverseMercator(
           const hx = 0.5 * lam;
           const z = hx * hx;
           const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
-          const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+          const hz = 0.5 * z;
+          const w = 1 - hz;
+          const cs = w + (1 - w - hz + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6))))));
           sl = lam === 0 ? lam : 2 * sn * cs;
           cl = (cs - sn) * (cs + sn);
         } else {

@@ -1,7 +1,8 @@
 // fdlibm __kernel_sin / __kernel_cos coefficients, for |x| <= pi/4: sin x = x + x z S(z), cos x = 1 - z/2 + z^2 C(z)
-// with z = x^2, the cos without fdlibm's correction term (about 1.2 ulp). The kernels apply them to half angles and
-// double: sin 2x = 2 sin x cos x is within a few ulp; cos 2x = (cos x - sin x)(cos x + sin x) within a few 1e-16
-// absolute, so not relatively accurate near +-pi/2, where callers use it only in sums or fall back to Math.
+// with z = x^2, the cos without fdlibm's correction term (about 1.2 ulp; the tmerc forward compensates 1 - z/2). The
+// kernels apply them to half angles and double: sin 2x = 2 sin x cos x is within a few ulp; cos 2x = (cos x - sin x)
+// (cos x + sin x) within a few 1e-16 absolute, so not relatively accurate near +-pi/2, where callers use it only in
+// sums, start from the complement or fall back to Math.
 export const KS1 = -1.66666666666666324348e-1,
   KS2 = 8.33333333332248946124e-3,
   KS3 = -1.98412698298579493134e-4,
