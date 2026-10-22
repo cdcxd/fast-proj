@@ -16,8 +16,9 @@ export const KC1 = 4.16666666666666019037e-2,
   KC5 = 2.0875723212981748279e-9,
   KC6 = -1.13596475577881948265e-11;
 
-// atan(u) = u + u^3 A(u^2), |u| <= tan(pi/8), within 1.2 ulp; exp(r) = 1 + r + r^2 E(r), |r| <= ln 2 / 2, expm1(r)
-// within 0.4 ulp: least-squares fits on Chebyshev nodes, shorter than the wasm kernels' (wasm/src/math.rs).
+// atan(u) = u + u^3 A(u^2), |u| <= tan(pi/8), within 1.6 ulp (atanQ within 2.3 with its reduction); exp(r) = 1 + r +
+// r^2 E(r), |r| <= ln 2 / 2 (a few ulp beyond, from the Web Mercator reduction), expm1(r) within 1.2 ulp:
+// least-squares fits on Chebyshev nodes, shorter than the wasm kernels' (wasm/src/math.rs).
 export const KA0 = -0.3333333333333325,
   KA1 = 0.19999999999901275,
   KA2 = -0.14285714266539506,

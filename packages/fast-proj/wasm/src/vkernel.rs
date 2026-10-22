@@ -151,7 +151,7 @@ pub fn forward2(mut lon: v128, lat: v128, q: &KS) -> (v128, v128) {
     let sh1 = f64x2_extract_lane::<1>(she);
     let etap = if sh0.abs() < 0.16 && sh1.abs() < 0.16 {
         // asinh by its odd series within |she| < 0.16 (about 9 degrees from the central meridian; the next term is
-        // below 1e-20 relative)
+        // below 3e-20 relative)
         let z = f64x2_mul(she, she);
         f64x2_add(she, f64x2_mul(f64x2_mul(she, z), poly_eo(z, &ASINH)))
     } else if sh0 > -1024.0 && sh0 < 1024.0 && sh1 > -1024.0 && sh1 < 1024.0 {

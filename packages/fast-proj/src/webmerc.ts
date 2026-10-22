@@ -3,8 +3,8 @@
  *
  * - forward: x = R lambda, y = R ln tan(pi/4 + phi/2) from sin and cos of phi/2, with log1p near the equator, and from
  *   the colatitude poleward of 45 degrees, accurate near the poles;
- * - inverse: lambda = x / R, phi = atan(sinh(y / R)), the Gudermannian, as 2 atan(tanh(y / 2R)) from an inline exp and
- *   atan (Math.sinh and Math.atan are calls into C++ in V8).
+ * - inverse: lambda = x / R, phi = atan(sinh(y / R)), the Gudermannian, as 2 atan(tanh(y / 2R)) below 45 degrees and
+ *   pi/2 - 2 atan(exp(-|y| / R)) above, from an inline exp and atan (Math.sinh and Math.atan are calls into C++ in V8).
  */
 import * as P from './poly.js';
 import { checkEven, checkOptions, checkSame, output } from './checks.js';
@@ -44,7 +44,6 @@ const KE6 = P.KE6;
 const KE7 = P.KE7;
 const KE8 = P.KE8;
 const KE9 = P.KE9;
-const TAN_PI_8 = P.TAN_PI_8;
 
 export interface WebMercatorOptions {
   /** Geographic system of `toLonLat`/`fromLonLat`. Default WGS84. */
@@ -60,8 +59,9 @@ const K = (R * Math.PI) / 180;
 const LOG2E = Math.LOG2E;
 const LN2_HI = 6.9314718036912381649e-1;
 const LN2_LO = 1.90821492927058770002e-10;
-const PI_4 = Math.PI / 4;
 const PI_2 = Math.PI / 2;
+const PI_2_LO = 6.123233995736766e-17;
+const ASINH1 = Math.asinh(1);
 const POW2 = new Float64Array(59).map((_, k) => 2 ** k);
 
 /** Web Mercator, EPSG:3857. Latitudes beyond ±85.0511° (the square tile limit) are not clamped. */
@@ -129,8 +129,10 @@ function sphericalMercator(): Projection {
       else if (lon < -180) lon += 360;
     }
     rx = lon;
-    // phi = 2 atan(tanh(v/2)) for v = |y| / R, with tanh(v/2) = m / (m + 2), m = expm1(v): m = 2^k (1 + q) - 1 from
-    // q = expm1(r), v = k ln 2 + r, so exact cancellation for k = 0. Beyond v = 40, phi rounds to pi/2.
+    // phi = gd(v) for v = |y| / R, from exp(r), v = k ln 2 + r. Below v = asinh(1), where phi = pi/4, phi = 2 atan(m /
+    // (m + 2)) with m = expm1(v) = 2^k (1 + expm1(r)) - 1, an exact cancellation for k = 0; above, phi = pi/2 - 2
+    // atan(exp(-v)) with exp(-v) = 2^-k (1 + expm1(-r)). Either atan argument is within tan(pi/8). Beyond v = 40, phi
+    // rounds to pi/2.
     let v = Math.abs(y / R);
     if (v > 40) v = 40;
     const k = Math.round(v * LOG2E);
@@ -138,25 +140,19 @@ function sphericalMercator(): Projection {
     const r2 = r * r;
     const qe = KE0 + r2 * (KE2 + r2 * (KE4 + r2 * (KE6 + r2 * KE8)));
     const qo = KE1 + r2 * (KE3 + r2 * (KE5 + r2 * (KE7 + r2 * KE9)));
+    const near = v < ASINH1;
+    const rr = near ? r : -r;
+    const q = rr + r2 * (qe + rr * qo);
     const s = POW2[k]!;
-    const m = s * (r + r2 * (qe + r * qo)) + (s - 1);
-    // atan(m / (m + 2)), reduced by pi/8 above tan(pi/8).
-    let num = m;
-    let den = m + 2;
-    let g = 0;
-    if (m > den * TAN_PI_8) {
-      num = m - den * TAN_PI_8;
-      den += m * TAN_PI_8;
-      g = PI_4;
-    }
-    const u = num / den;
+    const u = near ? (s * q + (s - 1)) / (s * q + (s + 1)) : (1 + q) / s;
     const t = u * u;
     const t2 = t * t;
     const ae = KA0 + t2 * (KA2 + t2 * (KA4 + t2 * (KA6 + t2 * KA8)));
     const ao = KA1 + t2 * (KA3 + t2 * (KA5 + t2 * (KA7 + t2 * KA9)));
-    g += 2 * (u + u * t * (ae + t * ao));
+    const w = 2 * (u + u * t * (ae + t * ao));
+    const g = near ? w : PI_2 - (w - PI_2_LO);
     // y = -0 keeps its sign.
-    ry = (g < PI_2 ? g : PI_2) * Math.sign(y) * R2D;
+    ry = g * Math.sign(y) * R2D;
   }
 
   return {
@@ -243,17 +239,11 @@ function inverseBatch(
         r2 *
           (0.008333333333326141 +
             r2 * (0.00019841269874802173 + r2 * (0.000002755725542387984 + r2 * 2.510520706464424e-8)));
+      const near = v < 0.881373587019543;
+      const rr = near ? r : -r;
+      const q = rr + r2 * (qe + rr * qo);
       const s = POW2[k]!;
-      const m = s * (r + r2 * (qe + r * qo)) + (s - 1);
-      let num = m;
-      let den = m + 2;
-      let g = 0;
-      if (m > den * 0.41421356237309503) {
-        num = m - den * 0.41421356237309503;
-        den += m * 0.41421356237309503;
-        g = 0.7853981633974483;
-      }
-      const u = num / den;
+      const u = near ? (s * q + (s - 1)) / (s * q + (s + 1)) : (1 + q) / s;
       const t = u * u;
       const t2 = t * t;
       const ae =
@@ -265,8 +255,9 @@ function inverseBatch(
         0.19999999999901275 +
         t2 *
           (0.11111109662900268 + t2 * (0.07691068361407245 + t2 * (0.05737080629289906 + t2 * 0.022780530526983894)));
-      g += 2 * (u + u * t * (ae + t * ao));
-      outB[j + o1] = (g < 1.5707963267948966 ? g : 1.5707963267948966) * Math.sign(y) * 57.29577951308232;
+      const w = 2 * (u + u * t * (ae + t * ao));
+      const g = near ? w : 1.5707963267948966 - (w - 6.123233995736766e-17);
+      outB[j + o1] = g * Math.sign(y) * 57.29577951308232;
     }
     // @end
   }
