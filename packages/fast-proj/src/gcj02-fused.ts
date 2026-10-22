@@ -81,8 +81,8 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
         const w = eta * eta;
         sh1 =
           eta +
-          eta * w * (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w / 6227020800)))));
-        ch1 = 1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w / 479001600)))));
+          eta * w * (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w * (1 / 6227020800))))));
+        ch1 = 1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600))))));
       } else {
         const e = Math.exp(eta);
         const ie = 1 / e;
@@ -111,11 +111,11 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
       const deta = tr * si + ti * sr;
 
       const dx2 = dxi * dxi;
-      const sdx = dxi * (1 + dx2 * (-1 / 6 + dx2 / 120));
-      const cdx = 1 + dx2 * (-1 / 2 + dx2 / 24);
+      const sdx = dxi * (1 + dx2 * (-1 / 6 + dx2 * (1 / 120)));
+      const cdx = 1 + dx2 * (-1 / 2 + dx2 * (1 / 24));
       const de2 = deta * deta;
-      const shd = deta * (1 + de2 * (1 / 6 + de2 / 120));
-      const chd = 1 + de2 * (1 / 2 + de2 / 24);
+      const shd = deta * (1 + de2 * (1 / 6 + de2 * (1 / 120)));
+      const chd = 1 + de2 * (1 / 2 + de2 * (1 / 24));
       const sx = s1 * cdx - c1x * sdx;
       const cx = c1x * cdx + s1 * sdx;
       const she = sh1 * chd - ch1 * shd;
@@ -149,8 +149,8 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
       const cChi = h * ir;
       const dc = phi - chi;
       const dc2 = dc * dc;
-      const sdc = dc * (1 + dc2 * (-1 / 6 + dc2 / 120));
-      const cdc = 1 + dc2 * (-1 / 2 + dc2 / 24);
+      const sdc = dc * (1 + dc2 * (-1 / 6 + dc2 * (1 / 120)));
+      const cdc = 1 + dc2 * (-1 / 2 + dc2 * (1 / 24));
       const sPhi = sChi * cdc + cChi * sdc;
       const cPhi = cChi * cdc - sChi * sdc;
       // sin, cos of lat - 35 and of 3 lam + (lon0 - 105) pi/60 (lam = atan(she / cx)).
@@ -278,9 +278,9 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
                 eta +
                 eta *
                   w *
-                  (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w / 6227020800)))));
+                  (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w * (1 / 6227020800))))));
               ch1 =
-                1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w / 479001600)))));
+                1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600))))));
             } else {
               const e = Math.exp(eta);
               const ie = 1 / e;
@@ -309,11 +309,11 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
             const deta = tr * si + ti * sr;
 
             const dx2 = dxi * dxi;
-            const sdx = dxi * (1 + dx2 * (-1 / 6 + dx2 / 120));
-            const cdx = 1 + dx2 * (-1 / 2 + dx2 / 24);
+            const sdx = dxi * (1 + dx2 * (-1 / 6 + dx2 * (1 / 120)));
+            const cdx = 1 + dx2 * (-1 / 2 + dx2 * (1 / 24));
             const de2 = deta * deta;
-            const shd = deta * (1 + de2 * (1 / 6 + de2 / 120));
-            const chd = 1 + de2 * (1 / 2 + de2 / 24);
+            const shd = deta * (1 + de2 * (1 / 6 + de2 * (1 / 120)));
+            const chd = 1 + de2 * (1 / 2 + de2 * (1 / 24));
             const sx = s1 * cdx - c1x * sdx;
             const cx = c1x * cdx + s1 * sdx;
             const she = sh1 * chd - ch1 * shd;
@@ -345,8 +345,8 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
             const cChi = h * ir;
             const dc = phi - chi;
             const dc2 = dc * dc;
-            const sdc = dc * (1 + dc2 * (-1 / 6 + dc2 / 120));
-            const cdc = 1 + dc2 * (-1 / 2 + dc2 / 24);
+            const sdc = dc * (1 + dc2 * (-1 / 6 + dc2 * (1 / 120)));
+            const cdc = 1 + dc2 * (-1 / 2 + dc2 * (1 / 24));
             const sPhi = sChi * cdc + cChi * sdc;
             const cPhi = cChi * cdc - sChi * sdc;
             const gu = sPhi * C35 - cPhi * S35;

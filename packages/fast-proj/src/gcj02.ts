@@ -318,10 +318,10 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
       if (Math.abs(d) < 1e-3 && Math.abs(e) < 1e-3) {
         const d2 = d * d;
         const e2 = e * e;
-        const sd = d * (1 - d2 / 6);
-        const cd = 1 - d2 * (0.5 - d2 / 24);
-        const se = e * (1 - e2 / 6);
-        const ce = 1 - e2 * (0.5 - e2 / 24);
+        const sd = d * (1 - d2 * (1 / 6));
+        const cd = 1 - d2 * (0.5 - d2 * (1 / 24));
+        const se = e * (1 - e2 * (1 / 6));
+        const ce = 1 - e2 * (0.5 - e2 * (1 / 24));
         const s0 = s;
         const u0 = u;
         s = s0 * cd + c * sd;
@@ -529,10 +529,10 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
       const e = dy * KY;
       const d2 = d * d;
       const e2 = e * e;
-      const sd = d * (1 - d2 / 6);
-      const cd = 1 - d2 * (0.5 - d2 / 24);
-      const se = e * (1 - e2 / 6);
-      const ce = 1 - e2 * (0.5 - e2 / 24);
+      const sd = d * (1 - d2 * (1 / 6));
+      const cd = 1 - d2 * (0.5 - d2 * (1 / 24));
+      const se = e * (1 - e2 * (1 / 6));
+      const ce = 1 - e2 * (0.5 - e2 * (1 / 24));
       const s0 = s;
       const u0 = u;
       s = s0 * cd + c * sd;
@@ -699,10 +699,10 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
           const e = dy * KY;
           const d2 = d * d;
           const e2 = e * e;
-          const sd = d * (1 - d2 / 6);
-          const cd = 1 - d2 * (0.5 - d2 / 24);
-          const se = e * (1 - e2 / 6);
-          const ce = 1 - e2 * (0.5 - e2 / 24);
+          const sd = d * (1 - d2 * (1 / 6));
+          const cd = 1 - d2 * (0.5 - d2 * (1 / 24));
+          const se = e * (1 - e2 * (1 / 6));
+          const ce = 1 - e2 * (0.5 - e2 * (1 / 24));
           const s0 = s;
           const u0 = u;
           s = s0 * cd + c * sd;

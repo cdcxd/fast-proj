@@ -176,8 +176,8 @@ export function transverseMercator(
     const q1 = cp0 + p * (cp1 + p * (cp2 + p * (cp3 + p * (c5 + p * c6))));
     const dchi = 2 * sp * cp * q1;
     const dd = dchi * dchi;
-    const sd = dchi * (1 + dd * (-1 / 6 + dd / 120));
-    const cd = 1 + dd * (-1 / 2 + dd / 24);
+    const sd = dchi * (1 + dd * (-1 / 6 + dd * (1 / 120)));
+    const cd = 1 + dd * (-1 / 2 + dd * (1 / 24));
     const sc = sp * cd + cp * sd;
     const cc = cp * cd - sp * sd;
 
@@ -221,7 +221,7 @@ export function transverseMercator(
           z *
             zz *
             (1 / 3 +
-              zz * (1 / 5 + zz * (1 / 7 + zz * (1 / 9 + zz * (1 / 11 + zz * (1 / 13 + zz * (1 / 15 + zz / 17)))))))
+              zz * (1 / 5 + zz * (1 / 7 + zz * (1 / 9 + zz * (1 / 11 + zz * (1 / 13 + zz * (1 / 15 + zz * (1 / 17))))))))
         : she > -1024 && she < 1024
           ? Math.log1p(she + (she * she) / (ir + 1))
           : Math.asinh(she);
@@ -276,8 +276,8 @@ export function transverseMercator(
       const w = eta * eta;
       sh1 =
         eta +
-        eta * w * (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w / 6227020800)))));
-      ch1 = 1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w / 479001600)))));
+        eta * w * (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w * (1 / 6227020800))))));
+      ch1 = 1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600))))));
     } else {
       const e = Math.exp(eta);
       const ie = 1 / e;
@@ -309,11 +309,11 @@ export function transverseMercator(
     const deta = tr * si + ti * sr;
 
     const dx2 = dxi * dxi;
-    const sdx = dxi * (1 + dx2 * (-1 / 6 + dx2 / 120));
-    const cdx = 1 + dx2 * (-1 / 2 + dx2 / 24);
+    const sdx = dxi * (1 + dx2 * (-1 / 6 + dx2 * (1 / 120)));
+    const cdx = 1 + dx2 * (-1 / 2 + dx2 * (1 / 24));
     const de2 = deta * deta;
-    const shd = deta * (1 + de2 * (1 / 6 + de2 / 120));
-    const chd = 1 + de2 * (1 / 2 + de2 / 24);
+    const shd = deta * (1 + de2 * (1 / 6 + de2 * (1 / 120)));
+    const chd = 1 + de2 * (1 / 2 + de2 * (1 / 24));
     const sx = s1 * cdx - c1x * sdx;
     const cx = c1x * cdx + s1 * sdx;
     const she = sh1 * chd - ch1 * shd;
@@ -373,8 +373,8 @@ export function transverseMercator(
           const w = eta * eta;
           sh1 =
             eta +
-            eta * w * (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w / 6227020800)))));
-          ch1 = 1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w / 479001600)))));
+            eta * w * (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w * (1 / 6227020800))))));
+          ch1 = 1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600))))));
         } else {
           const e = Math.exp(eta);
           const ie = 1 / e;
@@ -403,11 +403,11 @@ export function transverseMercator(
         const deta = tr * si + ti * sr;
 
         const dx2 = dxi * dxi;
-        const sdx = dxi * (1 + dx2 * (-1 / 6 + dx2 / 120));
-        const cdx = 1 + dx2 * (-1 / 2 + dx2 / 24);
+        const sdx = dxi * (1 + dx2 * (-1 / 6 + dx2 * (1 / 120)));
+        const cdx = 1 + dx2 * (-1 / 2 + dx2 * (1 / 24));
         const de2 = deta * deta;
-        const shd = deta * (1 + de2 * (1 / 6 + de2 / 120));
-        const chd = 1 + de2 * (1 / 2 + de2 / 24);
+        const shd = deta * (1 + de2 * (1 / 6 + de2 * (1 / 120)));
+        const chd = 1 + de2 * (1 / 2 + de2 * (1 / 24));
         const sx = s1 * cdx - c1x * sdx;
         const cx = c1x * cdx + s1 * sdx;
         const she = sh1 * chd - ch1 * shd;
@@ -476,8 +476,8 @@ export function transverseMercator(
         const q1 = cp0 + p * (cp1 + p * (cp2 + p * (cp3 + p * (c5 + p * c6))));
         const dchi = 2 * sp * cp * q1;
         const dd = dchi * dchi;
-        const sd = dchi * (1 + dd * (-1 / 6 + dd / 120));
-        const cd = 1 + dd * (-1 / 2 + dd / 24);
+        const sd = dchi * (1 + dd * (-1 / 6 + dd * (1 / 120)));
+        const cd = 1 + dd * (-1 / 2 + dd * (1 / 24));
         const sc = sp * cd + cp * sd;
         const cc = cp * cd - sp * sd;
 
@@ -515,7 +515,7 @@ export function transverseMercator(
               z *
                 zz *
                 (1 / 3 +
-                  zz * (1 / 5 + zz * (1 / 7 + zz * (1 / 9 + zz * (1 / 11 + zz * (1 / 13 + zz * (1 / 15 + zz / 17)))))))
+                  zz * (1 / 5 + zz * (1 / 7 + zz * (1 / 9 + zz * (1 / 11 + zz * (1 / 13 + zz * (1 / 15 + zz * (1 / 17))))))))
             : she > -1024 && she < 1024
               ? Math.log1p(she + (she * she) / (ir + 1))
               : Math.asinh(she);
