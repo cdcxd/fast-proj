@@ -7,7 +7,7 @@ and WGS84 ↔ GCJ-02 for maps of China, with typed-array APIs and an optional We
   ≈6e-9 m / 1.3e-13° vs proj4.
 - GCJ-02: the published formula, 7–20× faster than gcoord (16–29× with WebAssembly); the inverse is accurate to 3e-12°
   (gcoord: 1e-6°).
-- Web Mercator (EPSG:3857): within five ulps of an exact reference up to the poles; no clamping at ±85.05°.
+- Web Mercator (EPSG:3857): within five ulps of the correctly rounded exact value up to the poles; no clamping at ±85.05°.
 - No per-point allocations in the batch APIs; optional output buffers, in-place conversion.
 - No dependencies, ESM-only, tree-shakeable. Node ≥ 20 and modern browsers.
 
