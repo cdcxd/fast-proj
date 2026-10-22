@@ -300,6 +300,23 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
   in absolute terms only near ±π/2, so the TM forward starts from the colatitude poleward of 45° (cos φ from the
   doubled sine) and compensates the rounding of 1 - z/2, and λ keeps the polynomials within 0.8 rad only. Without
   these the forward reached 5.6e-9 m at 78°; with them it is within 4.7e-9 m, as is wasm.
+- Since 0.5.1 the JavaScript TM kernels take atan(n / d) from `atanQ` (`src/poly.ts`: reflection, a tan(π/8) shift
+  sharing the one division, a 10-term fit within 1.2 ulp) and the forward's η' = asinh(she) as atanh(cos χ sin λ) from
+  its series within |cos χ sin λ| < 0.1; the Web Mercator inverse writes gd(v) = 2 atan(tanh(v/2)) with tanh(v/2) =
+  m / (m + 2), m = expm1(v) from an inline exp (2^k (1 + q) - 1, so no cancellation for k = 0). With 13 atan terms
+  (the wasm fit) Node was 9% slower; 10 made it even. `Math.atan`, `Math.sinh` and `Math.log1p` cost 15-22 ns in
+  Chromium, about 8-15 in Node, less in Bun, which runs the long inline chains slower: Bun's Web Mercator `toLonLat` is
+  10% slower, the rest faster or even. `scripts/inline.ts` also writes the kernel file's numeric module constants into
+  the batch copies as literals: a batch method called a few hundred times runs in V8's on-stack-replacement code, which
+  reloads a module `const` from the context at every use (Node 9-48% faster per row, Bun unchanged, output
+  bit-identical). In-process A/Bs of two builds can reach a normal TurboFan compile and hide this; bench one case per
+  process. Hoisting the projection's closure coefficients into locals measured Bun -7-9%, Node 0% (not done). Tried and
+  dropped: a chord step reusing the GCJ-02 inverse's first Jacobian (1.4e-9° against 3e-12°: the high-frequency terms
+  move it), v128 loads/stores and a 2x unroll in the wasm loops (within ±2%).
+- Since 0.5.1 the wasm TM kernels take sin/cos with one fold about π/2 (exact by Sterbenz) when both lanes are within
+  3π/4, sinh/cosh of η from their series within 0.35 and asinh(she) from its series within 0.16, as the JavaScript
+  kernels; GCJ-02 takes the longitude's sin/cos from a third of the angle by triple angles, covering the box without
+  the general reduction: 7-12% faster.
 - The wasm converters' single-point methods run the JavaScript kernel: one point costs more to pass into wasm than to
   compute.
 - Re-entrant calls into a context (from array-like getters) throw; `dispose()` during a call throws.
