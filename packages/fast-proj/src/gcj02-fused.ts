@@ -81,8 +81,11 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
         const w = eta * eta;
         sh1 =
           eta +
-          eta * w * (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w * (1 / 6227020800))))));
-        ch1 = 1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600))))));
+          eta *
+            w *
+            (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w * (1 / 6227020800))))));
+        ch1 =
+          1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600))))));
       } else {
         const e = Math.exp(eta);
         const ie = 1 / e;
@@ -226,7 +229,10 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
           200 * gs2;
         const m = 1 - EE * sp * sp;
         const sm = Math.sqrt(m);
-        offLon = (dLon * KLON * sm) / cp;
+        const qcm = 1 / (cp * m);
+        const icp = m * qcm;
+        const fLon = KLON * sm * icp;
+        offLon = dLon * fLon;
         offLat = dLat * KLAT * m * sm;
       }
       // @end
@@ -278,9 +284,11 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
                 eta +
                 eta *
                   w *
-                  (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w * (1 / 6227020800))))));
+                  (1 / 6 +
+                    w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w * (1 / 6227020800))))));
               ch1 =
-                1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600))))));
+                1 +
+                w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600))))));
             } else {
               const e = Math.exp(eta);
               const ie = 1 / e;
@@ -420,7 +428,10 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
                 200 * gs2;
               const m = 1 - EE * sp * sp;
               const sm = Math.sqrt(m);
-              offLon = (dLon * KLON * sm) / cp;
+              const qcm = 1 / (cp * m);
+              const icp = m * qcm;
+              const fLon = KLON * sm * icp;
+              offLon = dLon * fLon;
               offLat = dLat * KLAT * m * sm;
             }
             if (!all) {

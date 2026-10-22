@@ -221,7 +221,8 @@ export function transverseMercator(
           z *
             zz *
             (1 / 3 +
-              zz * (1 / 5 + zz * (1 / 7 + zz * (1 / 9 + zz * (1 / 11 + zz * (1 / 13 + zz * (1 / 15 + zz * (1 / 17))))))))
+              zz *
+                (1 / 5 + zz * (1 / 7 + zz * (1 / 9 + zz * (1 / 11 + zz * (1 / 13 + zz * (1 / 15 + zz * (1 / 17))))))))
         : she > -1024 && she < 1024
           ? Math.log1p(she + (she * she) / (ir + 1))
           : Math.asinh(she);
@@ -276,7 +277,9 @@ export function transverseMercator(
       const w = eta * eta;
       sh1 =
         eta +
-        eta * w * (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w * (1 / 6227020800))))));
+        eta *
+          w *
+          (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w * (1 / 6227020800))))));
       ch1 = 1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600))))));
     } else {
       const e = Math.exp(eta);
@@ -373,8 +376,11 @@ export function transverseMercator(
           const w = eta * eta;
           sh1 =
             eta +
-            eta * w * (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w * (1 / 6227020800))))));
-          ch1 = 1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600))))));
+            eta *
+              w *
+              (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w * (1 / 6227020800))))));
+          ch1 =
+            1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600))))));
         } else {
           const e = Math.exp(eta);
           const ie = 1 / e;
@@ -515,7 +521,9 @@ export function transverseMercator(
               z *
                 zz *
                 (1 / 3 +
-                  zz * (1 / 5 + zz * (1 / 7 + zz * (1 / 9 + zz * (1 / 11 + zz * (1 / 13 + zz * (1 / 15 + zz * (1 / 17))))))))
+                  zz *
+                    (1 / 5 +
+                      zz * (1 / 7 + zz * (1 / 9 + zz * (1 / 11 + zz * (1 / 13 + zz * (1 / 15 + zz * (1 / 17))))))))
             : she > -1024 && she < 1024
               ? Math.log1p(she + (she * she) / (ir + 1))
               : Math.asinh(she);

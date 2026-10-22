@@ -175,7 +175,11 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
       200 * s2;
     const m = 1 - EE * sp * sp;
     const sm = Math.sqrt(m);
-    ox = (dLon * KLON * sm) / cp;
+    // One division for 1 / cp here and 1 / m in the inverse's Jacobian.
+    const qcm = 1 / (cp * m);
+    const icp = m * qcm;
+    const fLon = KLON * sm * icp;
+    ox = dLon * fLon;
     oy = dLat * KLAT * m * sm;
   }
 
@@ -281,7 +285,10 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
         200 * s2;
       const m = 1 - EE * sp * sp;
       const sm = Math.sqrt(m);
-      offLon = (dLon * KLON * sm) / cp;
+      const qcm = 1 / (cp * m);
+      const icp = m * qcm;
+      const fLon = KLON * sm * icp;
+      offLon = dLon * fLon;
       offLat = dLat * KLAT * m * sm;
     }
     // @end
@@ -487,7 +494,10 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
         200 * s2;
       const m = 1 - EE * sp * sp;
       const sm = Math.sqrt(m);
-      offLon = (dLon * KLON * sm) / cp;
+      const qcm = 1 / (cp * m);
+      const icp = m * qcm;
+      const fLon = KLON * sm * icp;
+      offLon = dLon * fLon;
       offLat = dLat * KLAT * m * sm;
       // @end
       // Jacobian of the offset in degrees per degree, from the copy's multiple-angle values. sm / cp and m * sm vary
@@ -501,10 +511,9 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
       const dLonX = 1 + 0.2 * x + 0.1 * y + dr + dCommon + JS60 * c60 + JS20 * c20 + JS5 * c5 + JS2 * c2;
       const dLatX = 2 + 0.1 * y + 2 * dr + dCommon;
       const dLatY = 3 + 0.4 * y + 0.1 * x + JU180 * v180 + JU60 * v60 + JU15 * v15 + JU6 * v6;
-      const fLon = (KLON * sm) / cp;
       const fLat = KLAT * m * sm;
-      const t = (sp / cp) * KY;
-      const em = (EE * sp * cp * KY) / m;
+      const t = sp * icp * KY;
+      const em = EE * sp * cp * cp * qcm * KY;
       // Solve (I + J) step = (lon, lat) - w - offset(w).
       const ja = 1 + dLonX * fLon;
       const jb = (2 + 0.1 * x) * fLon + offLon * (t - em);
@@ -662,7 +671,10 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
             200 * s2;
           const m = 1 - EE * sp * sp;
           const sm = Math.sqrt(m);
-          offLon = (dLon * KLON * sm) / cp;
+          const qcm = 1 / (cp * m);
+          const icp = m * qcm;
+          const fLon = KLON * sm * icp;
+          offLon = dLon * fLon;
           offLat = dLat * KLAT * m * sm;
           const c120 = 1 - 2 * s60 * s60;
           const c360 = c120 * (4 * c120 * c120 - 3);
@@ -673,10 +685,9 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
           const dLonX = 1 + 0.2 * x + 0.1 * y + dr + dCommon + JS60 * c60 + JS20 * c20 + JS5 * c5 + JS2 * c2;
           const dLatX = 2 + 0.1 * y + 2 * dr + dCommon;
           const dLatY = 3 + 0.4 * y + 0.1 * x + JU180 * v180 + JU60 * v60 + JU15 * v15 + JU6 * v6;
-          const fLon = (KLON * sm) / cp;
           const fLat = KLAT * m * sm;
-          const t = (sp / cp) * KY;
-          const em = (EE * sp * cp * KY) / m;
+          const t = sp * icp * KY;
+          const em = EE * sp * cp * cp * qcm * KY;
           const ja = 1 + dLonX * fLon;
           const jb = (2 + 0.1 * x) * fLon + offLon * (t - em);
           const jc = dLatX * fLat;
@@ -824,7 +835,10 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
             200 * s2;
           const m = 1 - EE * sp * sp;
           const sm = Math.sqrt(m);
-          offLon = (dLon * KLON * sm) / cp;
+          const qcm = 1 / (cp * m);
+          const icp = m * qcm;
+          const fLon = KLON * sm * icp;
+          offLon = dLon * fLon;
           offLat = dLat * KLAT * m * sm;
         }
         if (!all) {
