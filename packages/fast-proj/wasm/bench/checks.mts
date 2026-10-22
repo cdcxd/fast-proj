@@ -323,7 +323,9 @@ function wasmInverse(pts, zone, south, a = A, f = F) {
     const got = wasmInverse(pts, zone, south);
     for (let i = 0; i < pts.length; i++) {
       const [tl, tt] = c.toLonLatPoint(pts[i][0], pts[i][1]);
-      check(`equator lon sign ${pts[i][0]} south=${south}`, Object.is(got.lon[i], tl), `${got.lon[i]} vs ${tl}`);
+      // sign and zero parity exactly; the value to a few ulps (the JS kernel's polynomial trig differs)
+      const signOk = Object.is(Math.sign(got.lon[i]), Math.sign(tl)) && Math.abs(got.lon[i] - tl) <= 1e-13;
+      check(`equator lon sign ${pts[i][0]} south=${south}`, signOk, `${got.lon[i]} vs ${tl}`);
       check(`equator lat value ${pts[i][0]} south=${south}`, got.lat[i] === tt, `${got.lat[i]} vs ${tt}`);
     }
   }
@@ -359,7 +361,7 @@ function wasmInverse(pts, zone, south, a = A, f = F) {
   const got = wasmForward(pts, 31, false);
   for (let i = 0; i < pts.length; i++) {
     const [tx] = c.fromLonLatPoint(pts[i][0], pts[i][1]);
-    const clsOk = (Number.isNaN(tx) && Number.isNaN(got.x[i])) || tx === got.x[i];
+    const clsOk = Number.isNaN(tx) ? Number.isNaN(got.x[i]) : Math.abs(got.x[i] - tx) <= 1e-14 * Math.abs(tx);
     check(`fwd guard cls ${pts[i]}`, clsOk, `got ${got.x[i]} vs ${tx}`);
   }
 }

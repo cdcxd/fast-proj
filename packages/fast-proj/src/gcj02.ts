@@ -7,6 +7,7 @@
  * with the Jacobian from the same multiple-angle values, converge to ~1e-12 degrees, and after the first step the two
  * pairs are rotated by the step rather than recomputed.
  */
+import * as P from './poly.js';
 import { checkEven, checkOptions, checkSame, output } from './checks.js';
 import { fuser } from './gcj02-fused.js';
 import * as K from './gcj02-constants.js';
@@ -14,6 +15,18 @@ import { fusers } from './geographic.js';
 import type { Geographic, Impl } from './types.js';
 
 // Bound here, not imported: V8 reads a module's own consts faster than imported ones (fromWgs84 12% in Node).
+const KC1 = P.KC1;
+const KC2 = P.KC2;
+const KC3 = P.KC3;
+const KC4 = P.KC4;
+const KC5 = P.KC5;
+const KC6 = P.KC6;
+const KS1 = P.KS1;
+const KS2 = P.KS2;
+const KS3 = P.KS3;
+const KS4 = P.KS4;
+const KS5 = P.KS5;
+const KS6 = P.KS6;
 const C35 = K.C35;
 const EE = K.EE;
 const KLAT = K.KLAT;
@@ -184,12 +197,31 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
     if (lon === -180) lon = 180;
     const x = lon - 105;
     const y = lat - 35;
-    // @inline offset(x, y, Math.sin(x * KX), Math.cos(x * KX), Math.sin(y * KY), Math.cos(y * KY)); ox = offLon; oy = offLat
+    let sX: number, cX: number, uY: number, vY: number;
+    // sin, cos of x KX by double angles from half of it (|x KX| < pi / 2) and of y KY directly (|y KY| < pi / 4).
+    if (x > -30 && x < 30 && y > -45 && y < 45) {
+      const hx = 0.5 * KX * x;
+      const z = hx * hx;
+      const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
+      const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+      sX = 2 * sn * cs;
+      cX = (cs - sn) * (cs + sn);
+      const hy = KY * y;
+      const t = hy * hy;
+      uY = hy + hy * t * (KS1 + t * (KS2 + t * (KS3 + t * (KS4 + t * (KS5 + t * KS6)))));
+      vY = 1 - 0.5 * t + t * t * (KC1 + t * (KC2 + t * (KC3 + t * (KC4 + t * (KC5 + t * KC6)))));
+    } else {
+      sX = Math.sin(x * KX);
+      cX = Math.cos(x * KX);
+      uY = Math.sin(y * KY);
+      vY = Math.cos(y * KY);
+    }
+    // @inline offset(x, y, sX, cX, uY, vY); ox = offLon; oy = offLat
     {
-      const s1 = Math.sin(x * KX);
-      const c1 = Math.cos(x * KX);
-      const u1 = Math.sin(y * KY);
-      const v1 = Math.cos(y * KY);
+      const s1 = sX;
+      const c1 = cX;
+      const u1 = uY;
+      const v1 = vY;
       const s2 = 2 * s1 * c1;
       const c2 = 1 - 2 * s1 * s1;
       const s4 = 2 * s2 * c2;
@@ -364,10 +396,27 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
       ry = ty;
       return;
     }
-    let s = Math.sin((lon - 105) * KX);
-    let c = Math.cos((lon - 105) * KX);
-    let u = Math.sin((lat - 35) * KY);
-    let v = Math.cos((lat - 35) * KY);
+    const x0 = lon - 105;
+    const y0 = lat - 35;
+    let s: number, c: number, u: number, v: number;
+    // sin, cos of x KX by double angles from half of it (|x KX| < pi / 2) and of y KY directly (|y KY| < pi / 4).
+    if (x0 > -30 && x0 < 30 && y0 > -45 && y0 < 45) {
+      const hx = 0.5 * KX * x0;
+      const z = hx * hx;
+      const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
+      const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+      s = 2 * sn * cs;
+      c = (cs - sn) * (cs + sn);
+      const hy = KY * y0;
+      const t = hy * hy;
+      u = hy + hy * t * (KS1 + t * (KS2 + t * (KS3 + t * (KS4 + t * (KS5 + t * KS6)))));
+      v = 1 - 0.5 * t + t * t * (KC1 + t * (KC2 + t * (KC3 + t * (KC4 + t * (KC5 + t * KC6)))));
+    } else {
+      s = Math.sin(x0 * KX);
+      c = Math.cos(x0 * KX);
+      u = Math.sin(y0 * KY);
+      v = Math.cos(y0 * KY);
+    }
     let wx = lon;
     let wy = lat;
     // Newton steps on w + offset(w) = (lon, lat), from w = (lon, lat).
@@ -525,10 +574,26 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
           outB[j + o1] = ty;
           continue;
         }
-        let s = Math.sin((lon - 105) * KX);
-        let c = Math.cos((lon - 105) * KX);
-        let u = Math.sin((lat - 35) * KY);
-        let v = Math.cos((lat - 35) * KY);
+        const x0 = lon - 105;
+        const y0 = lat - 35;
+        let s: number, c: number, u: number, v: number;
+        if (x0 > -30 && x0 < 30 && y0 > -45 && y0 < 45) {
+          const hx = 0.5 * KX * x0;
+          const z = hx * hx;
+          const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
+          const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+          s = 2 * sn * cs;
+          c = (cs - sn) * (cs + sn);
+          const hy = KY * y0;
+          const t = hy * hy;
+          u = hy + hy * t * (KS1 + t * (KS2 + t * (KS3 + t * (KS4 + t * (KS5 + t * KS6)))));
+          v = 1 - 0.5 * t + t * t * (KC1 + t * (KC2 + t * (KC3 + t * (KC4 + t * (KC5 + t * KC6)))));
+        } else {
+          s = Math.sin(x0 * KX);
+          c = Math.cos(x0 * KX);
+          u = Math.sin(y0 * KY);
+          v = Math.cos(y0 * KY);
+        }
         let wx = lon;
         let wy = lat;
         for (let k = 1; ; k++) {
@@ -677,11 +742,29 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
         if (lon === -180) lon = 180;
         const x = lon - 105;
         const y = lat - 35;
+        let sX: number, cX: number, uY: number, vY: number;
+        if (x > -30 && x < 30 && y > -45 && y < 45) {
+          const hx = 0.5 * KX * x;
+          const z = hx * hx;
+          const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
+          const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+          sX = 2 * sn * cs;
+          cX = (cs - sn) * (cs + sn);
+          const hy = KY * y;
+          const t = hy * hy;
+          uY = hy + hy * t * (KS1 + t * (KS2 + t * (KS3 + t * (KS4 + t * (KS5 + t * KS6)))));
+          vY = 1 - 0.5 * t + t * t * (KC1 + t * (KC2 + t * (KC3 + t * (KC4 + t * (KC5 + t * KC6)))));
+        } else {
+          sX = Math.sin(x * KX);
+          cX = Math.cos(x * KX);
+          uY = Math.sin(y * KY);
+          vY = Math.cos(y * KY);
+        }
         {
-          const s1 = Math.sin(x * KX);
-          const c1 = Math.cos(x * KX);
-          const u1 = Math.sin(y * KY);
-          const v1 = Math.cos(y * KY);
+          const s1 = sX;
+          const c1 = cX;
+          const u1 = uY;
+          const v1 = vY;
           const s2 = 2 * s1 * c1;
           const c2 = 1 - 2 * s1 * s1;
           const s4 = 2 * s2 * c2;

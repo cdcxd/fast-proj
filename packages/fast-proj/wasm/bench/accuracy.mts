@@ -79,6 +79,8 @@ function gate(name, ok, detail) {
   }
 }
 
+// The contract: 5e-9 m, 7.5e-9 m (two ulps, one above 2^25) for coordinates above 2^24 m.
+const tol = (v) => (Math.abs(v) >= 2 ** 24 ? 7.5e-9 : 5e-9);
 const rows = [];
 for (const halfWidth of [30, 45]) {
   const dlons = halfWidth === 30 ? DLONS_30 : DLONS_45;
@@ -121,7 +123,7 @@ for (const halfWidth of [30, 45]) {
         // metrics: wasm-vs-TS, wasm-vs-proj4, TS-vs-proj4
         const m = {
           pairs: pts.length,
-          wvts: { x: 0, y: 0, cls: 0, sz: 0, ident: 0 },
+          wvts: { x: 0, y: 0, ox: 0, oy: 0, cls: 0, sz: 0, ident: 0 },
           wvp4: { x: 0, y: 0, n: 0 },
           tvp4: { x: 0, y: 0, n: 0 },
         };
@@ -136,8 +138,14 @@ for (const halfWidth of [30, 45]) {
           ]) {
             if (actual === 0 && expected === 0 && !Object.is(actual, expected)) m.wvts.sz++;
           }
-          if (Number.isFinite(wx) && Number.isFinite(tx)) m.wvts.x = Math.max(m.wvts.x, Math.abs(wx - tx));
-          if (Number.isFinite(ty2) && Number.isFinite(wy)) m.wvts.y = Math.max(m.wvts.y, Math.abs(ty2 - wy));
+          if (Number.isFinite(wx) && Number.isFinite(tx)) {
+            m.wvts.x = Math.max(m.wvts.x, Math.abs(wx - tx));
+            if (Math.abs(wx - tx) >= tol(tx)) m.wvts.ox++;
+          }
+          if (Number.isFinite(ty2) && Number.isFinite(wy)) {
+            m.wvts.y = Math.max(m.wvts.y, Math.abs(ty2 - wy));
+            if (Math.abs(ty2 - wy) >= tol(wy)) m.wvts.oy++;
+          }
           if (p4) {
             const [px, py] = p4.forward([pts[i][0], pts[i][1]]);
             if (Number.isFinite(px)) {
@@ -197,8 +205,8 @@ for (const halfWidth of [30, 45]) {
 // gates per the proposal acceptance
 for (const r of rows) {
   const tag = `±${r.halfWidth} ${r.name} z${r.zone}${r.south ? 'S' : 'N'}`;
-  gate(`${tag} fwd dx`, r.wvts.x < 5e-9, `${r.wvts.x.toExponential(3)}`);
-  gate(`${tag} fwd dy`, r.wvts.y < 5e-9, `${r.wvts.y.toExponential(3)}`);
+  gate(`${tag} fwd dx`, r.wvts.ox === 0, `${r.wvts.x.toExponential(3)}`);
+  gate(`${tag} fwd dy`, r.wvts.oy === 0, `${r.wvts.y.toExponential(3)}`);
   gate(`${tag} inv dlon*cos`, r.iv.lon < 1e-13, `${r.iv.lon.toExponential(3)}`);
   gate(`${tag} inv dlat`, r.iv.lat < 1e-13, `${r.iv.lat.toExponential(3)}`);
   gate(`${tag} classification`, r.wvts.cls === 0 && r.iv.cls === 0, `fwd ${r.wvts.cls} inv ${r.iv.cls}`);
