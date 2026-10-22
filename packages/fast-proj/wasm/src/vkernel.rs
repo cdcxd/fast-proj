@@ -17,7 +17,22 @@ use core::arch::wasm32::{
     v128_or, v128_xor,
 };
 
-use crate::simd::{load_pair, store_pair, vatan2, vatan_q, vexp_eo, vlog1p_eo, vsincos_eo};
+use crate::simd::{load_pair, poly_eo, store_pair, vatan2, vatan_q, vexp_eo, vlog1p_eo, vsincos_h};
+
+const ASINH: [f64; 10] = [
+    -1.0 / 6.0,
+    3.0 / 40.0,
+    -5.0 / 112.0,
+    35.0 / 1152.0,
+    -63.0 / 2816.0,
+    231.0 / 13312.0,
+    -143.0 / 10240.0,
+    6435.0 / 557056.0,
+    -12155.0 / 1245184.0,
+    46189.0 / 5505024.0,
+];
+const SINH: [f64; 6] = [1.0 / 6.0, 1.0 / 120.0, 1.0 / 5040.0, 1.0 / 362880.0, 1.0 / 39916800.0, 1.0 / 6227020800.0];
+const COSH: [f64; 7] = [0.5, 1.0 / 24.0, 1.0 / 720.0, 1.0 / 40320.0, 1.0 / 3628800.0, 1.0 / 479001600.0, 1.0 / 87178291200.0];
 
 #[inline]
 fn spl(x: f64) -> v128 {
@@ -90,7 +105,7 @@ pub fn forward2(mut lon: v128, lat: v128, q: &KS) -> (v128, v128) {
     }
     let lam = f64x2_sub(f64x2_mul(lon, q.d2r), q.lon0);
 
-    let (sp, cp) = vsincos_eo(phi);
+    let (sp, cp) = vsincos_h(phi);
     let p = f64x2_sub(spl(2.0), f64x2_mul(spl(4.0), f64x2_mul(sp, sp)));
     let q1 = poly6_eo(p, &q.cp);
     let dchi = f64x2_mul(f64x2_mul(f64x2_add(sp, sp), cp), q1);
@@ -109,7 +124,7 @@ pub fn forward2(mut lon: v128, lat: v128, q: &KS) -> (v128, v128) {
     let sc = f64x2_add(f64x2_mul(sp, cd), f64x2_mul(cp, sd));
     let cc = f64x2_sub(f64x2_mul(cp, cd), f64x2_mul(sp, sd));
 
-    let (sl, cl) = vsincos_eo(lam);
+    let (sl, cl) = vsincos_h(lam);
     // !(cl > 1e-15) -> NaN pair (mirrors the early return in the TS kernel)
     let bad = v128_xor(f64x2_gt(cl, spl(1e-15)), i64x2_splat(-1));
 
@@ -134,7 +149,12 @@ pub fn forward2(mut lon: v128, lat: v128, q: &KS) -> (v128, v128) {
     // lanes (select-based fallbacks would pay the asinh chain every iteration)
     let sh0 = f64x2_extract_lane::<0>(she);
     let sh1 = f64x2_extract_lane::<1>(she);
-    let etap = if sh0 > -1024.0 && sh0 < 1024.0 && sh1 > -1024.0 && sh1 < 1024.0 {
+    let etap = if sh0.abs() < 0.16 && sh1.abs() < 0.16 {
+        // asinh by its odd series within |she| < 0.16 (about 9 degrees from the central meridian; the next term is
+        // below 1e-20 relative)
+        let z = f64x2_mul(she, she);
+        f64x2_add(she, f64x2_mul(f64x2_mul(she, z), poly_eo(z, &ASINH)))
+    } else if sh0 > -1024.0 && sh0 < 1024.0 && sh1 > -1024.0 && sh1 < 1024.0 {
         vlog1p_eo(f64x2_add(
             she,
             f64x2_div(f64x2_mul(she, she), f64x2_add(ir, spl(1.0))),
@@ -207,11 +227,21 @@ pub fn inverse_parts(x: v128, y: v128, q: &KS) -> Inv {
     let xi = f64x2_mul(f64x2_sub(y, q.fnorth), q.inv_k_a);
     let eta = f64x2_mul(f64x2_sub(x, q.feast), q.inv_k_a);
 
-    let (s1, c1x) = vsincos_eo(xi);
-    let e = vexp_eo(eta);
-    let ie = f64x2_div(spl(1.0), e);
-    let ch1 = f64x2_mul(spl(0.5), f64x2_add(e, ie));
-    let sh1 = f64x2_mul(spl(0.5), f64x2_sub(e, ie));
+    let (s1, c1x) = vsincos_h(xi);
+    // sinh, cosh of eta from their series within |eta| < 0.35 (as the JavaScript kernel), else from exp
+    let e0 = f64x2_extract_lane::<0>(eta).abs();
+    let e1 = f64x2_extract_lane::<1>(eta).abs();
+    let (sh1, ch1) = if e0 < 0.35 && e1 < 0.35 {
+        let w = f64x2_mul(eta, eta);
+        (
+            f64x2_add(eta, f64x2_mul(f64x2_mul(eta, w), poly_eo(w, &SINH))),
+            f64x2_add(spl(1.0), f64x2_mul(w, poly_eo(w, &COSH))),
+        )
+    } else {
+        let e = vexp_eo(eta);
+        let ie = f64x2_div(spl(1.0), e);
+        (f64x2_mul(spl(0.5), f64x2_sub(e, ie)), f64x2_mul(spl(0.5), f64x2_add(e, ie)))
+    };
     let s2 = f64x2_mul(f64x2_mul(spl(2.0), s1), c1x);
     let c2x = f64x2_sub(f64x2_mul(c1x, c1x), f64x2_mul(s1, s1));
     let ch = f64x2_add(f64x2_mul(ch1, ch1), f64x2_mul(sh1, sh1));
