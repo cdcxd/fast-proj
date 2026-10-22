@@ -19,6 +19,7 @@ const KS3 = P.KS3;
 const KS4 = P.KS4;
 const KS5 = P.KS5;
 const KS6 = P.KS6;
+const atanQ = P.atanQ;
 const C35 = K.C35;
 const EE = K.EE;
 const KLAT = K.KLAT;
@@ -121,8 +122,8 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
 
       const h2 = she * she + cx * cx;
       const h = Math.sqrt(h2);
-      const lam = cx > 0 && Number.isFinite(she) ? Math.atan(she / cx) : Math.atan2(she, cx);
-      const chi = h > 0 && Number.isFinite(sx) ? Math.atan(sx / h) : Math.atan2(sx, h);
+      const lam = cx > 0 && Number.isFinite(she) ? atanQ(she, cx) : Math.atan2(she, cx);
+      const chi = h > 0 && Number.isFinite(sx) ? atanQ(sx, h) : Math.atan2(sx, h);
 
       const sx2 = sx * sx;
       const r2 = sx2 + h2;
@@ -319,8 +320,8 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
 
             const h2 = she * she + cx * cx;
             const h = Math.sqrt(h2);
-            const lam = cx > 0 && Number.isFinite(she) ? Math.atan(she / cx) : Math.atan2(she, cx);
-            const chi = h > 0 && Number.isFinite(sx) ? Math.atan(sx / h) : Math.atan2(sx, h);
+            const lam = cx > 0 && Number.isFinite(she) ? atanQ(she, cx) : Math.atan2(she, cx);
+            const chi = h > 0 && Number.isFinite(sx) ? atanQ(sx, h) : Math.atan2(sx, h);
 
             const sx2 = sx * sx;
             const r2 = sx2 + h2;

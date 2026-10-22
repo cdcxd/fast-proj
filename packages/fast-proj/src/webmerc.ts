@@ -24,6 +24,27 @@ const KS3 = P.KS3;
 const KS4 = P.KS4;
 const KS5 = P.KS5;
 const KS6 = P.KS6;
+const KA0 = P.KA0;
+const KA1 = P.KA1;
+const KA2 = P.KA2;
+const KA3 = P.KA3;
+const KA4 = P.KA4;
+const KA5 = P.KA5;
+const KA6 = P.KA6;
+const KA7 = P.KA7;
+const KA8 = P.KA8;
+const KA9 = P.KA9;
+const KE0 = P.KE0;
+const KE1 = P.KE1;
+const KE2 = P.KE2;
+const KE3 = P.KE3;
+const KE4 = P.KE4;
+const KE5 = P.KE5;
+const KE6 = P.KE6;
+const KE7 = P.KE7;
+const KE8 = P.KE8;
+const KE9 = P.KE9;
+const TAN_PI_8 = P.TAN_PI_8;
 
 export interface WebMercatorOptions {
   /** Geographic system of `toLonLat`/`fromLonLat`. Default WGS84. */
@@ -39,35 +60,9 @@ const K = (R * Math.PI) / 180;
 const LOG2E = Math.LOG2E;
 const LN2_HI = 6.9314718036912381649e-1;
 const LN2_LO = 1.90821492927058770002e-10;
-const TAN_PI_8 = 0.41421356237309503;
 const PI_4 = Math.PI / 4;
 const PI_2 = Math.PI / 2;
 const POW2 = new Float64Array(59).map((_, k) => 2 ** k);
-// exp(r) = 1 + r + r^2 E(r), |r| <= ln 2 / 2; atan(u) = u + u^3 A(u^2), |u| <= tan(pi/8) (wasm/src/math.rs)
-const KE0 = 5.0e-1,
-  KE1 = 1.66666666666666713e-1,
-  KE2 = 4.16666666666666713e-2,
-  KE3 = 8.33333333332613585e-3,
-  KE4 = 1.38888888888837503e-3,
-  KE5 = 1.98412698748158344e-4,
-  KE6 = 2.48015873255443207e-5,
-  KE7 = 2.75572554062850442e-6,
-  KE8 = 2.75572736474510872e-7,
-  KE9 = 2.5105214474751413e-8,
-  KE10 = 2.09146851614180674e-9;
-const KA0 = -3.33333333333333315e-1,
-  KA1 = 1.99999999999999928e-1,
-  KA2 = -1.42857142857115177e-1,
-  KA3 = 1.11111111107547289e-1,
-  KA4 = -9.09090906700999041e-2,
-  KA5 = 7.69230673600017345e-2,
-  KA6 = -6.66664202005516626e-2,
-  KA7 = 5.88192525319286355e-2,
-  KA8 = -5.25804155429777931e-2,
-  KA9 = 4.71939503002743316e-2,
-  KA10 = -4.10443626575508203e-2,
-  KA11 = 3.06357041129694981e-2,
-  KA12 = -1.39182292910244292e-2;
 
 /** Web Mercator, EPSG:3857. Latitudes beyond ±85.0511° (the square tile limit) are not clamped. */
 export function webMercator(options: WebMercatorOptions = {}): Projection {
@@ -141,7 +136,7 @@ function sphericalMercator(): Projection {
     const k = Math.round(v * LOG2E);
     const r = v - k * LN2_HI - k * LN2_LO;
     const r2 = r * r;
-    const qe = KE0 + r2 * (KE2 + r2 * (KE4 + r2 * (KE6 + r2 * (KE8 + r2 * KE10))));
+    const qe = KE0 + r2 * (KE2 + r2 * (KE4 + r2 * (KE6 + r2 * KE8)));
     const qo = KE1 + r2 * (KE3 + r2 * (KE5 + r2 * (KE7 + r2 * KE9)));
     const s = POW2[k]!;
     const m = s * (r + r2 * (qe + r * qo)) + (s - 1);
@@ -157,8 +152,8 @@ function sphericalMercator(): Projection {
     const u = num / den;
     const t = u * u;
     const t2 = t * t;
-    const ae = KA0 + t2 * (KA2 + t2 * (KA4 + t2 * (KA6 + t2 * (KA8 + t2 * (KA10 + t2 * KA12)))));
-    const ao = KA1 + t2 * (KA3 + t2 * (KA5 + t2 * (KA7 + t2 * (KA9 + t2 * KA11))));
+    const ae = KA0 + t2 * (KA2 + t2 * (KA4 + t2 * (KA6 + t2 * KA8)));
+    const ao = KA1 + t2 * (KA3 + t2 * (KA5 + t2 * (KA7 + t2 * KA9)));
     g += 2 * (u + u * t * (ae + t * ao));
     // y = -0 keeps its sign.
     ry = (g < PI_2 ? g : PI_2) * Math.sign(y) * R2D;
@@ -238,7 +233,7 @@ function inverseBatch(
       const k = Math.round(v * LOG2E);
       const r = v - k * LN2_HI - k * LN2_LO;
       const r2 = r * r;
-      const qe = KE0 + r2 * (KE2 + r2 * (KE4 + r2 * (KE6 + r2 * (KE8 + r2 * KE10))));
+      const qe = KE0 + r2 * (KE2 + r2 * (KE4 + r2 * (KE6 + r2 * KE8)));
       const qo = KE1 + r2 * (KE3 + r2 * (KE5 + r2 * (KE7 + r2 * KE9)));
       const s = POW2[k]!;
       const m = s * (r + r2 * (qe + r * qo)) + (s - 1);
@@ -253,8 +248,8 @@ function inverseBatch(
       const u = num / den;
       const t = u * u;
       const t2 = t * t;
-      const ae = KA0 + t2 * (KA2 + t2 * (KA4 + t2 * (KA6 + t2 * (KA8 + t2 * (KA10 + t2 * KA12)))));
-      const ao = KA1 + t2 * (KA3 + t2 * (KA5 + t2 * (KA7 + t2 * (KA9 + t2 * KA11))));
+      const ae = KA0 + t2 * (KA2 + t2 * (KA4 + t2 * (KA6 + t2 * KA8)));
+      const ao = KA1 + t2 * (KA3 + t2 * (KA5 + t2 * (KA7 + t2 * KA9)));
       g += 2 * (u + u * t * (ae + t * ao));
       outB[j + o1] = (g < PI_2 ? g : PI_2) * Math.sign(y) * R2D;
     }

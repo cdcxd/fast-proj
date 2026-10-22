@@ -31,6 +31,7 @@ const KS3 = P.KS3;
 const KS4 = P.KS4;
 const KS5 = P.KS5;
 const KS6 = P.KS6;
+const atanQ = P.atanQ;
 
 export interface TransverseMercatorOptions {
   /** Degrees, in [-180, 180]. */
@@ -308,8 +309,8 @@ export function transverseMercator(
     const h2 = she * she + cx * cx;
     const h = Math.sqrt(h2);
     // Keep atan2 for other quadrants and for zero, NaN or infinite operands (atan(Inf/Inf) is NaN).
-    const lam = cx > 0 && Number.isFinite(she) ? Math.atan(she / cx) : Math.atan2(she, cx);
-    const chi = h > 0 && Number.isFinite(sx) ? Math.atan(sx / h) : Math.atan2(sx, h);
+    const lam = cx > 0 && Number.isFinite(she) ? atanQ(she, cx) : Math.atan2(she, cx);
+    const chi = h > 0 && Number.isFinite(sx) ? atanQ(sx, h) : Math.atan2(sx, h);
 
     const sx2 = sx * sx;
     const r2 = sx2 + h2;
@@ -401,8 +402,8 @@ export function transverseMercator(
 
         const h2 = she * she + cx * cx;
         const h = Math.sqrt(h2);
-        const lam = cx > 0 && Number.isFinite(she) ? Math.atan(she / cx) : Math.atan2(she, cx);
-        const chi = h > 0 && Number.isFinite(sx) ? Math.atan(sx / h) : Math.atan2(sx, h);
+        const lam = cx > 0 && Number.isFinite(she) ? atanQ(she, cx) : Math.atan2(she, cx);
+        const chi = h > 0 && Number.isFinite(sx) ? atanQ(sx, h) : Math.atan2(sx, h);
 
         const sx2 = sx * sx;
         const r2 = sx2 + h2;
