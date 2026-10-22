@@ -207,12 +207,24 @@ export function transverseMercator(
     const ccl2 = ccl * ccl;
     const ir = 1 / Math.sqrt(sc2 + ccl2);
     // atan is sufficient in the positive-denominator quadrant; retain atan2 otherwise.
-    const xip = ccl > 0 ? Math.atan(sc / ccl) : Math.atan2(sc, ccl);
+    const xip = ccl > 0 ? atanQ(sc, ccl) : Math.atan2(sc, ccl);
     const she = cc * sl * ir;
-    // asinh(she) = log(she + sqrt(1 + she^2)); cosh(eta') = sqrt(1 + she^2) equals the already-computed ir
-    // up to rounding, so only log1p remains. Beyond |she| ~ 1e4 (lon within ~1e-7 degrees of +-90 degrees)
-    // the argument rounds to -1, so keep asinh there.
-    const etap = she > -1024 && she < 1024 ? Math.log1p(she + (she * she) / (ir + 1)) : Math.asinh(she);
+    // eta' = asinh(she) = atanh(cc sl), as cosh(eta') = 1 / ir: its series within |cc sl| < 0.1 (about 6 degrees from
+    // the central meridian; the next term is below 1e-19 relative). Otherwise log(she + sqrt(1 + she^2)) with that
+    // cosh, so only log1p remains; beyond |she| ~ 1e4 (lon within ~1e-7 degrees of +-90 degrees) the argument rounds
+    // to -1, so keep asinh there.
+    const z = cc * sl;
+    const zz = z * z;
+    const etap =
+      zz < 0.01
+        ? z +
+          z *
+            zz *
+            (1 / 3 +
+              zz * (1 / 5 + zz * (1 / 7 + zz * (1 / 9 + zz * (1 / 11 + zz * (1 / 13 + zz * (1 / 15 + zz / 17)))))))
+        : she > -1024 && she < 1024
+          ? Math.log1p(she + (she * she) / (ir + 1))
+          : Math.asinh(she);
 
     const ir2 = ir * ir;
     const s2 = 2 * sc * ccl * ir2;
@@ -493,9 +505,20 @@ export function transverseMercator(
         const sc2 = sc * sc;
         const ccl2 = ccl * ccl;
         const ir = 1 / Math.sqrt(sc2 + ccl2);
-        const xip = ccl > 0 ? Math.atan(sc / ccl) : Math.atan2(sc, ccl);
+        const xip = ccl > 0 ? atanQ(sc, ccl) : Math.atan2(sc, ccl);
         const she = cc * sl * ir;
-        const etap = she > -1024 && she < 1024 ? Math.log1p(she + (she * she) / (ir + 1)) : Math.asinh(she);
+        const z = cc * sl;
+        const zz = z * z;
+        const etap =
+          zz < 0.01
+            ? z +
+              z *
+                zz *
+                (1 / 3 +
+                  zz * (1 / 5 + zz * (1 / 7 + zz * (1 / 9 + zz * (1 / 11 + zz * (1 / 13 + zz * (1 / 15 + zz / 17)))))))
+            : she > -1024 && she < 1024
+              ? Math.log1p(she + (she * she) / (ir + 1))
+              : Math.asinh(she);
 
         const ir2 = ir * ir;
         const s2 = 2 * sc * ccl * ir2;
