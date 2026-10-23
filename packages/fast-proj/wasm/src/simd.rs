@@ -7,7 +7,7 @@ use core::arch::wasm32::{
     f64x2_gt, f64x2_le, f64x2_lt, f64x2_mul, f64x2_neg, f64x2_ne, f64x2_nearest, f64x2_pmax,
     f64x2_pmin, f64x2_splat, f64x2_sub, i32x4_trunc_sat_f32x4,
     i64x2_add, i64x2_extend_low_i32x4, i64x2_lt, i64x2_shl, i64x2_splat, i64x2_sub,
-    u64x2_shr, v128, v128_and, v128_bitselect, v128_or,
+    u64x2_shr, v128, v128_and, v128_any_true, v128_bitselect, v128_not, v128_or, v128_xor,
 };
 
 #[inline]
@@ -310,4 +310,23 @@ fn vlog1p_p<const EO: bool>(t: v128) -> v128 {
     let lg = vlog_p::<EO>(f64x2_add(spl(1.0), t));
     let base = v128_bitselect(lm, lg, mid);
     v128_bitselect(t, base, small)
+}
+
+/// `vsincos_eo` for pairs with both |x| <= 3 pi / 4: one fold about pi/2 (exact: Sterbenz) instead of the general
+/// reduction; other pairs, infinities and NaNs take `vsincos_eo`.
+#[inline(always)]
+pub fn vsincos_h(x: v128) -> (v128, v128) {
+    let a = f64x2_abs(x);
+    if v128_any_true(v128_not(f64x2_le(a, spl(3.0 * PI_4)))) {
+        return vsincos_eo(x);
+    }
+    let big = f64x2_gt(a, spl(PI_4));
+    let r = v128_bitselect(f64x2_add(f64x2_sub(spl(PIO2_1), a), spl(PIO2_1T)), a, big);
+    let t = f64x2_mul(r, r);
+    let sp = f64x2_add(r, f64x2_mul(t, f64x2_mul(r, poly_eo(t, &S))));
+    let cp = f64x2_add(spl(1.0), f64x2_mul(t, poly_eo(t, &C)));
+    let sa = v128_bitselect(cp, sp, big);
+    let ca = v128_bitselect(sp, cp, big);
+    // sin is odd (and keeps -0); cos is even
+    (v128_xor(sa, v128_and(x, i64x2_splat(i64::MIN))), ca)
 }

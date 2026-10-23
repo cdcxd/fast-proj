@@ -7,22 +7,8 @@ import * as K from './gcj02-constants.js';
 import type { FusedInverse, TmInverse } from './geographic.js';
 
 // Bound here, not imported, as in gcj02.ts.
-const KC1 = P.KC1;
-const KC2 = P.KC2;
-const KC3 = P.KC3;
-const KC4 = P.KC4;
-const KC5 = P.KC5;
-const KC6 = P.KC6;
-const KS1 = P.KS1;
-const KS2 = P.KS2;
-const KS3 = P.KS3;
-const KS4 = P.KS4;
-const KS5 = P.KS5;
-const KS6 = P.KS6;
+const atanQ = P.atanQ;
 const C35 = K.C35;
-const EE = K.EE;
-const KLAT = K.KLAT;
-const KLON = K.KLON;
 const KX = K.KX;
 const LAT_MAX = K.LAT_MAX;
 const LAT_MIN = K.LAT_MIN;
@@ -30,8 +16,6 @@ const LON_MAX = K.LON_MAX;
 const LON_MIN = K.LON_MIN;
 const reduce = K.reduce;
 const S35 = K.S35;
-
-const R2D = 180 / Math.PI;
 
 /** The fused builder for one mode of GCJ-02. */
 export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => FusedInverse {
@@ -67,8 +51,27 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
       if (xi > -1.5707963267948966 && xi < 1.5707963267948966) {
         const hx = 0.5 * xi;
         const z = hx * hx;
-        const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
-        const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+        const sn =
+          hx +
+          hx *
+            z *
+            (-0.16666666666666632 +
+              z *
+                (0.00833333333332249 +
+                  z *
+                    (-0.0001984126982985795 +
+                      z * (0.0000027557313707070068 + z * (-2.5050760253406863e-8 + z * 1.58969099521155e-10)))));
+        const cs =
+          1 -
+          0.5 * z +
+          z *
+            z *
+            (0.0416666666666666 +
+              z *
+                (-0.001388888888887411 +
+                  z *
+                    (0.00002480158728947673 +
+                      z * (-2.7557314351390663e-7 + z * (2.087572321298175e-9 + z * -1.1359647557788195e-11)))));
         s1 = xi === 0 ? xi : 2 * sn * cs;
         c1x = (cs - sn) * (cs + sn);
       } else {
@@ -80,8 +83,11 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
         const w = eta * eta;
         sh1 =
           eta +
-          eta * w * (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w / 6227020800)))));
-        ch1 = 1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w / 479001600)))));
+          eta *
+            w *
+            (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w * (1 / 6227020800))))));
+        ch1 =
+          1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600))))));
       } else {
         const e = Math.exp(eta);
         const ie = 1 / e;
@@ -110,19 +116,19 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
       const deta = tr * si + ti * sr;
 
       const dx2 = dxi * dxi;
-      const sdx = dxi * (1 + dx2 * (-1 / 6 + dx2 / 120));
-      const cdx = 1 + dx2 * (-1 / 2 + dx2 / 24);
+      const sdx = dxi * (1 + dx2 * (-1 / 6 + dx2 * (1 / 120)));
+      const cdx = 1 + dx2 * (-1 / 2 + dx2 * (1 / 24));
       const de2 = deta * deta;
-      const shd = deta * (1 + de2 * (1 / 6 + de2 / 120));
-      const chd = 1 + de2 * (1 / 2 + de2 / 24);
+      const shd = deta * (1 + de2 * (1 / 6 + de2 * (1 / 120)));
+      const chd = 1 + de2 * (1 / 2 + de2 * (1 / 24));
       const sx = s1 * cdx - c1x * sdx;
       const cx = c1x * cdx + s1 * sdx;
       const she = sh1 * chd - ch1 * shd;
 
       const h2 = she * she + cx * cx;
       const h = Math.sqrt(h2);
-      const lam = cx > 0 && Number.isFinite(she) ? Math.atan(she / cx) : Math.atan2(she, cx);
-      const chi = h > 0 && Number.isFinite(sx) ? Math.atan(sx / h) : Math.atan2(sx, h);
+      const lam = cx > 0 && Number.isFinite(she) ? atanQ(she, cx) : Math.atan2(she, cx);
+      const chi = h > 0 && Number.isFinite(sx) ? atanQ(sx, h) : Math.atan2(sx, h);
 
       const sx2 = sx * sx;
       const r2 = sx2 + h2;
@@ -130,11 +136,11 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
       const q1 = dp0 + p * (dp1 + p * (dp2 + p * (dp3 + p * (d5 + p * d6))));
       const phi = chi + ((2 * sx * h) / r2) * q1;
 
-      let lon = (lon0 + lam) * R2D;
+      let lon = (lon0 + lam) * 57.29577951308232;
       if (lon > 180) lon -= 360;
       else if (lon < -180) lon += 360;
       wl = lon;
-      wp = phi * R2D;
+      wp = phi * 57.29577951308232;
       // @end
       if (!inDomain(wl, wp)) {
         rx = all ? NaN : wl;
@@ -148,8 +154,8 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
       const cChi = h * ir;
       const dc = phi - chi;
       const dc2 = dc * dc;
-      const sdc = dc * (1 + dc2 * (-1 / 6 + dc2 / 120));
-      const cdc = 1 + dc2 * (-1 / 2 + dc2 / 24);
+      const sdc = dc * (1 + dc2 * (-1 / 6 + dc2 * (1 / 120)));
+      const cdc = 1 + dc2 * (-1 / 2 + dc2 * (1 / 24));
       const sPhi = sChi * cdc + cChi * sdc;
       const cPhi = cChi * cdc - sChi * sdc;
       // sin, cos of lat - 35 and of 3 lam + (lon0 - 105) pi/60 (lam = atan(she / cx)).
@@ -194,8 +200,8 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
         const u60 = 2 * u30 * v30;
         const u180 = u60 * (3 - 4 * u60 * u60);
 
-        const sp = gu * C35 + gv * S35;
-        const cp = gv * C35 - gu * S35;
+        const sp = gu * 0.8191520442889918 + gv * 0.573576436351046;
+        const cp = gv * 0.8191520442889918 - gu * 0.573576436351046;
 
         const r = Math.sqrt(Math.abs(gx));
         const common = (40 / 3) * (s360 + s120);
@@ -223,10 +229,13 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
           (80 / 3) * s20 +
           100 * s5 +
           200 * gs2;
-        const m = 1 - EE * sp * sp;
+        const m = 1 - 0.006693421622965943 * sp * sp;
         const sm = Math.sqrt(m);
-        offLon = (dLon * KLON * sm) / cp;
-        offLat = dLat * KLAT * m * sm;
+        const qcm = 1 / (cp * m);
+        const icp = m * qcm;
+        const fLon = 0.000008983000733443498 * sm * icp;
+        offLon = dLon * fLon;
+        offLat = dLat * 0.000009043532912185927 * m * sm;
       }
       // @end
       if (!all) {
@@ -262,8 +271,27 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
             if (xi > -1.5707963267948966 && xi < 1.5707963267948966) {
               const hx = 0.5 * xi;
               const z = hx * hx;
-              const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
-              const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+              const sn =
+                hx +
+                hx *
+                  z *
+                  (-0.16666666666666632 +
+                    z *
+                      (0.00833333333332249 +
+                        z *
+                          (-0.0001984126982985795 +
+                            z * (0.0000027557313707070068 + z * (-2.5050760253406863e-8 + z * 1.58969099521155e-10)))));
+              const cs =
+                1 -
+                0.5 * z +
+                z *
+                  z *
+                  (0.0416666666666666 +
+                    z *
+                      (-0.001388888888887411 +
+                        z *
+                          (0.00002480158728947673 +
+                            z * (-2.7557314351390663e-7 + z * (2.087572321298175e-9 + z * -1.1359647557788195e-11)))));
               s1 = xi === 0 ? xi : 2 * sn * cs;
               c1x = (cs - sn) * (cs + sn);
             } else {
@@ -277,9 +305,11 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
                 eta +
                 eta *
                   w *
-                  (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w / 6227020800)))));
+                  (1 / 6 +
+                    w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w * (1 / 6227020800))))));
               ch1 =
-                1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w / 479001600)))));
+                1 +
+                w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600))))));
             } else {
               const e = Math.exp(eta);
               const ie = 1 / e;
@@ -308,19 +338,19 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
             const deta = tr * si + ti * sr;
 
             const dx2 = dxi * dxi;
-            const sdx = dxi * (1 + dx2 * (-1 / 6 + dx2 / 120));
-            const cdx = 1 + dx2 * (-1 / 2 + dx2 / 24);
+            const sdx = dxi * (1 + dx2 * (-1 / 6 + dx2 * (1 / 120)));
+            const cdx = 1 + dx2 * (-1 / 2 + dx2 * (1 / 24));
             const de2 = deta * deta;
-            const shd = deta * (1 + de2 * (1 / 6 + de2 / 120));
-            const chd = 1 + de2 * (1 / 2 + de2 / 24);
+            const shd = deta * (1 + de2 * (1 / 6 + de2 * (1 / 120)));
+            const chd = 1 + de2 * (1 / 2 + de2 * (1 / 24));
             const sx = s1 * cdx - c1x * sdx;
             const cx = c1x * cdx + s1 * sdx;
             const she = sh1 * chd - ch1 * shd;
 
             const h2 = she * she + cx * cx;
             const h = Math.sqrt(h2);
-            const lam = cx > 0 && Number.isFinite(she) ? Math.atan(she / cx) : Math.atan2(she, cx);
-            const chi = h > 0 && Number.isFinite(sx) ? Math.atan(sx / h) : Math.atan2(sx, h);
+            const lam = cx > 0 && Number.isFinite(she) ? atanQ(she, cx) : Math.atan2(she, cx);
+            const chi = h > 0 && Number.isFinite(sx) ? atanQ(sx, h) : Math.atan2(sx, h);
 
             const sx2 = sx * sx;
             const r2 = sx2 + h2;
@@ -328,11 +358,11 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
             const q1 = dp0 + p * (dp1 + p * (dp2 + p * (dp3 + p * (d5 + p * d6))));
             const phi = chi + ((2 * sx * h) / r2) * q1;
 
-            let lon = (lon0 + lam) * R2D;
+            let lon = (lon0 + lam) * 57.29577951308232;
             if (lon > 180) lon -= 360;
             else if (lon < -180) lon += 360;
             wl = lon;
-            wp = phi * R2D;
+            wp = phi * 57.29577951308232;
             if (!inDomain(wl, wp)) {
               outA[j] = all ? NaN : wl;
               outB[j + o1] = all ? NaN : wp;
@@ -344,12 +374,12 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
             const cChi = h * ir;
             const dc = phi - chi;
             const dc2 = dc * dc;
-            const sdc = dc * (1 + dc2 * (-1 / 6 + dc2 / 120));
-            const cdc = 1 + dc2 * (-1 / 2 + dc2 / 24);
+            const sdc = dc * (1 + dc2 * (-1 / 6 + dc2 * (1 / 120)));
+            const cdc = 1 + dc2 * (-1 / 2 + dc2 * (1 / 24));
             const sPhi = sChi * cdc + cChi * sdc;
             const cPhi = cChi * cdc - sChi * sdc;
-            const gu = sPhi * C35 - cPhi * S35;
-            const gv = cPhi * C35 + sPhi * S35;
+            const gu = sPhi * 0.8191520442889918 - cPhi * 0.573576436351046;
+            const gv = cPhi * 0.8191520442889918 + sPhi * 0.573576436351046;
             const ih = 1 / h;
             const sl = she * ih;
             const cl = cx * ih;
@@ -388,8 +418,8 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
               const u60 = 2 * u30 * v30;
               const u180 = u60 * (3 - 4 * u60 * u60);
 
-              const sp = gu * C35 + gv * S35;
-              const cp = gv * C35 - gu * S35;
+              const sp = gu * 0.8191520442889918 + gv * 0.573576436351046;
+              const cp = gv * 0.8191520442889918 - gu * 0.573576436351046;
 
               const r = Math.sqrt(Math.abs(gx));
               const common = (40 / 3) * (s360 + s120);
@@ -417,10 +447,13 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
                 (80 / 3) * s20 +
                 100 * s5 +
                 200 * gs2;
-              const m = 1 - EE * sp * sp;
+              const m = 1 - 0.006693421622965943 * sp * sp;
               const sm = Math.sqrt(m);
-              offLon = (dLon * KLON * sm) / cp;
-              offLat = dLat * KLAT * m * sm;
+              const qcm = 1 / (cp * m);
+              const icp = m * qcm;
+              const fLon = 0.000008983000733443498 * sm * icp;
+              offLon = dLon * fLon;
+              offLat = dLat * 0.000009043532912185927 * m * sm;
             }
             if (!all) {
               outA[j] = wl + offLon;

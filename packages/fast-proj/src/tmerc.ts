@@ -31,6 +31,7 @@ const KS3 = P.KS3;
 const KS4 = P.KS4;
 const KS5 = P.KS5;
 const KS6 = P.KS6;
+const atanQ = P.atanQ;
 
 export interface TransverseMercatorOptions {
   /** Degrees, in [-180, 180]. */
@@ -175,8 +176,8 @@ export function transverseMercator(
     const q1 = cp0 + p * (cp1 + p * (cp2 + p * (cp3 + p * (c5 + p * c6))));
     const dchi = 2 * sp * cp * q1;
     const dd = dchi * dchi;
-    const sd = dchi * (1 + dd * (-1 / 6 + dd / 120));
-    const cd = 1 + dd * (-1 / 2 + dd / 24);
+    const sd = dchi * (1 + dd * (-1 / 6 + dd * (1 / 120)));
+    const cd = 1 + dd * (-1 / 2 + dd * (1 / 24));
     const sc = sp * cd + cp * sd;
     const cc = cp * cd - sp * sd;
 
@@ -206,12 +207,25 @@ export function transverseMercator(
     const ccl2 = ccl * ccl;
     const ir = 1 / Math.sqrt(sc2 + ccl2);
     // atan is sufficient in the positive-denominator quadrant; retain atan2 otherwise.
-    const xip = ccl > 0 ? Math.atan(sc / ccl) : Math.atan2(sc, ccl);
+    const xip = ccl > 0 ? atanQ(sc, ccl) : Math.atan2(sc, ccl);
     const she = cc * sl * ir;
-    // asinh(she) = log(she + sqrt(1 + she^2)); cosh(eta') = sqrt(1 + she^2) equals the already-computed ir
-    // up to rounding, so only log1p remains. Beyond |she| ~ 1e4 (lon within ~1e-7 degrees of +-90 degrees)
-    // the argument rounds to -1, so keep asinh there.
-    const etap = she > -1024 && she < 1024 ? Math.log1p(she + (she * she) / (ir + 1)) : Math.asinh(she);
+    // eta' = asinh(she) = atanh(cc sl), as cosh(eta') = 1 / ir: its series within |cc sl| < 0.1 (about 6 degrees from
+    // the central meridian; the next term is below 1e-19 relative). Otherwise log(she + sqrt(1 + she^2)) with that
+    // cosh, so only log1p remains; beyond |she| ~ 1e4 (lon within ~1e-7 degrees of +-90 degrees) the argument rounds
+    // to -1, so keep asinh there.
+    const z = cc * sl;
+    const zz = z * z;
+    const etap =
+      zz < 0.01
+        ? z +
+          z *
+            zz *
+            (1 / 3 +
+              zz *
+                (1 / 5 + zz * (1 / 7 + zz * (1 / 9 + zz * (1 / 11 + zz * (1 / 13 + zz * (1 / 15 + zz * (1 / 17))))))))
+        : she > -1024 && she < 1024
+          ? Math.log1p(she + (she * she) / (ir + 1))
+          : Math.asinh(she);
 
     const ir2 = ir * ir;
     const s2 = 2 * sc * ccl * ir2;
@@ -263,8 +277,10 @@ export function transverseMercator(
       const w = eta * eta;
       sh1 =
         eta +
-        eta * w * (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w / 6227020800)))));
-      ch1 = 1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w / 479001600)))));
+        eta *
+          w *
+          (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w * (1 / 6227020800))))));
+      ch1 = 1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600))))));
     } else {
       const e = Math.exp(eta);
       const ie = 1 / e;
@@ -296,11 +312,11 @@ export function transverseMercator(
     const deta = tr * si + ti * sr;
 
     const dx2 = dxi * dxi;
-    const sdx = dxi * (1 + dx2 * (-1 / 6 + dx2 / 120));
-    const cdx = 1 + dx2 * (-1 / 2 + dx2 / 24);
+    const sdx = dxi * (1 + dx2 * (-1 / 6 + dx2 * (1 / 120)));
+    const cdx = 1 + dx2 * (-1 / 2 + dx2 * (1 / 24));
     const de2 = deta * deta;
-    const shd = deta * (1 + de2 * (1 / 6 + de2 / 120));
-    const chd = 1 + de2 * (1 / 2 + de2 / 24);
+    const shd = deta * (1 + de2 * (1 / 6 + de2 * (1 / 120)));
+    const chd = 1 + de2 * (1 / 2 + de2 * (1 / 24));
     const sx = s1 * cdx - c1x * sdx;
     const cx = c1x * cdx + s1 * sdx;
     const she = sh1 * chd - ch1 * shd;
@@ -308,8 +324,8 @@ export function transverseMercator(
     const h2 = she * she + cx * cx;
     const h = Math.sqrt(h2);
     // Keep atan2 for other quadrants and for zero, NaN or infinite operands (atan(Inf/Inf) is NaN).
-    const lam = cx > 0 && Number.isFinite(she) ? Math.atan(she / cx) : Math.atan2(she, cx);
-    const chi = h > 0 && Number.isFinite(sx) ? Math.atan(sx / h) : Math.atan2(sx, h);
+    const lam = cx > 0 && Number.isFinite(she) ? atanQ(she, cx) : Math.atan2(she, cx);
+    const chi = h > 0 && Number.isFinite(sx) ? atanQ(sx, h) : Math.atan2(sx, h);
 
     const sx2 = sx * sx;
     const r2 = sx2 + h2;
@@ -347,8 +363,27 @@ export function transverseMercator(
         if (xi > -1.5707963267948966 && xi < 1.5707963267948966) {
           const hx = 0.5 * xi;
           const z = hx * hx;
-          const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
-          const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+          const sn =
+            hx +
+            hx *
+              z *
+              (-0.16666666666666632 +
+                z *
+                  (0.00833333333332249 +
+                    z *
+                      (-0.0001984126982985795 +
+                        z * (0.0000027557313707070068 + z * (-2.5050760253406863e-8 + z * 1.58969099521155e-10)))));
+          const cs =
+            1 -
+            0.5 * z +
+            z *
+              z *
+              (0.0416666666666666 +
+                z *
+                  (-0.001388888888887411 +
+                    z *
+                      (0.00002480158728947673 +
+                        z * (-2.7557314351390663e-7 + z * (2.087572321298175e-9 + z * -1.1359647557788195e-11)))));
           s1 = xi === 0 ? xi : 2 * sn * cs;
           c1x = (cs - sn) * (cs + sn);
         } else {
@@ -360,8 +395,11 @@ export function transverseMercator(
           const w = eta * eta;
           sh1 =
             eta +
-            eta * w * (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w / 6227020800)))));
-          ch1 = 1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w / 479001600)))));
+            eta *
+              w *
+              (1 / 6 + w * (1 / 120 + w * (1 / 5040 + w * (1 / 362880 + w * (1 / 39916800 + w * (1 / 6227020800))))));
+          ch1 =
+            1 + w * (1 / 2 + w * (1 / 24 + w * (1 / 720 + w * (1 / 40320 + w * (1 / 3628800 + w * (1 / 479001600))))));
         } else {
           const e = Math.exp(eta);
           const ie = 1 / e;
@@ -390,19 +428,19 @@ export function transverseMercator(
         const deta = tr * si + ti * sr;
 
         const dx2 = dxi * dxi;
-        const sdx = dxi * (1 + dx2 * (-1 / 6 + dx2 / 120));
-        const cdx = 1 + dx2 * (-1 / 2 + dx2 / 24);
+        const sdx = dxi * (1 + dx2 * (-1 / 6 + dx2 * (1 / 120)));
+        const cdx = 1 + dx2 * (-1 / 2 + dx2 * (1 / 24));
         const de2 = deta * deta;
-        const shd = deta * (1 + de2 * (1 / 6 + de2 / 120));
-        const chd = 1 + de2 * (1 / 2 + de2 / 24);
+        const shd = deta * (1 + de2 * (1 / 6 + de2 * (1 / 120)));
+        const chd = 1 + de2 * (1 / 2 + de2 * (1 / 24));
         const sx = s1 * cdx - c1x * sdx;
         const cx = c1x * cdx + s1 * sdx;
         const she = sh1 * chd - ch1 * shd;
 
         const h2 = she * she + cx * cx;
         const h = Math.sqrt(h2);
-        const lam = cx > 0 && Number.isFinite(she) ? Math.atan(she / cx) : Math.atan2(she, cx);
-        const chi = h > 0 && Number.isFinite(sx) ? Math.atan(sx / h) : Math.atan2(sx, h);
+        const lam = cx > 0 && Number.isFinite(she) ? atanQ(she, cx) : Math.atan2(she, cx);
+        const chi = h > 0 && Number.isFinite(sx) ? atanQ(sx, h) : Math.atan2(sx, h);
 
         const sx2 = sx * sx;
         const r2 = sx2 + h2;
@@ -410,11 +448,11 @@ export function transverseMercator(
         const q1 = dp0 + p * (dp1 + p * (dp2 + p * (dp3 + p * (d5 + p * d6))));
         const phi = chi + ((2 * sx * h) / r2) * q1;
 
-        let lon = (lon0 + lam) * R2D;
+        let lon = (lon0 + lam) * 57.29577951308232;
         if (lon > 180) lon -= 360;
         else if (lon < -180) lon += 360;
         outA[j] = lon;
-        outB[j + o1] = phi * R2D;
+        outB[j + o1] = phi * 57.29577951308232;
       }
       // @end
     }
@@ -439,23 +477,44 @@ export function transverseMercator(
           if (lonDeg > 180) lonDeg -= 360;
           else if (lonDeg < -180) lonDeg += 360;
         }
-        const lam = lonDeg * D2R - lon0;
+        const lam = lonDeg * 0.017453292519943295 - lon0;
 
         let sp, cp;
         const alat = Math.abs(latDeg);
         if (alat < 90) {
-          const hx = 0.5 * D2R * (alat > 45 ? 90 - alat : latDeg);
+          const hx = 0.5 * 0.017453292519943295 * (alat > 45 ? 90 - alat : latDeg);
           const z = hx * hx;
-          const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
+          const sn =
+            hx +
+            hx *
+              z *
+              (-0.16666666666666632 +
+                z *
+                  (0.00833333333332249 +
+                    z *
+                      (-0.0001984126982985795 +
+                        z * (0.0000027557313707070068 + z * (-2.5050760253406863e-8 + z * 1.58969099521155e-10)))));
           const hz = 0.5 * z;
           const w = 1 - hz;
-          const cs = w + (1 - w - hz + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6))))));
+          const cs =
+            w +
+            (1 -
+              w -
+              hz +
+              z *
+                z *
+                (0.0416666666666666 +
+                  z *
+                    (-0.001388888888887411 +
+                      z *
+                        (0.00002480158728947673 +
+                          z * (-2.7557314351390663e-7 + z * (2.087572321298175e-9 + z * -1.1359647557788195e-11))))));
           const dsin = 2 * sn * cs;
           const dcos = (cs - sn) * (cs + sn);
           sp = alat > 45 ? (latDeg < 0 ? -dcos : dcos) : latDeg === 0 ? latDeg : dsin;
           cp = alat > 45 ? dsin : dcos;
         } else {
-          const phi = latDeg * D2R;
+          const phi = latDeg * 0.017453292519943295;
           sp = Math.sin(phi);
           cp = Math.cos(phi);
         }
@@ -463,8 +522,8 @@ export function transverseMercator(
         const q1 = cp0 + p * (cp1 + p * (cp2 + p * (cp3 + p * (c5 + p * c6))));
         const dchi = 2 * sp * cp * q1;
         const dd = dchi * dchi;
-        const sd = dchi * (1 + dd * (-1 / 6 + dd / 120));
-        const cd = 1 + dd * (-1 / 2 + dd / 24);
+        const sd = dchi * (1 + dd * (-1 / 6 + dd * (1 / 120)));
+        const cd = 1 + dd * (-1 / 2 + dd * (1 / 24));
         const sc = sp * cd + cp * sd;
         const cc = cp * cd - sp * sd;
 
@@ -472,10 +531,31 @@ export function transverseMercator(
         if (lam > -0.8 && lam < 0.8) {
           const hx = 0.5 * lam;
           const z = hx * hx;
-          const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
+          const sn =
+            hx +
+            hx *
+              z *
+              (-0.16666666666666632 +
+                z *
+                  (0.00833333333332249 +
+                    z *
+                      (-0.0001984126982985795 +
+                        z * (0.0000027557313707070068 + z * (-2.5050760253406863e-8 + z * 1.58969099521155e-10)))));
           const hz = 0.5 * z;
           const w = 1 - hz;
-          const cs = w + (1 - w - hz + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6))))));
+          const cs =
+            w +
+            (1 -
+              w -
+              hz +
+              z *
+                z *
+                (0.0416666666666666 +
+                  z *
+                    (-0.001388888888887411 +
+                      z *
+                        (0.00002480158728947673 +
+                          z * (-2.7557314351390663e-7 + z * (2.087572321298175e-9 + z * -1.1359647557788195e-11))))));
           sl = lam === 0 ? lam : 2 * sn * cs;
           cl = (cs - sn) * (cs + sn);
         } else {
@@ -492,9 +572,22 @@ export function transverseMercator(
         const sc2 = sc * sc;
         const ccl2 = ccl * ccl;
         const ir = 1 / Math.sqrt(sc2 + ccl2);
-        const xip = ccl > 0 ? Math.atan(sc / ccl) : Math.atan2(sc, ccl);
+        const xip = ccl > 0 ? atanQ(sc, ccl) : Math.atan2(sc, ccl);
         const she = cc * sl * ir;
-        const etap = she > -1024 && she < 1024 ? Math.log1p(she + (she * she) / (ir + 1)) : Math.asinh(she);
+        const z = cc * sl;
+        const zz = z * z;
+        const etap =
+          zz < 0.01
+            ? z +
+              z *
+                zz *
+                (1 / 3 +
+                  zz *
+                    (1 / 5 +
+                      zz * (1 / 7 + zz * (1 / 9 + zz * (1 / 11 + zz * (1 / 13 + zz * (1 / 15 + zz * (1 / 17))))))))
+            : she > -1024 && she < 1024
+              ? Math.log1p(she + (she * she) / (ir + 1))
+              : Math.asinh(she);
 
         const ir2 = ir * ir;
         const s2 = 2 * sc * ccl * ir2;

@@ -38,6 +38,8 @@ def main():
         lonlat.append((rng.uniform(-1, 1), rng.uniform(-1e-3, 1e-3)))
     e = float(R * pi)
     xy = [(0.0, 0.0), (e, e), (-e, -e), (0.0, 1e-300), (1.0, 1e-6), (0.0, 3e7), (0.0, -1e8)]
+    # over 3e-14 degrees with a tan(pi/8) reduction in the inline atan; about asinh(1), where the inverse switches form
+    xy += [(0.0, 17723719.93129409), (0.0, -61351589.76), (0.0, 5621521.486192067), (0.0, -8085952.984662622)]
     for _ in range(400):
         xy.append((rng.uniform(-e, e), rng.uniform(-e, e)))
     for _ in range(100):
