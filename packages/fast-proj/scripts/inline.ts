@@ -8,6 +8,10 @@
 // `return;` (default `continue;`); `scope = open` leaves out the enclosing block, so code after the region can read
 // the copy's locals. A kernel's own regions are expanded before it is copied. --check fails if a region is stale.
 //
+// `// @locals name` ... `// @end` before a loop declares the closure constants kernel `name` reads as locals (`kAL =
+// kA`), and an @inline region with the option `locals` reads them: JavaScriptCore reloads a closure variable at every
+// use in a loop (Bun 7-10% on the TM rows), V8 doesn't.
+//
 // Copies also take the kernel's file's module-level numeric constants (`const KS1 = P.KS1;`, `const D2R = Math.PI /
 // 180;`) as literals, a bare `Math.LOG2E` as written: V8 reloads a module const from its context on every use in on-stack-replacement code, which is how a batch
 // loop called a few hundred times runs (up to 1.9x slower in Node; JavaScriptCore folds them either way).
@@ -19,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 const src = join(dirname(fileURLToPath(import.meta.url)), '../src');
 const FILES = ['tmerc.ts', 'gcj02.ts', 'gcj02-fused.ts', 'webmerc.ts'];
 
-type Kernel = { params: string[]; body: string[]; consts: Map<string, string> };
+type Kernel = { params: string[]; body: string[]; consts: Map<string, string>; mutable: Set<string> };
 
 // The modules the kernels' files bind constants from, under their import names.
 const MODULES = { P: await import(join(src, 'poly.ts')), K: await import(join(src, 'gcj02-constants.ts')) };
@@ -49,12 +53,35 @@ function constants(lines: string[]): Map<string, string> {
   return new Map([...vals].map(([k, v]) => [k, bare.get(k) ?? String(v)]));
 }
 
-const MARKER = /\/\/\s*@(kernel|inline|end)\b/;
+// Names the file declares with let or var, or assigns other than in a const declaration (a parameter, say): a
+// @locals copy of one could go stale.
+function mutableNames(lines: string[]): Set<string> {
+  const out = new Set<string>();
+  let inConst = false;
+  for (const raw of lines) {
+    const l = raw.replace(/\/\/.*$/, '');
+    for (const m of l.matchAll(/\b(?:let|var)\s+([^=;]+?)\s*(?:=|;)/g))
+      for (const n of m[1]!.split(',')) out.add(n.split(':')[0]!.trim());
+    const decl = inConst || /^\s*const\b/.test(l);
+    // In a const declaration only `name =` at the start of the line or after `const`/a comma declares.
+    const body = decl ? l.replace(/^\s*(?:const\s+)?\w+\s*=(?!=)/, '').replace(/,\s*\w+\s*=(?!=)/g, ',') : l;
+    const assign = /(?<![.\w$])([A-Za-z_$][\w$]*)\s*(?:(?:\*\*|<<|>>>?|&&|\|\||\?\?|[-+*/%&|^])?=(?!=)|\+\+|--)/g;
+    for (const m of body.matchAll(assign)) out.add(m[1]!);
+    // Destructuring assignments: `[a, b] = ...`, `({ a, b } = ...)`.
+    for (const m of body.matchAll(/(?<!\b(?:const|let|var)\s*)[[{]([^\]}=]*)[\]}]\s*=(?!=)/g))
+      for (const n of m[1]!.matchAll(/(?<![.\w$])[A-Za-z_$][\w$]*/g)) out.add(n[0]);
+    for (const m of body.matchAll(/(?:\+\+|--)([A-Za-z_$][\w$]*)/g)) out.add(m[1]!);
+    if (decl) inConst = !/;\s*$/.test(l);
+  }
+  return out;
+}
+
+const MARKER = /\/\/\s*@(kernel|inline|locals|end)\b/;
 
 // Every marker-like comment must be one the script reads: a typo would otherwise leave a region unexpanded.
 function checkMarkers(lines: string[]): void {
   lines.forEach((l, i) => {
-    if (MARKER.test(l) && !/^\s*\/\/ @(kernel|end)$/.test(l) && !REGION.test(l))
+    if (MARKER.test(l) && !/^\s*\/\/ @(kernel|end)$/.test(l) && !REGION.test(l) && !LOCALS.test(l))
       throw new Error(`malformed marker at line ${i + 1}: ${l.trim()}`);
   });
 }
@@ -62,13 +89,14 @@ function checkMarkers(lines: string[]): void {
 function kernels(lines: string[]): Map<string, Kernel> {
   const found = new Map<string, Kernel>();
   const consts = constants(lines);
+  const mutable = mutableNames(lines);
   for (let i = 0; i < lines.length; i++) {
     if (lines[i]!.trim() !== '// @kernel') continue;
     const m = /^(\s*)function (\w+)\(([^)]*)\)(?:: \w+)? \{$/.exec(lines[i + 1]!);
     if (!m) throw new Error(`@kernel at line ${i + 1} is not followed by a one-line function header`);
     const end = lines.indexOf(`${m[1]}}`, i + 2);
     const params = m[3]!.split(',').map((p) => p.split(':')[0]!.trim());
-    found.set(m[2]!, { params, body: lines.slice(i + 2, end), consts });
+    found.set(m[2]!, { params, body: lines.slice(i + 2, end), consts, mutable });
   }
   return found;
 }
@@ -91,6 +119,44 @@ function splitArgs(s: string): string[] {
 }
 
 const REGION = /^(\s*)\/\/ @inline (\w+)\((.*?)\)((?:; [^;]+)*)$/;
+const LOCALS = /^(\s*)\/\/ @locals (\w+)$/;
+
+// Names a kernel declares: `const a = ...`, `let a, b;`, `, b = ...`.
+function declaredIn(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of text.matchAll(/\b(?:const|let)\s+([^=;]+?)\s*(?:=|;)/g))
+    for (const n of m[1]!.split(',')) out.add(n.split(':')[0]!.trim());
+  for (const m of text.matchAll(/,\s+(\w+) = /g)) out.add(m[1]!);
+  return out;
+}
+
+const NOT_FREE = new Set(
+  'const let var if else return throw for of in while do break continue switch case default true false null undefined typeof instanceof void new Math NaN Infinity Number number boolean'.split(
+    ' ',
+  ),
+);
+
+// The kernel's free names that are neither its parameters, literal constants nor ever reassigned: the enclosing
+// function's constants, which a @locals region hoists.
+function closureNames(k: Kernel): string[] {
+  const text = k.body
+    .filter((l) => !/^\s*\/\//.test(l))
+    .map((l) => l.replace(/\/\/.*$/, ''))
+    .join('\n');
+  const declared = declaredIn(text);
+  const names = new Set<string>();
+  // Words in string literals aren't names.
+  const code = text.replace(/(['"`])(?:\\.|(?!\1).)*\1/g, '""');
+  for (const m of code.matchAll(/(?<![.\w$])[A-Za-z_$][\w$]*\b(?!\s*:(?!\s*[\w(-]))/g)) {
+    const n = m[0];
+    if (NOT_FREE.has(n) || declared.has(n) || k.params.includes(n) || k.consts.has(n) || k.mutable.has(n)) continue;
+    names.add(n);
+  }
+  const out = [...names].toSorted();
+  for (const n of out)
+    if (new RegExp(`(?<![.\\w$])${n}L\\b`).test(text)) throw new Error(`${n}L is taken: @locals names ${n} so`);
+  return out;
+}
 
 function regions(
   lines: string[],
@@ -125,12 +191,14 @@ function expand(k: Kernel, name: string, args: string[], opts: [string, string][
   // Copies drop whole-line comments: the kernel is the commented reference.
   const body = dedent(k.body.filter((l) => !/^\s*\/\//.test(l)));
   const text = body.join('\n');
-  const declared = new Set([...text.matchAll(/\b(?:const|let)\s+(\w+)|,\s+(\w+) = /g)].map((m) => m[1] ?? m[2]));
+  const declared = declaredIn(text);
   const open = opts.some(([key, v]) => key === 'scope' && v === 'open');
   const pad = open ? '' : '  ';
   const out = open ? [] : ['{'];
   const exit = opts.find(([key]) => key === 'return')?.[1] ?? 'continue;';
-  const renames = opts.filter(([key]) => key !== 'return' && key !== 'scope');
+  const renames = opts.filter(([key]) => key !== 'return' && key !== 'scope' && key !== 'locals');
+  if (opts.some(([key]) => key === 'locals'))
+    for (const n of closureNames(k)) if (!renames.some(([from]) => from === n)) renames.push([n, `${n}L`]);
   for (const [from] of renames)
     if (!k.params.includes(from) && !new RegExp(`(?<![.\\w$])${from}\\b`).test(text))
       throw new Error(`@inline ${name}: rename ${from} matches nothing`);
@@ -196,6 +264,19 @@ function generate(text: string, earlier: Map<string, Kernel>): string {
       if (!k) throw new Error(`@inline ${r.name}: no @kernel of that name`);
       const copy = expand(k, r.name, r.args, r.opts).map((l) => (l ? r.indent + l : l));
       next.splice(r.start + 1, r.end - r.start - 1, ...copy);
+    }
+    // @locals regions, last first likewise.
+    for (let i = next.length - 1; i >= 0; i--) {
+      const m = LOCALS.exec(next[i]!);
+      if (!m) continue;
+      const k = ks.get(m[2]!);
+      if (!k) throw new Error(`@locals ${m[2]}: no @kernel of that name`);
+      const end = next.findIndex((l, j) => j > i && MARKER.test(l));
+      if (end < 0 || next[end] !== `${m[1]}// @end`)
+        throw new Error(`@locals at line ${i + 1} has no @end at its indent`);
+      const names = closureNames(k);
+      const decl = names.length ? [`${m[1]}const ${names.map((n) => `${n}L = ${n}`).join(', ')};`] : [];
+      next.splice(i + 1, end - i - 1, ...decl);
     }
     if (next.join('\n') === lines.join('\n')) return lines.join('\n');
     lines = next;
