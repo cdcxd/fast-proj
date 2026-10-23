@@ -136,11 +136,14 @@ fn offset<const J: bool>(x: v128, y: v128, s1: v128, c1: v128, u1: v128, v1: v12
     dlon = add(dlon, mul(spl(200.0), s2));
     let m = sub(spl(1.0), mul(mul(spl(EE), sp), sp));
     let sm = f64x2_sqrt(m);
-    let ox = f64x2_div(mul(mul(dlon, spl(KLON)), sm), cp);
     let oy = mul(mul(mul(dlat, spl(KLAT)), m), sm);
     if !J {
-        return [ox, oy, spl(0.0), spl(0.0), spl(0.0), spl(0.0)];
+        // 1 / cp from 1 / (cp m), as in the TS kernel: 10% faster here than dividing the product by cp. The Jacobian
+        // divides separately: its divisions overlap, and sharing one is 3% slower.
+        let flon = mul(mul(spl(KLON), sm), mul(m, f64x2_div(spl(1.0), mul(cp, m))));
+        return [mul(dlon, flon), oy, spl(0.0), spl(0.0), spl(0.0), spl(0.0)];
     }
+    let ox = f64x2_div(mul(mul(dlon, spl(KLON)), sm), cp);
     let c120 = one_m2(s60);
     let c360 = triple_c(c120);
     let v60 = one_m2(u30);
