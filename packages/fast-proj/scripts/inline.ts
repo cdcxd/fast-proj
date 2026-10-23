@@ -65,7 +65,11 @@ function mutableNames(lines: string[]): Set<string> {
     const decl = inConst || /^\s*const\b/.test(l);
     // In a const declaration only `name =` at the start of the line or after `const`/a comma declares.
     const body = decl ? l.replace(/^\s*(?:const\s+)?\w+\s*=(?!=)/, '').replace(/,\s*\w+\s*=(?!=)/g, ',') : l;
-    for (const m of body.matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)\s*(?:[-+*/%]?=(?!=)|\+\+|--)/g)) out.add(m[1]!);
+    const assign = /(?<![.\w$])([A-Za-z_$][\w$]*)\s*(?:(?:\*\*|<<|>>>?|&&|\|\||\?\?|[-+*/%&|^])?=(?!=)|\+\+|--)/g;
+    for (const m of body.matchAll(assign)) out.add(m[1]!);
+    // Destructuring assignments: `[a, b] = ...`, `({ a, b } = ...)`.
+    for (const m of body.matchAll(/(?<!\b(?:const|let|var)\s*)[[{]([^\]}=]*)[\]}]\s*=(?!=)/g))
+      for (const n of m[1]!.matchAll(/(?<![.\w$])[A-Za-z_$][\w$]*/g)) out.add(n[0]);
     for (const m of body.matchAll(/(?:\+\+|--)([A-Za-z_$][\w$]*)/g)) out.add(m[1]!);
     if (decl) inConst = !/;\s*$/.test(l);
   }
@@ -127,7 +131,7 @@ function declaredIn(text: string): Set<string> {
 }
 
 const NOT_FREE = new Set(
-  'const let if else return for while do break continue true false null undefined typeof new Math NaN Infinity Number number'.split(
+  'const let var if else return throw for of in while do break continue switch case default true false null undefined typeof instanceof void new Math NaN Infinity Number number boolean'.split(
     ' ',
   ),
 );
@@ -141,7 +145,9 @@ function closureNames(k: Kernel): string[] {
     .join('\n');
   const declared = declaredIn(text);
   const names = new Set<string>();
-  for (const m of text.matchAll(/(?<![.\w$])[A-Za-z_$][\w$]*\b(?!\s*:(?!\s*[\w(-]))/g)) {
+  // Words in string literals aren't names.
+  const code = text.replace(/(['"`])(?:\\.|(?!\1).)*\1/g, '""');
+  for (const m of code.matchAll(/(?<![.\w$])[A-Za-z_$][\w$]*\b(?!\s*:(?!\s*[\w(-]))/g)) {
     const n = m[0];
     if (NOT_FREE.has(n) || declared.has(n) || k.params.includes(n) || k.consts.has(n) || k.mutable.has(n)) continue;
     names.add(n);
