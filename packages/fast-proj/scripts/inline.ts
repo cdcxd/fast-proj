@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 const src = join(dirname(fileURLToPath(import.meta.url)), '../src');
 const FILES = ['tmerc.ts', 'gcj02.ts', 'gcj02-fused.ts', 'webmerc.ts'];
 
-type Kernel = { params: string[]; body: string[]; consts: Map<string, string> };
+type Kernel = { params: string[]; body: string[]; consts: Map<string, string>; mutable: Set<string> };
 
 // The modules the kernels' files bind constants from, under their import names.
 const MODULES = { P: await import(join(src, 'poly.ts')), K: await import(join(src, 'gcj02-constants.ts')) };
@@ -53,6 +53,25 @@ function constants(lines: string[]): Map<string, string> {
   return new Map([...vals].map(([k, v]) => [k, bare.get(k) ?? String(v)]));
 }
 
+// Names the file declares with let or var, or assigns other than in a const declaration (a parameter, say): a
+// @locals copy of one could go stale.
+function mutableNames(lines: string[]): Set<string> {
+  const out = new Set<string>();
+  let inConst = false;
+  for (const raw of lines) {
+    const l = raw.replace(/\/\/.*$/, '');
+    for (const m of l.matchAll(/\b(?:let|var)\s+([^=;]+?)\s*(?:=|;)/g))
+      for (const n of m[1]!.split(',')) out.add(n.split(':')[0]!.trim());
+    const decl = inConst || /^\s*const\b/.test(l);
+    // In a const declaration only `name =` at the start of the line or after `const`/a comma declares.
+    const body = decl ? l.replace(/^\s*(?:const\s+)?\w+\s*=(?!=)/, '').replace(/,\s*\w+\s*=(?!=)/g, ',') : l;
+    for (const m of body.matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)\s*(?:[-+*/%]?=(?!=)|\+\+|--)/g)) out.add(m[1]!);
+    for (const m of body.matchAll(/(?:\+\+|--)([A-Za-z_$][\w$]*)/g)) out.add(m[1]!);
+    if (decl) inConst = !/;\s*$/.test(l);
+  }
+  return out;
+}
+
 const MARKER = /\/\/\s*@(kernel|inline|locals|end)\b/;
 
 // Every marker-like comment must be one the script reads: a typo would otherwise leave a region unexpanded.
@@ -66,13 +85,14 @@ function checkMarkers(lines: string[]): void {
 function kernels(lines: string[]): Map<string, Kernel> {
   const found = new Map<string, Kernel>();
   const consts = constants(lines);
+  const mutable = mutableNames(lines);
   for (let i = 0; i < lines.length; i++) {
     if (lines[i]!.trim() !== '// @kernel') continue;
     const m = /^(\s*)function (\w+)\(([^)]*)\)(?:: \w+)? \{$/.exec(lines[i + 1]!);
     if (!m) throw new Error(`@kernel at line ${i + 1} is not followed by a one-line function header`);
     const end = lines.indexOf(`${m[1]}}`, i + 2);
     const params = m[3]!.split(',').map((p) => p.split(':')[0]!.trim());
-    found.set(m[2]!, { params, body: lines.slice(i + 2, end), consts });
+    found.set(m[2]!, { params, body: lines.slice(i + 2, end), consts, mutable });
   }
   return found;
 }
@@ -112,7 +132,7 @@ const NOT_FREE = new Set(
   ),
 );
 
-// The kernel's free names that are neither its parameters, literal constants nor assigned in it: the enclosing
+// The kernel's free names that are neither its parameters, literal constants nor ever reassigned: the enclosing
 // function's constants, which a @locals region hoists.
 function closureNames(k: Kernel): string[] {
   const text = k.body
@@ -123,8 +143,7 @@ function closureNames(k: Kernel): string[] {
   const names = new Set<string>();
   for (const m of text.matchAll(/(?<![.\w$])[A-Za-z_$][\w$]*\b(?!\s*:(?!\s*[\w(-]))/g)) {
     const n = m[0];
-    if (NOT_FREE.has(n) || declared.has(n) || k.params.includes(n) || k.consts.has(n)) continue;
-    if (new RegExp(`(?<![.\\w$])${n}\\s*(?:[-+*/%]?=(?!=)|\\+\\+|--)`).test(text)) continue;
+    if (NOT_FREE.has(n) || declared.has(n) || k.params.includes(n) || k.consts.has(n) || k.mutable.has(n)) continue;
     names.add(n);
   }
   const out = [...names].toSorted();
