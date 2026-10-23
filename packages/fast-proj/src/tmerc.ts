@@ -351,13 +351,32 @@ export function transverseMercator(
     step: number,
     end: number,
   ): void {
+    // @locals inverse
+    const atanQL = atanQ,
+      b5L = b5,
+      b6L = b6,
+      bp0L = bp0,
+      bp1L = bp1,
+      bp2L = bp2,
+      bp3L = bp3,
+      d5L = d5,
+      d6L = d6,
+      dp0L = dp0,
+      dp1L = dp1,
+      dp2L = dp2,
+      dp3L = dp3,
+      feL = fe,
+      fnL = fn,
+      invKAL = invKA,
+      lon0L = lon0;
+    // @end
     for (let j = 0; j < end; j += step) {
-      // @inline inverse(a[j]!, b[j + o1]!); rx = outA[j]; ry = outB[j + o1]
+      // @inline inverse(a[j]!, b[j + o1]!); rx = outA[j]; ry = outB[j + o1]; locals
       {
         const x = a[j]!;
         const y = b[j + o1]!;
-        const xi = (y - fn) * invKA;
-        const eta = (x - fe) * invKA;
+        const xi = (y - fnL) * invKAL;
+        const eta = (x - feL) * invKAL;
 
         let s1, c1x;
         if (xi > -1.5707963267948966 && xi < 1.5707963267948966) {
@@ -415,11 +434,11 @@ export function transverseMercator(
 
         const rho = ar * ar + ai * ai;
         const twiceAr = 2 * ar;
-        const u4 = b5 + twiceAr * b6;
-        const u3 = bp3 + twiceAr * u4 - rho * b6;
-        const u2 = bp2 + twiceAr * u3 - rho * u4;
-        const u1 = bp1 + twiceAr * u2 - rho * u3;
-        const tr = bp0 + ar * u1 - rho * u2;
+        const u4 = b5L + twiceAr * b6L;
+        const u3 = bp3L + twiceAr * u4 - rho * b6L;
+        const u2 = bp2L + twiceAr * u3 - rho * u4;
+        const u1 = bp1L + twiceAr * u2 - rho * u3;
+        const tr = bp0L + ar * u1 - rho * u2;
         const ti = ai * u1 + 0;
 
         const sr = s2 * ch;
@@ -439,16 +458,16 @@ export function transverseMercator(
 
         const h2 = she * she + cx * cx;
         const h = Math.sqrt(h2);
-        const lam = cx > 0 && Number.isFinite(she) ? atanQ(she, cx) : Math.atan2(she, cx);
-        const chi = h > 0 && Number.isFinite(sx) ? atanQ(sx, h) : Math.atan2(sx, h);
+        const lam = cx > 0 && Number.isFinite(she) ? atanQL(she, cx) : Math.atan2(she, cx);
+        const chi = h > 0 && Number.isFinite(sx) ? atanQL(sx, h) : Math.atan2(sx, h);
 
         const sx2 = sx * sx;
         const r2 = sx2 + h2;
         const p = (2 * (h2 - sx2)) / r2;
-        const q1 = dp0 + p * (dp1 + p * (dp2 + p * (dp3 + p * (d5 + p * d6))));
+        const q1 = dp0L + p * (dp1L + p * (dp2L + p * (dp3L + p * (d5L + p * d6L))));
         const phi = chi + ((2 * sx * h) / r2) * q1;
 
-        let lon = (lon0 + lam) * 57.29577951308232;
+        let lon = (lon0L + lam) * 57.29577951308232;
         if (lon > 180) lon -= 360;
         else if (lon < -180) lon += 360;
         outA[j] = lon;
@@ -467,8 +486,27 @@ export function transverseMercator(
     step: number,
     end: number,
   ): void {
+    // @locals forward
+    const a5L = a5,
+      a6L = a6,
+      ap0L = ap0,
+      ap1L = ap1,
+      ap2L = ap2,
+      ap3L = ap3,
+      atanQL = atanQ,
+      c5L = c5,
+      c6L = c6,
+      cp0L = cp0,
+      cp1L = cp1,
+      cp2L = cp2,
+      cp3L = cp3,
+      feL = fe,
+      fnL = fn,
+      kAL = kA,
+      lon0L = lon0;
+    // @end
     for (let j = 0; j < end; j += step) {
-      // @inline forward(a[j]!, b[j + o1]!); rx = outA[j]; ry = outB[j + o1]
+      // @inline forward(a[j]!, b[j + o1]!); rx = outA[j]; ry = outB[j + o1]; locals
       {
         let lonDeg = a[j]!;
         const latDeg = b[j + o1]!;
@@ -477,7 +515,7 @@ export function transverseMercator(
           if (lonDeg > 180) lonDeg -= 360;
           else if (lonDeg < -180) lonDeg += 360;
         }
-        const lam = lonDeg * 0.017453292519943295 - lon0;
+        const lam = lonDeg * 0.017453292519943295 - lon0L;
 
         let sp, cp;
         const alat = Math.abs(latDeg);
@@ -519,7 +557,7 @@ export function transverseMercator(
           cp = Math.cos(phi);
         }
         const p = 2 - 4 * sp * sp;
-        const q1 = cp0 + p * (cp1 + p * (cp2 + p * (cp3 + p * (c5 + p * c6))));
+        const q1 = cp0L + p * (cp1L + p * (cp2L + p * (cp3L + p * (c5L + p * c6L))));
         const dchi = 2 * sp * cp * q1;
         const dd = dchi * dchi;
         const sd = dchi * (1 + dd * (-1 / 6 + dd * (1 / 120)));
@@ -572,7 +610,7 @@ export function transverseMercator(
         const sc2 = sc * sc;
         const ccl2 = ccl * ccl;
         const ir = 1 / Math.sqrt(sc2 + ccl2);
-        const xip = ccl > 0 ? atanQ(sc, ccl) : Math.atan2(sc, ccl);
+        const xip = ccl > 0 ? atanQL(sc, ccl) : Math.atan2(sc, ccl);
         const she = cc * sl * ir;
         const z = cc * sl;
         const zz = z * z;
@@ -599,18 +637,18 @@ export function transverseMercator(
 
         const rho = ar * ar + ai * ai;
         const twiceAr = 2 * ar;
-        const u4 = a5 + twiceAr * a6;
-        const u3 = ap3 + twiceAr * u4 - rho * a6;
-        const u2 = ap2 + twiceAr * u3 - rho * u4;
-        const u1 = ap1 + twiceAr * u2 - rho * u3;
-        const tr = ap0 + ar * u1 - rho * u2;
+        const u4 = a5L + twiceAr * a6L;
+        const u3 = ap3L + twiceAr * u4 - rho * a6L;
+        const u2 = ap2L + twiceAr * u3 - rho * u4;
+        const u1 = ap1L + twiceAr * u2 - rho * u3;
+        const tr = ap0L + ar * u1 - rho * u2;
         const ti = ai * u1;
 
         const sr = s2 * ch;
         const si = c2x * sh;
 
-        outA[j] = fe + kA * (etap + tr * si + ti * sr);
-        outB[j + o1] = fn + kA * (xip + tr * sr - ti * si);
+        outA[j] = feL + kAL * (etap + tr * si + ti * sr);
+        outB[j + o1] = fnL + kAL * (xip + tr * sr - ti * si);
       }
       // @end
     }
