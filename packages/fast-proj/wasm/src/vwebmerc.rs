@@ -2,17 +2,23 @@
 //!
 //! - forward: y = R asinh(tan phi) as 2 R atanh(tan(phi / 2)), from one sincos of the half latitude, or of the half
 //!   colatitude poleward of 45 degrees (exact there; the TS kernel does the same);
-//! - inverse: phi = atan(sinh(y / R)), sinh from a Taylor series below |y / R| = 1/4 and from exp above, clamped at
-//!   |y / R| = 40, where atan already rounds to pi/2.
+//! - inverse: phi = atan(sinh(y / R)) as 2 atan(tanh(y / 2R)) below 45 degrees and pi/2 - 2 atan(exp(-|y| / R))
+//!   above, from one exp and an atan without reduction (the TS kernel does the same).
 
 use crate::kernel::{reduce_lon, D2R, R2D};
-use crate::math::L;
+use crate::math::{AT, E, L, LN2_HI, LN2_LO, LOG2E, PI_2};
 use core::arch::wasm32::{
-    f64x2, f64x2_abs, f64x2_add, f64x2_div, f64x2_extract_lane, f64x2_gt, f64x2_lt, f64x2_mul, f64x2_pmin,
-    f64x2_splat, f64x2_sub, i64x2_splat, v128, v128_and, v128_any_true, v128_bitselect, v128_or,
+    f32x4_demote_f64x2_zero, f64x2, f64x2_abs, f64x2_add, f64x2_div, f64x2_extract_lane, f64x2_gt, f64x2_lt,
+    f64x2_mul, f64x2_nearest, f64x2_neg, f64x2_pmin, f64x2_splat, f64x2_sub, i32x4_trunc_sat_f32x4, i64x2_add,
+    i64x2_extend_low_i32x4, i64x2_shl, i64x2_splat, i64x2_sub, v128, v128_and, v128_any_true, v128_bitselect,
+    v128_or,
 };
 
-use crate::simd::{load_pair, store_pair, vatan_q, poly_eo, vexp_eo, vlog_eo, vsincos_eo};
+use crate::simd::{load_pair, poly_eo, store_pair, vlog_eo, vsincos_eo};
+
+/// asinh(1), where the inverse switches form, and the rounding error of PI_2.
+const ASINH1: f64 = 0.881373587019543;
+const PI_2_LO: f64 = 6.123233995736766e-17;
 
 /// The WGS84 semi-major axis, the sphere's radius.
 pub const R: f64 = 6378137.0;
@@ -84,26 +90,27 @@ pub fn inverse2(x: v128, y: v128) -> (v128, v128) {
     let ok = v128_and(finite(x), finite(y));
     let lon = reduce(f64x2_div(x, spl(K)));
 
+    // As in the TS kernel: phi = gd(v), v = |y / R| = k ln 2 + r, as 2 atan(m / (m + 2)) with m = expm1(v) = 2^k (1 +
+    // expm1(r)) - 1 below v = asinh(1) (phi = pi/4), else pi/2 - 2 atan(exp(-v)), exp(-v) = 2^-k (1 + expm1(-r)); both
+    // atan arguments are within tan(pi/8). Clamped at v = 40, where phi rounds to pi/2.
     let v = f64x2_pmin(f64x2_abs(f64x2_div(y, spl(R))), spl(40.0));
-    let small = f64x2_lt(v, spl(0.25));
-    let (v0, v1) = (f64x2_extract_lane::<0>(v), f64x2_extract_lane::<1>(v));
-    // atan(n / d) = atan(sinh v): n = sinh v, d = 1 from the series, or n = e^2 - 1, d = 2e from e = exp(v).
-    let (mut n, mut d) = (spl(0.0), spl(1.0));
-    if v0 < 0.25 || v1 < 0.25 {
-        // sinh v = v (1 + v^2/3! + ... + v^10/11!); the next term is below 1e-17 relative at v = 1/4.
-        let v2 = f64x2_mul(v, v);
-        let mut p = spl(1.0 / 39916800.0);
-        for k in [362880.0, 5040.0, 120.0, 6.0] {
-            p = f64x2_add(spl(1.0 / k), f64x2_mul(v2, p));
-        }
-        n = f64x2_add(v, f64x2_mul(f64x2_mul(v, v2), p));
-    }
-    if !(v0 < 0.25 && v1 < 0.25) {
-        let e = vexp_eo(v);
-        n = v128_bitselect(n, f64x2_sub(f64x2_mul(e, e), spl(1.0)), small);
-        d = v128_bitselect(d, f64x2_add(e, e), small);
-    }
-    let lat = f64x2_mul(copysign(vatan_q(n, d), y), spl(R2D));
+    let k = f64x2_nearest(f64x2_mul(v, spl(LOG2E)));
+    let r = f64x2_sub(f64x2_sub(v, f64x2_mul(k, spl(LN2_HI))), f64x2_mul(k, spl(LN2_LO)));
+    let near = f64x2_lt(v, spl(ASINH1));
+    let rr = v128_bitselect(r, f64x2_neg(r), near);
+    let q = f64x2_add(rr, f64x2_mul(f64x2_mul(rr, rr), poly_eo(rr, &E)));
+    // k is integral in [0, 58], exact through f32 and i32.
+    let ki = i64x2_extend_low_i32x4(i32x4_trunc_sat_f32x4(f32x4_demote_f64x2_zero(k)));
+    let s = i64x2_shl(i64x2_add(ki, i64x2_splat(1023)), 52);
+    let is = i64x2_shl(i64x2_sub(i64x2_splat(1023), ki), 52);
+    let sq = f64x2_mul(s, q);
+    let num = v128_bitselect(f64x2_add(sq, f64x2_sub(s, spl(1.0))), f64x2_mul(f64x2_add(spl(1.0), q), is), near);
+    let den = v128_bitselect(f64x2_add(sq, f64x2_add(s, spl(1.0))), spl(1.0), near);
+    let u = f64x2_div(num, den);
+    let t = f64x2_mul(u, u);
+    let w = f64x2_mul(spl(2.0), f64x2_add(u, f64x2_mul(t, f64x2_mul(u, poly_eo(t, &AT)))));
+    let g = v128_bitselect(w, f64x2_sub(spl(PI_2), f64x2_sub(w, spl(PI_2_LO))), near);
+    let lat = f64x2_mul(copysign(g, y), spl(R2D));
 
     let nan = spl(f64::NAN);
     (v128_bitselect(lon, nan, ok), v128_bitselect(lat, nan, ok))

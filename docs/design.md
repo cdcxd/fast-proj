@@ -311,7 +311,7 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
   the batch copies as literals: a batch method called a few hundred times runs in V8's on-stack-replacement code, which
   reloads a module `const` from the context at every use (Node 9-48% faster per row, Bun unchanged, output
   bit-identical). In-process A/Bs of two builds can reach a normal TurboFan compile and hide this; bench one case per
-  process. Hoisting the projection's closure coefficients into locals measured Bun -7-9%, Node 0% (not done). Tried and
+  process. Since 0.5.2 the TM batch loops read the projection's closure coefficients as locals (a `// @locals` region in `scripts/inline.ts`; names the file reassigns stay closure reads): Bun ran the loops 7-10% slower without, timing one converter per process, though not in `bench/run.mts`; Node and Chromium even. In the fused GCJ-02 inverse and the GCJ-02 loops it gained nothing, so they don't. The wasm GCJ-02 forward takes 1/cp from 1/(cp m), as JavaScript does, 10% faster; the same in the inverse's Jacobian was 3% slower (its separate divisions overlap). Tried and
   dropped: a chord step reusing the GCJ-02 inverse's first Jacobian (1.4e-9° against 3e-12°: the high-frequency terms
   move it), v128 loads/stores and a 2x unroll in the wasm loops (within ±2%).
 - Since 0.5.1 the wasm TM kernels take sin/cos with one fold about π/2 (exact by Sterbenz) when both lanes are within
@@ -340,7 +340,7 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
   equator; R ln(c / s) of half the colatitude poleward) instead of asinh(tan φ): about half the time in Chromium and
   Bun, for five ulps instead of three. The wasm kernel (`wm_forward_batch` / `wm_inverse_batch`) writes asinh(tan φ)
   as 2 atanh(t), t = tan(φ/2): the log series in t up to 19.4°, else log1p(2t / (1 - t)) with the rounding of its 1 +
-  u compensated (a plain `vlog1p` reached six ulps). It takes sinh(y/R) as a Taylor series below 1/4 and from exp
-  above; y agrees with JavaScript within 7.5e-9 m below 2^25 m, the inherent rounding of y/R scaled by R. It measured
+  u compensated (a plain `vlog1p` reached six ulps). Its inverse took atan(sinh(y/R)) from a sinh series below 1/4 and exp above, then
+  `vatan_q` (seven ulps); since 0.5.2 it takes the JavaScript kernel's two forms of gd (four ulps, 3% faster). y agrees with JavaScript within 7.5e-9 m below 2^25 m, the inherent rounding of y/R scaled by R. It measured
   1.3–2.1× the JavaScript kernel's batch methods (Node, Bun, Chromium). Its composition with GCJ-02 runs the two
   passes; a fused kernel waits for a measured gain.
