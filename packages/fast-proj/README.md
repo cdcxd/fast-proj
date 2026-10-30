@@ -30,7 +30,7 @@ utm({ zone: 50, geographic: GCJ02 }).toLonLatInterleaved(xy, xy); // UTM -> GCJ-
 GCJ02.fromWgs84Interleaved(lonlat, lonlat); // WGS84 -> GCJ-02, in place
 webMercator().fromLonLatInterleaved(lonlat, lonlat); // lon/lat -> EPSG:3857 x/y (on GCJ-02 lon/lat: AMap tiles)
 
-import { loadWasm } from 'fast-proj/wasm'; // opt-in, ~75 kB
+import { loadWasm } from 'fast-proj/wasm'; // opt-in, ~78 kB
 const wasm = await loadWasm();
 wasm.utm({ zone: 33 }).toLonLatInterleaved(xy, xy);
 ```

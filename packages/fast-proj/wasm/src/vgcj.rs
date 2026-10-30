@@ -3,7 +3,7 @@
 //!
 //! Out-of-box lanes compute garbage (wasm float ops don't trap) and select
 //! their (reduced) input at the end; pairs with both lanes out of the box skip
-//! the math. The inverse's extra Newton steps near longitude 105 are masked
+//! the math, also within a group of two. The inverse's extra Newton steps near longitude 105 are masked
 //! per lane, so each lane takes exactly the steps the TS loop would. The batch
 //! loops take two pairs at a time through the same code (`Vx`): 6% (forward)
 //! and 13% (inverse) faster in V8, within 1% in JavaScriptCore.
@@ -217,8 +217,8 @@ pub fn forward_batch(lon: &[f64], lat: &[f64], olon: &mut [f64], olat: &mut [f64
     batch(lon, lat, olon, olat, forward, forward);
 }
 
-/// Runs `f2` on two pairs at a time and `f1` on the last pair, if odd: `(lon, lat, in-box mask) -> (lon, lat)`, for
-/// pairs with a lane in the box.
+/// Runs `f2` on two pairs at a time when both have a lane in the box, `f1` on a single such pair (a mixed group or the
+/// last pair, if odd): `(lon, lat, in-box mask) -> (lon, lat)`.
 #[inline(always)]
 fn batch(
     lon: &[f64],
@@ -232,8 +232,18 @@ fn batch(
     while i + 4 <= lon.len() {
         let (l0, p0, b0) = prepare(lon, lat, i);
         let (l1, p1, b1) = prepare(lon, lat, i + 2);
-        let (l, p, inbox) = ([l0, l1], [p0, p1], [b0, b1]);
-        let (ol, op) = if inbox.any() { f2(l, p, inbox) } else { (l, p) };
+        let (ol, op) = match (v128_any_true(b0), v128_any_true(b1)) {
+            (true, true) => f2([l0, l1], [p0, p1], [b0, b1]),
+            (true, false) => {
+                let (a, b) = f1(l0, p0, b0);
+                ([a, l1], [b, p1])
+            }
+            (false, true) => {
+                let (a, b) = f1(l1, p1, b1);
+                ([l0, a], [p0, b])
+            }
+            (false, false) => ([l0, l1], [p0, p1]),
+        };
         store_pair(ol[0], olon, i);
         store_pair(op[0], olat, i);
         store_pair(ol[1], olon, i + 2);

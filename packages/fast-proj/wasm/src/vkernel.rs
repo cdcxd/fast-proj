@@ -10,7 +10,9 @@
 //! - `vexp` clamps its exponent term at ±1000 (RESULTS.md documents the
 //!   boundary where classification diverges from libm);
 //! - the forward batch takes two pairs at a time through `forward_dual` (`Vx`)
-//!   while every lane is on the common path, 10% faster in V8.
+//!   while every lane is on the common path, 10% faster in V8; past about 9
+//!   degrees from the central meridian each pair finishes from the shared
+//!   intermediates (`forward_tail`), as fast as `forward2` alone.
 
 use crate::kernel::{reduce_lon, K, D2R, R2D};
 use core::arch::wasm32::{
@@ -135,6 +137,26 @@ pub fn forward2(mut lon: v128, lat: v128, q: &KS) -> (v128, v128) {
     let sc2 = f64x2_mul(sc, sc);
     let ccl2 = f64x2_mul(ccl, ccl);
     let ir = f64x2_div(spl(1.0), f64x2_sqrt(f64x2_add(sc2, ccl2)));
+    let she = f64x2_mul(f64x2_mul(cc, sl), ir);
+    forward_tail(Pre { sc, ccl, sc2, ccl2, ir, she, bad }, q)
+}
+
+/// The forward's intermediates through she = sinh(eta'), for the rest of `forward2`.
+#[derive(Clone, Copy)]
+struct Pre {
+    sc: v128,
+    ccl: v128,
+    sc2: v128,
+    ccl2: v128,
+    ir: v128,
+    she: v128,
+    bad: v128,
+}
+
+/// `forward2` from xi' and eta' on.
+#[inline]
+fn forward_tail(p: Pre, q: &KS) -> (v128, v128) {
+    let Pre { sc, ccl, sc2, ccl2, ir, she, bad } = p;
     let ccl0 = f64x2_extract_lane::<0>(ccl);
     let ccl1 = f64x2_extract_lane::<1>(ccl);
     let xip = if ccl0 > 0.0 && ccl1 > 0.0 {
@@ -147,7 +169,6 @@ pub fn forward2(mut lon: v128, lat: v128, q: &KS) -> (v128, v128) {
             f64x2_gt(ccl, spl(0.0)),
         )
     };
-    let she = f64x2_mul(f64x2_mul(cc, sl), ir);
     // log1p eta' with the |she| <= 1024 guard; the test is hoisted out of the
     // lanes (select-based fallbacks would pay the asinh chain every iteration)
     let sh0 = f64x2_extract_lane::<0>(she);
@@ -339,9 +360,10 @@ pub fn inverse_parts(x: v128, y: v128, q: &KS) -> Inv {
 }
 
 /// `forward2` on two pairs, interleaved, while every lane is on its common path (|lon| <= 180, |phi| and |lam| <=
-/// 3 pi / 4, ccl > 0, |she| < 0.16): the same operations per lane. None otherwise, for `forward2` on each pair.
+/// 3 pi / 4, ccl > 0, |she| < 0.16): the same operations per lane. Otherwise `Err` with each pair's intermediates for
+/// `forward_tail` if they were computed (only ccl or she out of range), for `forward2` if not.
 #[inline(always)]
-fn forward_dual(lon: [v128; 2], lat: [v128; 2], q: &KS) -> Option<([v128; 2], [v128; 2])> {
+fn forward_dual(lon: [v128; 2], lat: [v128; 2], q: &KS) -> Result<([v128; 2], [v128; 2]), Option<[Pre; 2]>> {
     type T = [v128; 2];
     let s = T::splat;
     let k = |v: v128| -> T { [v; 2] };
@@ -349,7 +371,7 @@ fn forward_dual(lon: [v128; 2], lat: [v128; 2], q: &KS) -> Option<([v128; 2], [v
     let lam = lon.mul(k(q.d2r)).sub(k(q.lon0));
     let fold = phi.abs().le(s(3.0 * PI_4)).and(lam.abs().le(s(3.0 * PI_4)));
     if lon.gt(s(180.0)).or(lon.lt(s(-180.0))).or(fold.not()).any() {
-        return None;
+        return Err(None);
     }
     let (sp, cp) = sincos_fold(phi);
     let p = s(2.0).sub(s(4.0).mul(sp.mul(sp)));
@@ -372,7 +394,8 @@ fn forward_dual(lon: [v128; 2], lat: [v128; 2], q: &KS) -> Option<([v128; 2], [v
     let ir = s(1.0).div(sc2.add(ccl2).sqrt());
     let she = cc.mul(sl).mul(ir);
     if ccl.gt(s(0.0)).and(she.abs().lt(s(0.16))).not().any() {
-        return None;
+        let pre = |i: usize| Pre { sc: sc[i], ccl: ccl[i], sc2: sc2[i], ccl2: ccl2[i], ir: ir[i], she: she[i], bad: bad[i] };
+        return Err(Some([pre(0), pre(1)]));
     }
     let xip = vatan_q(sc, ccl);
     let z = she.mul(she);
@@ -396,7 +419,7 @@ fn forward_dual(lon: [v128; 2], lat: [v128; 2], q: &KS) -> Option<([v128; 2], [v
     let si = c2x.mul(sh);
     let x = k(q.feast).add(k(q.k_a).mul(etap.add(tr.mul(si).add(ti.mul(sr)))));
     let y = k(q.fnorth).add(k(q.k_a).mul(xip.add(tr.mul(sr)).sub(ti.mul(si))));
-    Some((T::select(s(f64::NAN), x, bad), T::select(s(f64::NAN), y, bad)))
+    Ok((T::select(s(f64::NAN), x, bad), T::select(s(f64::NAN), y, bad)))
 }
 
 pub fn forward_batch(lon: &[f64], lat: &[f64], x: &mut [f64], y: &mut [f64], k: &K) {
@@ -405,9 +428,11 @@ pub fn forward_batch(lon: &[f64], lat: &[f64], x: &mut [f64], y: &mut [f64], k: 
     while i + 4 <= lon.len() {
         let l = [load_pair(lon, i), load_pair(lon, i + 2)];
         let p = [load_pair(lat, i), load_pair(lat, i + 2)];
-        let (a, b) = forward_dual(l, p, &q).unwrap_or_else(|| {
-            let (a0, b0) = forward2(l[0], p[0], &q);
-            let (a1, b1) = forward2(l[1], p[1], &q);
+        let (a, b) = forward_dual(l, p, &q).unwrap_or_else(|pre| {
+            let ((a0, b0), (a1, b1)) = match pre {
+                Some([p0, p1]) => (forward_tail(p0, &q), forward_tail(p1, &q)),
+                None => (forward2(l[0], p[0], &q), forward2(l[1], p[1], &q)),
+            };
             ([a0, a1], [b0, b1])
         });
         store_pair(a[0], x, i);
