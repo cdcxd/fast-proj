@@ -80,7 +80,7 @@ export function jsContext(): WasmContext {
     bd09: (o) => {
       open();
       const mode = gcj02Mode(o, 'bd09');
-      return (bd[mode] ??= live(composeBd09(ctx.gcj02({ outsideChina: mode }))));
+      return (bd[mode] ??= live(composeBd09(ctx.gcj02({ outsideChina: mode }), mode)));
     },
     dispose() {
       disposed = true;
@@ -315,7 +315,7 @@ export function wasmContext(exports: Exports): WasmContext {
     bd09: (o) => {
       open();
       const mode = gcj02Mode(o, 'bd09');
-      return (bd[mode] ??= guarded(composeBd09(ctx.gcj02({ outsideChina: mode })), () => !e));
+      return (bd[mode] ??= guarded(composeBd09(ctx.gcj02({ outsideChina: mode }), mode), () => !e));
     },
     dispose,
     [DISPOSE]: dispose,

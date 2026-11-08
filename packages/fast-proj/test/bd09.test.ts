@@ -18,6 +18,8 @@ function maxError(rows: (string | number)[][], f: (lon: number, lat: number) => 
 
 describe('bd09', () => {
   const b = bd09();
+  // The formula everywhere; 'passthrough' leaves points outside the China box unchanged.
+  const t = bd09({ outsideChina: 'transform' });
 
   it('is the shared default', () => {
     expect(bd09()).toBe(BD09);
@@ -25,9 +27,9 @@ describe('bd09', () => {
   });
 
   it('matches the 40-digit reference', () => {
-    // Against the references rounded to doubles: within an ulp both ways.
-    expect(maxError(fixture.fromGcj02, b.fromGcj02Point)).toBeLessThan(1.5e-14);
-    expect(maxError(fixture.toGcj02, b.toGcj02Point)).toBeLessThan(1.5e-14);
+    // Against the references rounded to doubles, which include points outside China.
+    expect(maxError(fixture.fromGcj02, t.fromGcj02Point)).toBeLessThan(1.5e-14);
+    expect(maxError(fixture.toGcj02, t.toGcj02Point)).toBeLessThan(1.5e-14);
   });
 
   it('matches gcoord and coordtransform forward, and their closed-form inverse within 3e-6', () => {
@@ -83,45 +85,68 @@ describe('bd09', () => {
     let max = 0;
     for (let lat = -89.5; lat <= 89.5; lat += 0.73) {
       for (let lon = -179.9; lon <= 179.9; lon += 3.7) {
-        const [l, p] = b.toGcj02Point(...b.fromGcj02Point(lon, lat));
+        const [l, p] = t.toGcj02Point(...t.fromGcj02Point(lon, lat));
         max = Math.max(max, Math.abs(l - lon) * cosd(lat), Math.abs(p - lat));
       }
     }
     for (let lat = -0.02; lat <= 0.02; lat += 0.0013) {
       for (let lon = -0.02; lon <= 0.02; lon += 0.0017) {
-        const [l, p] = b.toGcj02Point(...b.fromGcj02Point(lon, lat));
+        const [l, p] = t.toGcj02Point(...t.fromGcj02Point(lon, lat));
         max = Math.max(max, Math.abs(l - lon), Math.abs(p - lat));
       }
     }
     expect(max).toBeLessThan(3e-14);
   });
 
-  it('applies the offset outside China; outsideChina only governs the GCJ-02 step', () => {
-    const [l, p] = b.fromWgs84Point(13.4, 52.5);
-    expect([l, p]).toEqual(b.fromGcj02Point(13.4, 52.5));
+  it('leaves points outside the China box unchanged in passthrough mode, as Baidu uses WGS84 there', () => {
+    for (const [lon, lat] of [
+      [13.4, 52.5],
+      [-74, 40.7],
+      [151.2, -33.9],
+      [72, 30],
+      [116, 55.83],
+      [0, 0],
+      [180, 90.5],
+    ] as const) {
+      for (const f of [b.fromWgs84Point, b.toWgs84Point, b.fromGcj02Point, b.toGcj02Point]) {
+        expect(f(lon, lat)).toEqual([lon, lat]);
+      }
+    }
+    expect(b.fromGcj02Point(13.5 + 360, 52.5)).toEqual([13.5, 52.5]);
+    // Inside the box (Hong Kong, Taipei), the offset applies as in 'transform' mode.
+    for (const [lon, lat] of [
+      [114.17, 22.3],
+      [121.56, 25.04],
+    ] as const) {
+      expect(b.fromGcj02Point(lon, lat)).toEqual(t.fromGcj02Point(lon, lat));
+      expect(b.toGcj02Point(lon, lat)).toEqual(t.toGcj02Point(lon, lat));
+    }
+  });
+
+  it('applies the offset everywhere in transform mode, as gcoord does', () => {
+    const [l, p] = t.fromWgs84Point(13.4, 52.5);
+    expect([l, p]).toEqual(t.fromGcj02Point(...gcj02({ outsideChina: 'transform' }).fromWgs84Point(13.4, 52.5)));
     expect(Math.abs(l - 13.4)).toBeGreaterThan(1e-3);
-    const t = bd09({ outsideChina: 'transform' });
-    expect(t.fromWgs84Point(13.4, 52.5)).toEqual(
-      b.fromGcj02Point(...gcj02({ outsideChina: 'transform' }).fromWgs84Point(13.4, 52.5)),
-    );
-    expect(t.fromGcj02Point(13.4, 52.5)).toEqual(b.fromGcj02Point(13.4, 52.5));
+    const r = gcoord.transform([13.4, 52.5], gcoord.GCJ02, gcoord.BD09);
+    const [gl, gp] = t.fromGcj02Point(13.4, 52.5);
+    expect(Math.max(Math.abs(gl - r[0]!), Math.abs(gp - r[1]!))).toBeLessThan(1e-13);
     expect(t.fromWgs84Point(116, 39.9)).toEqual(b.fromWgs84Point(116, 39.9));
   });
 
   it('gives a valid preimage or NaN near the antimeridian', () => {
-    expect(b.fromGcj02Point(-180, 30)).toEqual(b.fromGcj02Point(180, 30));
+    expect(t.fromGcj02Point(-180, 30)).toEqual(t.fromGcj02Point(180, 30));
     // Points that are neither NaN in both coordinates nor a preimage within 1e-12 in (-180, 180].
     const bad: number[][] = [];
     for (const lat of [-75, -30, 0, 30, 60, 88]) {
       for (let lon = -180; lon <= -179.98; lon += 0.00037) {
         for (const g of [lon, -lon]) {
-          const [l, p] = b.toGcj02Point(g, lat);
+          const [l, p] = t.toGcj02Point(g, lat);
           if (Number.isNaN(l) && Number.isNaN(p)) continue;
-          const [bl, bp] = b.fromGcj02Point(l, p);
+          const [bl, bp] = t.fromGcj02Point(l, p);
           const d = Math.abs(bl - g) % 360;
           if (!(l > -180 && l <= 180 && Math.min(d, 360 - d) < 1e-12 && Math.abs(bp - lat) < 1e-12)) bad.push([g, lat]);
         }
-        const [fl, fp] = b.fromGcj02Point(lon, lat);
+        const [fl, fp] = t.fromGcj02Point(lon, lat);
         if (!(Math.abs(fl) <= 180 && Math.abs(fp) <= 90)) bad.push([lon, lat]);
       }
     }
@@ -131,15 +156,15 @@ describe('bd09', () => {
   it('gives valid coordinates or NaN near the poles', () => {
     for (const lat of [89.9, 89.99, 89.999, 90, -89.999, -90]) {
       for (let lon = -180; lon <= 180; lon += 7.5) {
-        for (const [l, p] of [b.fromGcj02Point(lon, lat), b.toGcj02Point(lon, lat)]) {
+        for (const [l, p] of [t.fromGcj02Point(lon, lat), t.toGcj02Point(lon, lat)]) {
           const valid = Math.abs(l) <= 180 && Math.abs(p) <= 90;
           const nan = Number.isNaN(l) && Number.isNaN(p);
           expect(valid || nan).toBe(true);
         }
       }
     }
-    expect(b.fromGcj02Point(0, 90.5)).toEqual([NaN, NaN]);
-    expect(b.toGcj02Point(0, -91)).toEqual([NaN, NaN]);
+    expect(t.fromGcj02Point(0, 90.5)).toEqual([NaN, NaN]);
+    expect(t.toGcj02Point(0, -91)).toEqual([NaN, NaN]);
   });
 
   it('reduces input longitudes', () => {
@@ -148,10 +173,20 @@ describe('bd09', () => {
   });
 
   it('propagates NaN and rejects infinities', () => {
-    for (const f of [b.fromGcj02Point, b.toGcj02Point]) {
+    for (const f of [t.fromGcj02Point, t.toGcj02Point]) {
       expect(f(NaN, 30)).toEqual([NaN, NaN]);
       expect(f(116, NaN)).toEqual([NaN, NaN]);
       expect(f(Infinity, 30)).toEqual([NaN, NaN]);
+    }
+    // Outside the box, as passthrough GCJ-02 does: the input, its longitude reduced.
+    for (const [lon, lat] of [
+      [NaN, 30],
+      [116, NaN],
+      [Infinity, 30],
+      [116, -Infinity],
+    ] as const) {
+      expect(b.fromGcj02Point(lon, lat)).toEqual(GCJ02.fromWgs84Point(lon, lat));
+      expect(b.toGcj02Point(lon, lat)).toEqual(GCJ02.toWgs84Point(lon, lat));
     }
   });
 
@@ -164,9 +199,13 @@ describe('bd09', () => {
 
 // Batch methods against the JavaScript point form: exact for the offset, which always runs in JavaScript; through
 // WGS84, within the GCJ-02 batch tolerance (the wasm GCJ-02 kernel).
-describe.each(backends)('$name backend bd09 batch', ({ bd09: make }) => {
-  const b = make();
-  const ref = bd09();
+describe.each(
+  backends.flatMap(({ name, bd09: make }) =>
+    (['passthrough', 'transform'] as const).map((mode) => ({ name, make, mode })),
+  ),
+)('$name backend bd09 batch, $mode', ({ make, mode }) => {
+  const b = make({ outsideChina: mode });
+  const ref = bd09({ outsideChina: mode });
   const rows = [...fixture.fromGcj02, ...fixture.toGcj02] as [number, number][];
   const lon = [...rows.map((r) => r[0]), 13.4, -179.99, NaN];
   const lat = [...rows.map((r) => r[1]), 52.5, 30, 1];

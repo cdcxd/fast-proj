@@ -199,7 +199,7 @@ directly to and from GCJ-02.
 const BD09: Bd09; // bd09() with the default options; the same object
 function bd09(options?: Bd09Options): Bd09;
 
-type Bd09Options = Gcj02Options; // outsideChina, for the GCJ-02 step
+type Bd09Options = Gcj02Options; // outsideChina, for both offsets
 
 interface Bd09 extends Geographic {
   toGcj02(lon, lat, outLon?, outLat?): { lon; lat }; // BD-09 -> GCJ-02
@@ -216,21 +216,23 @@ BD09.toGcj02Interleaved(baidu, out); // BD-09 -> GCJ-02
 utm({ zone: 50, geographic: BD09 }).toLonLatInterleaved(xy, xy); // UTM -> BD-09
 ```
 
-- **Outside China.** Baidu's SDKs take and return WGS84 overseas
-  ([FAQ](https://lbsyun.baidu.com/docs/ios?title=iossdk/qa)): keep WGS84 for Baidu's services outside China, Hong
-  Kong, Macau and Taiwan. This converter applies the BD-09 offset everywhere, as gcoord and coordtransform do, for
-  compatibility with them; `outsideChina` only decides the GCJ-02 step of `toWgs84`/`fromWgs84`, so with
-  `'passthrough'`, WGS84 points outside the box still get the BD-09 offset (Berlin moves about 800 m). The GCJ-02
-  methods don't depend on it.
+- **Outside China.** Baidu uses BD-09 in mainland China, Hong Kong, Macau and Taiwan and WGS84 elsewhere: its SDKs
+  take and return WGS84 overseas ([coordinates](https://lbsyun.baidu.com/docs/android?title=androidsdk%2Fguide%2Ftool%2Fcoordinate),
+  [FAQ](https://lbsyun.baidu.com/docs/ios?title=iossdk/qa)). So with `'passthrough'` (default), points outside the
+  GCJ-02 box (which contains all four) are returned unchanged by every method, BD-09 being WGS84 = GCJ-02 there. The
+  box is rough: it also takes in parts of Japan, Korea, Mongolia and Southeast Asia, where Baidu uses WGS84. Each
+  step tests its own input, so within about 0.01° of the box's edge a WGS84 point can get one offset without the
+  other. With `'transform'`, both offsets apply everywhere, as gcoord and coordtransform do (Berlin moves about
+  800 m).
 - **Accuracy.** `fromGcj02` is within 1.5e-14° of a 40-digit evaluation of the formula. The offset has no
-  closed-form inverse; `toGcj02` takes two Newton steps and is within 1.5e-14° of the exact inverse. These are absolute
-  bounds: near 0° the formula cancels, and a result there can be hundreds of ulps of itself off (but under 1e-18°). gcoord's and
-  coordtransform's closed-form inverse is off by up to 2e-6° (0.2 m). `toWgs84`/`fromWgs84` add GCJ-02's accuracy
-  (above).
-- **Poles and the antimeridian.** Latitudes beyond ±90°, in or out, give `NaN`. Longitudes 180° and −180° are treated
-  as 180°. The offset's angle term jumps across the antimeridian (by up to 1e-3° of latitude), so within about 0.01°
-  of longitude ±180° some BD-09 points have two GCJ-02 preimages (`toGcj02` returns one of them) and some have none
-  (`NaN`).
+  closed-form inverse; `toGcj02` takes two Newton steps and is within 1.5e-14° of the exact inverse. These are
+  absolute bounds: near 0° (in `'transform'` mode) the formula cancels, and a result there can be hundreds of ulps of
+  itself off (but under 1e-18°). gcoord's and coordtransform's closed-form inverse is off by up to 2e-6° (0.2 m).
+  `toWgs84`/`fromWgs84` add GCJ-02's accuracy (above).
+- **Poles and the antimeridian** (`'transform'` mode; both are outside the box). Latitudes beyond ±90°, in or out,
+  give `NaN`. Longitudes 180° and −180° are treated as 180°. The offset's angle term jumps across the antimeridian (by
+  up to 1e-3° of latitude), so within about 0.01° of longitude ±180° some BD-09 points have two GCJ-02 preimages
+  (`toGcj02` returns one of them) and some have none (`NaN`).
 - **Baidu tiles.** Baidu's map tiles use BD-09MC, Baidu's own Mercator, which isn't supported; `webMercator()` of
   BD-09 longitude/latitude is not their grid.
 - Input longitudes outside [-180, 180] are reduced first; output longitudes are in [-180, 180].

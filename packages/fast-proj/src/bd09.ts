@@ -9,10 +9,11 @@
  * rotated by the first step rather than recomputed, are within 1.5e-14 degrees of the exact solution (gcoord's closed
  * form is off by up to 2e-6 degrees, 0.2 m).
  *
- * The offset applies everywhere, as in gcoord (Baidu's SDKs take WGS84 overseas): outside the China box,
- * 'passthrough' mode leaves out only GCJ-02. Its angle term jumps across the antimeridian (by up to 1e-3 degrees of
- * latitude), so within about 0.01 degrees of longitude +-180 some BD-09 points have two GCJ-02 preimages (the inverse
- * returns one) and some none (NaN).
+ * Baidu's SDKs use BD-09 in China (Hong Kong, Macau and Taiwan included) and WGS84 elsewhere, so 'passthrough'
+ * mode leaves out both GCJ-02 and the offset outside the China box; 'transform' applies both everywhere, as gcoord
+ * does. The offset's angle term jumps across the antimeridian (by up to 1e-3 degrees of latitude), so within about
+ * 0.01 degrees of longitude +-180 some BD-09 points have two GCJ-02 preimages (the inverse returns one) and some none
+ * (NaN).
  */
 import { checkEven, checkSame, output } from './checks.js';
 import { buildGcj02, gcj02Mode, type Gcj02Options } from './gcj02.js';
@@ -22,8 +23,12 @@ import type { Bd09, Geographic, Impl } from './types.js';
 // Bound here, not imported, as in gcj02.ts.
 const KY = K.KY;
 const reduce = K.reduce;
+const LAT_MAX = K.LAT_MAX;
+const LAT_MIN = K.LAT_MIN;
+const LON_MAX = K.LON_MAX;
+const LON_MIN = K.LON_MIN;
 
-/** Same options as GCJ-02's; they apply to its step. */
+/** Same options as GCJ-02's: `outsideChina` decides both the GCJ-02 step and the BD-09 offset. */
 export type Bd09Options = Gcj02Options;
 
 // Radians per degree of the offset's angles (3000 degrees per degree), and the weights of its radius and angle terms.
@@ -49,15 +54,16 @@ const C3 = 2.480158085064316e-5;
 const C4 = -2.7555547913821156e-7;
 const C5 = 2.0646636973611476e-9;
 
-/** The point kernels of the GCJ-02 <-> BD-09 offset, shared by every mode and backend. */
+/** The point kernels of the GCJ-02 <-> BD-09 offset, one per mode, shared by both backends. */
 interface Offset {
   fromGcj02Point(lon: number, lat: number): [number, number];
   toGcj02Point(lon: number, lat: number): [number, number];
 }
 
-let shared: Offset | undefined;
+const offsets: { passthrough?: Offset; transform?: Offset } = {};
 
-function makeOffset(): Offset {
+// box: 'passthrough' mode, which returns points outside the China box unchanged (longitude reduced), as GCJ-02 does.
+function makeOffset(box: boolean): Offset {
   let rx = 0;
   let ry = 0;
 
@@ -79,10 +85,15 @@ function makeOffset(): Offset {
     ry = (1 - ((q + 1) & 2)) * (cs + o * (sn - cs));
   }
 
-  // GCJ-02 -> BD-09. Latitudes beyond +-90, in or out, give NaN.
+  // GCJ-02 -> BD-09. Latitudes beyond +-90, in or out, give NaN in 'transform' mode.
   // @kernel
   function fromGcj02(lon: number, lat: number): void {
     if (lon > 180 || lon < -180) lon = reduce(lon);
+    if (box && !(lon >= LON_MIN && lon <= LON_MAX && lat >= LAT_MIN && lat <= LAT_MAX)) {
+      rx = lon;
+      ry = lat;
+      return;
+    }
     if (!(lat >= -90 && lat <= 90)) {
       rx = NaN;
       ry = NaN;
@@ -183,6 +194,11 @@ function makeOffset(): Offset {
   // @kernel
   function toGcj02(lon: number, lat: number): void {
     if (lon > 180 || lon < -180) lon = reduce(lon);
+    if (box && !(lon >= LON_MIN && lon <= LON_MAX && lat >= LAT_MIN && lat <= LAT_MAX)) {
+      rx = lon;
+      ry = lat;
+      return;
+    }
     if (!(lat >= -90 && lat <= 90)) {
       rx = NaN;
       ry = NaN;
@@ -327,8 +343,9 @@ function makeOffset(): Offset {
   };
 }
 
-// Batch loops as in tmerc.ts: (o1, step) = (0, 1) for separate arrays, (1, 2) interleaved.
+// Batch loops as in tmerc.ts: (o1, step) = (0, 1) for separate arrays, (1, 2) interleaved; box as in makeOffset.
 function fromGcj02Batch(
+  box: boolean,
   a: ArrayLike<number>,
   b: ArrayLike<number>,
   outA: Float64Array,
@@ -343,6 +360,11 @@ function fromGcj02Batch(
       let lon = a[j]!;
       const lat = b[j + o1]!;
       if (lon > 180 || lon < -180) lon = reduce(lon);
+      if (box && !(lon >= 72.004 && lon <= 137.8347 && lat >= 0.8293 && lat <= 55.8271)) {
+        outA[j] = lon;
+        outB[j + o1] = lat;
+        continue;
+      }
       if (!(lat >= -90 && lat <= 90)) {
         outA[j] = NaN;
         outB[j + o1] = NaN;
@@ -433,6 +455,7 @@ function fromGcj02Batch(
 }
 
 function toGcj02Batch(
+  box: boolean,
   a: ArrayLike<number>,
   b: ArrayLike<number>,
   outA: Float64Array,
@@ -447,6 +470,11 @@ function toGcj02Batch(
       let lon = a[j]!;
       const lat = b[j + o1]!;
       if (lon > 180 || lon < -180) lon = reduce(lon);
+      if (box && !(lon >= 72.004 && lon <= 137.8347 && lat >= 0.8293 && lat <= 55.8271)) {
+        outA[j] = lon;
+        outB[j + o1] = lat;
+        continue;
+      }
       if (!(lat >= -90 && lat <= 90)) {
         outA[j] = NaN;
         outB[j + o1] = NaN;
@@ -580,18 +608,19 @@ function head(a: Float64Array, n: number): Float64Array {
 }
 
 /**
- * BD-09 over `gcj`, a GCJ-02 converter: WGS84 <-> `gcj` <-> the offset, the second step in place on the first n
- * elements of the output buffer. A wasm context passes its own GCJ-02.
+ * BD-09 over `gcj`, a GCJ-02 converter in the same mode: WGS84 <-> `gcj` <-> the offset, the second step in place on
+ * the first n elements of the output buffer. A wasm context passes its own GCJ-02.
  */
-export function composeBd09(gcj: Geographic): Bd09 {
-  const o = (shared ??= makeOffset());
+export function composeBd09(gcj: Geographic, mode: 'passthrough' | 'transform'): Bd09 {
+  const box = mode === 'passthrough';
+  const o = (offsets[mode] ??= makeOffset(box));
   return Object.freeze({
     toWgs84(lon, lat, outLon?, outLat?) {
       const n = lon.length;
       checkSame(n, lat.length, 'lon and lat');
       const oLon = output(outLon, n, 'outLon'),
         oLat = output(outLat, n, 'outLat');
-      toGcj02Batch(lon, lat, oLon, oLat, 0, 1, n);
+      toGcj02Batch(box, lon, lat, oLon, oLat, 0, 1, n);
       const lo = head(oLon, n),
         la = head(oLat, n);
       gcj.toWgs84(lo, la, lo, la);
@@ -605,14 +634,14 @@ export function composeBd09(gcj: Geographic): Bd09 {
       const lo = head(oLon, n),
         la = head(oLat, n);
       gcj.fromWgs84(lon, lat, lo, la);
-      fromGcj02Batch(lo, la, lo, la, 0, 1, n);
+      fromGcj02Batch(box, lo, la, lo, la, 0, 1, n);
       return { lon: oLon, lat: oLat };
     },
     toWgs84Interleaved(lonlat, outBuf?) {
       const n = lonlat.length;
       checkEven(n);
       const out = output(outBuf, n, 'out');
-      toGcj02Batch(lonlat, lonlat, out, out, 1, 2, n);
+      toGcj02Batch(box, lonlat, lonlat, out, out, 1, 2, n);
       const h = head(out, n);
       gcj.toWgs84Interleaved(h, h);
       return out;
@@ -623,7 +652,7 @@ export function composeBd09(gcj: Geographic): Bd09 {
       const out = output(outBuf, n, 'out');
       const h = head(out, n);
       gcj.fromWgs84Interleaved(lonlat, h);
-      fromGcj02Batch(h, h, h, h, 1, 2, n);
+      fromGcj02Batch(box, h, h, h, h, 1, 2, n);
       return out;
     },
     toWgs84Point(lon, lat) {
@@ -639,7 +668,7 @@ export function composeBd09(gcj: Geographic): Bd09 {
       checkSame(n, lat.length, 'lon and lat');
       const oLon = output(outLon, n, 'outLon'),
         oLat = output(outLat, n, 'outLat');
-      toGcj02Batch(lon, lat, oLon, oLat, 0, 1, n);
+      toGcj02Batch(box, lon, lat, oLon, oLat, 0, 1, n);
       return { lon: oLon, lat: oLat };
     },
     fromGcj02(lon, lat, outLon?, outLat?) {
@@ -647,21 +676,21 @@ export function composeBd09(gcj: Geographic): Bd09 {
       checkSame(n, lat.length, 'lon and lat');
       const oLon = output(outLon, n, 'outLon'),
         oLat = output(outLat, n, 'outLat');
-      fromGcj02Batch(lon, lat, oLon, oLat, 0, 1, n);
+      fromGcj02Batch(box, lon, lat, oLon, oLat, 0, 1, n);
       return { lon: oLon, lat: oLat };
     },
     toGcj02Interleaved(lonlat, outBuf?) {
       const n = lonlat.length;
       checkEven(n);
       const out = output(outBuf, n, 'out');
-      toGcj02Batch(lonlat, lonlat, out, out, 1, 2, n);
+      toGcj02Batch(box, lonlat, lonlat, out, out, 1, 2, n);
       return out;
     },
     fromGcj02Interleaved(lonlat, outBuf?) {
       const n = lonlat.length;
       checkEven(n);
       const out = output(outBuf, n, 'out');
-      fromGcj02Batch(lonlat, lonlat, out, out, 1, 2, n);
+      fromGcj02Batch(box, lonlat, lonlat, out, out, 1, 2, n);
       return out;
     },
     toGcj02Point: (lon, lat) => o.toGcj02Point(lon, lat),
@@ -673,7 +702,7 @@ const built: { passthrough?: Bd09; transform?: Bd09 } = {};
 
 export function bd09(options: Bd09Options = {}): Bd09 {
   const mode = gcj02Mode(options, 'bd09');
-  return (built[mode] ??= composeBd09(buildGcj02(mode)));
+  return (built[mode] ??= composeBd09(buildGcj02(mode), mode));
 }
 
 /** BD-09 with the default options; the same object `bd09()` returns. */
