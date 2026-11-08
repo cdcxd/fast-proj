@@ -1,7 +1,7 @@
 # fast-proj API
 
 ```ts
-import { GCJ02, gcj02, tmerc, utm, utmFor, utmZoneFor, webMercator, WGS84, GRS80 } from 'fast-proj';
+import { BD09, bd09, GCJ02, gcj02, tmerc, utm, utmFor, utmZoneFor, webMercator, WGS84, GRS80 } from 'fast-proj';
 import { positions, lineString, latLngs } from 'fast-proj/geojson';
 import { loadWasm } from 'fast-proj/wasm';
 ```
@@ -18,6 +18,7 @@ or re-entering one throws a plain `Error`. Messages start with `fast-proj:`.
 - [`tmerc(options)`](#tmercoptions)
 - [`webMercator(options)`](#webmercatoroptions)
 - [`GCJ02` and `gcj02(options)`](#gcj02-and-gcj02options)
+- [`BD09` and `bd09(options)`](#bd09-and-bd09options)
 - [Converter methods](#converter-methods)
 - [Buffers and aliasing](#buffers-and-aliasing)
 - [Zones: `utmFor`, `utmZoneFor`](#zones)
@@ -158,8 +159,8 @@ merc.toLonLatInterleaved(xy, xy); // AMap/Tencent x/y -> GCJ-02 lon/lat
 ## `GCJ02` and `gcj02(options)`
 
 GCJ-02, the obfuscated coordinate system required for maps of mainland China (AMap/Gaode, Tencent, Google Maps in
-China). It follows the published WGS84 → GCJ-02 formula, as gcoord and coordtransform do; Baidu's BD-09 is not
-supported yet. Use it standalone or as a projection's `geographic`.
+China). It follows the published WGS84 → GCJ-02 formula, as gcoord and coordtransform do; for Baidu, see
+[`BD09`](#bd09-and-bd09options). Use it standalone or as a projection's `geographic`.
 
 ```ts
 const GCJ02: Geographic; // gcj02() with the default options; the same object
@@ -188,11 +189,59 @@ interface Gcj02Options {
   offset differs at longitudes 180° and −180°; both are treated as 180°.
 - Input longitudes outside [-180, 180] are reduced first; output longitudes are in [-180, 180].
 
+## `BD09` and `bd09(options)`
+
+BD-09, Baidu's coordinate system (Baidu Maps and the Baidu SDKs): GCJ-02 plus Baidu's published offset, as in gcoord
+and coordtransform. A `Bd09` is a `Geographic` (WGS84 ↔ BD-09, for a projection's `geographic` too) that also converts
+directly to and from GCJ-02.
+
+```ts
+const BD09: Bd09; // bd09() with the default options; the same object
+function bd09(options?: Bd09Options): Bd09;
+
+type Bd09Options = Gcj02Options; // outsideChina, for both offsets
+
+interface Bd09 extends Geographic {
+  toGcj02(lon, lat, outLon?, outLat?): { lon; lat }; // BD-09 -> GCJ-02
+  fromGcj02(lon, lat, outLon?, outLat?): { lon; lat }; // GCJ-02 -> BD-09
+  toGcj02Interleaved(lonlat, out?); fromGcj02Interleaved(lonlat, out?);
+  toGcj02Point(lon, lat); fromGcj02Point(lon, lat);
+}
+```
+
+```ts
+BD09.fromWgs84Interleaved(gps, out); // WGS84 (GPS) -> BD-09, for a Baidu map
+BD09.fromGcj02Interleaved(amap, out); // AMap/Tencent GCJ-02 -> BD-09
+BD09.toGcj02Interleaved(baidu, out); // BD-09 -> GCJ-02
+utm({ zone: 50, geographic: BD09 }).toLonLatInterleaved(xy, xy); // UTM -> BD-09
+```
+
+- **Outside China.** Baidu uses BD-09 in mainland China, Hong Kong, Macau and Taiwan and WGS84 elsewhere: its SDKs
+  take and return WGS84 overseas ([coordinates](https://lbsyun.baidu.com/docs/android?title=androidsdk%2Fguide%2Ftool%2Fcoordinate),
+  [FAQ](https://lbsyun.baidu.com/docs/ios?title=iossdk/qa)). So with `'passthrough'` (default), points outside the
+  GCJ-02 box (which contains all four) are returned unchanged by every method, BD-09 being WGS84 = GCJ-02 there. The
+  box is rough: it also takes in parts of Japan, Korea, Mongolia and Southeast Asia, where Baidu uses WGS84. Each
+  step tests its own input, so within about 0.01° of the box's edge a WGS84 point can get one offset without the
+  other. With `'transform'`, both offsets apply everywhere, as gcoord and coordtransform do (Berlin moves about
+  800 m).
+- **Accuracy.** `fromGcj02` is within 1.5e-14° of a 40-digit evaluation of the formula. The offset has no
+  closed-form inverse; `toGcj02` takes two Newton steps and is within 1.5e-14° of the exact inverse. These are
+  absolute bounds: near 0° (in `'transform'` mode) the formula cancels, and a result there can be hundreds of ulps of
+  itself off (but under 1e-18°). gcoord's and coordtransform's closed-form inverse is off by up to 2e-6° (0.2 m).
+  `toWgs84`/`fromWgs84` add GCJ-02's accuracy (above).
+- **Poles and the antimeridian** (`'transform'` mode; both are outside the box). Latitudes beyond ±90°, in or out,
+  give `NaN`. Longitudes 180° and −180° are treated as 180°. The offset's angle term jumps across the antimeridian (by
+  up to 1e-3° of latitude), so within about 0.01° of longitude ±180° some BD-09 points have two GCJ-02 preimages
+  (`toGcj02` returns one of them) and some have none (`NaN`).
+- **Baidu tiles.** Baidu's map tiles use BD-09MC, Baidu's own Mercator, which isn't supported; `webMercator()` of
+  BD-09 longitude/latitude is not their grid.
+- Input longitudes outside [-180, 180] are reduced first; output longitudes are in [-180, 180].
+
 ## Converter methods
 
 Every `Projection` has the methods below. A `Geographic` has the same set with lon/lat on both sides:
 `toWgs84(lon, lat, outLon?, outLat?)`, `fromWgs84(...)`, `toWgs84Interleaved(lonlat, out?)`, `fromWgs84Interleaved`,
-`toWgs84Point(lon, lat)` and `fromWgs84Point`.
+`toWgs84Point(lon, lat)` and `fromWgs84Point`. A `Bd09` adds the same six with `Gcj02` in place of `Wgs84`.
 
 | method                                | input                         | output                                         |
 | ------------------------------------- | ----------------------------- | ---------------------------------------------- |
@@ -288,6 +337,7 @@ interface WasmContext extends Disposable {
   utm(options: UtmOptions): Utm;
   webMercator(options?: WebMercatorOptions): Projection;
   gcj02(options?: Gcj02Options): Geographic;
+  bd09(options?: Bd09Options): Bd09;
   dispose(): void;
 }
 ```
@@ -322,6 +372,9 @@ wasm.dispose(); // or: using wasm = await loadWasm();
   and the result back (about 0.17 ns per point). There is no zero-copy access to wasm memory.
 - **GCJ-02.** The context's `gcj02()` batch methods run the wasm kernel in `'passthrough'` mode (about 1.9–4×
   the JavaScript kernel); `'transform'` mode runs the JavaScript kernel. Each context returns one converter per mode.
+- **BD-09.** The context's `bd09()` runs the BD-09 offset in JavaScript over the context's own `gcj02()`, so
+  `toWgs84`/`fromWgs84` batches run the wasm GCJ-02 kernel in `'passthrough'` mode. Its GCJ-02 methods are the
+  JavaScript ones.
 - **Web Mercator.** `webMercator()` batch methods run a wasm kernel. With a `source` older than 0.4.0, which has no
   such kernel, they run the JavaScript one and `backend` still reports `wasm`.
 - **Single points.** `toLonLatPoint`/`fromLonLatPoint` and `toWgs84Point`/`fromWgs84Point` run the JavaScript kernel:
