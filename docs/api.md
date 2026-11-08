@@ -216,11 +216,15 @@ BD09.toGcj02Interleaved(baidu, out); // BD-09 -> GCJ-02
 utm({ zone: 50, geographic: BD09 }).toLonLatInterleaved(xy, xy); // UTM -> BD-09
 ```
 
-- **Outside China.** The BD-09 offset applies everywhere, as in gcoord, coordtransform and Baidu's own maps;
-  `outsideChina` only decides the GCJ-02 step of `toWgs84`/`fromWgs84` (so with `'passthrough'`, WGS84 points outside
-  the box get the BD-09 offset alone). The GCJ-02 methods don't depend on it.
-- **Accuracy.** `fromGcj02` is within one ulp (1.5e-14°) of a 40-digit evaluation of the formula. The offset has no
-  closed-form inverse; `toGcj02` takes two Newton steps and is within one ulp of the exact inverse. gcoord's and
+- **Outside China.** Baidu's SDKs take and return WGS84 overseas
+  ([FAQ](https://lbsyun.baidu.com/docs/ios?title=iossdk/qa)): keep WGS84 for Baidu's services outside China, Hong
+  Kong, Macau and Taiwan. This converter applies the BD-09 offset everywhere, as gcoord and coordtransform do, for
+  compatibility with them; `outsideChina` only decides the GCJ-02 step of `toWgs84`/`fromWgs84`, so with
+  `'passthrough'`, WGS84 points outside the box still get the BD-09 offset (Berlin moves about 800 m). The GCJ-02
+  methods don't depend on it.
+- **Accuracy.** `fromGcj02` is within 1.5e-14° of a 40-digit evaluation of the formula. The offset has no
+  closed-form inverse; `toGcj02` takes two Newton steps and is within 1.5e-14° of the exact inverse. These are absolute
+  bounds: near 0° the formula cancels, and a result there can be hundreds of ulps of itself off (but under 1e-18°). gcoord's and
   coordtransform's closed-form inverse is off by up to 2e-6° (0.2 m). `toWgs84`/`fromWgs84` add GCJ-02's accuracy
   (above).
 - **Poles and the antimeridian.** Latitudes beyond ±90°, in or out, give `NaN`. Longitudes 180° and −180° are treated

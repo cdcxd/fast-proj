@@ -4,13 +4,15 @@
  * a + 3e-6 cos(lon K), K = 3000 pi / 180, then by (0.0065, 0.006).
  *
  * The forward takes cos and sin of the new angle by angle addition from lon / r and lat / r, so the offset is a small
- * term added to the input and the result is within an ulp. The inverse has no closed form; two Newton steps from the
- * input less (0.0065, 0.006), with the second step's sines rotated by the first step rather than recomputed, are
- * within an ulp of the exact solution (gcoord's closed form is off by up to 2e-6 degrees, 0.2 m).
+ * term added to the input and the result is within 1.5e-14 degrees (an ulp, except near 0 where the formula cancels).
+ * The inverse has no closed form; two Newton steps from the input less (0.0065, 0.006), with the second step's sines
+ * rotated by the first step rather than recomputed, are within 1.5e-14 degrees of the exact solution (gcoord's closed
+ * form is off by up to 2e-6 degrees, 0.2 m).
  *
- * The offset applies everywhere, as in gcoord: outside the China box, 'passthrough' mode leaves out only GCJ-02. Its
- * angle term jumps across the antimeridian (by up to 1e-3 degrees of latitude), so within about 0.01 degrees of
- * longitude +-180 some BD-09 points have two GCJ-02 preimages (the inverse returns one) and some none (NaN).
+ * The offset applies everywhere, as in gcoord (Baidu's SDKs take WGS84 overseas): outside the China box,
+ * 'passthrough' mode leaves out only GCJ-02. Its angle term jumps across the antimeridian (by up to 1e-3 degrees of
+ * latitude), so within about 0.01 degrees of longitude +-180 some BD-09 points have two GCJ-02 preimages (the inverse
+ * returns one) and some none (NaN).
  */
 import { checkEven, checkSame, output } from './checks.js';
 import { buildGcj02, gcj02Mode, type Gcj02Options } from './gcj02.js';
@@ -284,7 +286,8 @@ function makeOffset(): Offset {
         x -= dx;
         y -= dy;
         if (k === 1) break;
-        // Rotate the sines by the step, |angle| < 0.04: series to under 1e-14.
+        // Rotate the sines by the step, |angle| < 0.05: series to 2e-13, which the 2e-5 and 3e-6 factors take far under
+        // an ulp.
         const ex = -dx * KB;
         const ey = -dy * KB;
         const ex2 = ex * ex;
