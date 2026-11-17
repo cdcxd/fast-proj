@@ -152,8 +152,8 @@ BD-09 (0.6) is another `Geographic` relative to WGS84, composing GCJ-02, plus th
 (`Bd09 extends Geographic`): users with AMap data go to Baidu directly, without the round trip through WGS84 and its two
 GCJ-02 solves. `outsideChina` governs both offsets, as Baidu uses WGS84 outside China; gcoord applies its offset
 everywhere, as `'transform'` does. The offset is one closure per mode shared by both backends; `composeBd09(gcj, mode)`
-builds a converter over any GCJ-02, so a wasm context passes its own and WGS84 <-> BD-09 batches run the wasm GCJ-02
-kernel with the offset as a second, JavaScript pass. The offset's sines of 3000 lat and 3000 lon degrees are reduced in
+builds a converter over any GCJ-02, so a wasm context passes its own (and, since 0.6.1, replaces the batch methods
+with wasm kernels; see below). The offset's sines of 3000 lat and 3000 lon degrees are reduced in
 degrees by whole quarter turns (exact) with shorter polynomials than poly.ts's, since the offset needs them only to
 1e-12: Math.sin and Math.cos of thousands of radians were three quarters of the forward's time. Kept: one rounding by
 1.5 2^52 instead of two Math.round, branch-free quadrant selection (random quadrants mispredict), together 41% on each
@@ -353,3 +353,11 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
   `vatan_q` (seven ulps); since 0.5.2 it takes the JavaScript kernel's two forms of gd (four ulps, 3% faster). y agrees with JavaScript within 7.5e-9 m below 2^25 m, the inherent rounding of y/R scaled by R. It measured
   1.3–2.1× the JavaScript kernel's batch methods (Node, Bun, Chromium). Its composition with GCJ-02 runs the two
   passes; a fused kernel waits for a measured gain.
+- The wasm BD-09 offset (0.6.1, `bd_from_gcj_batch` / `bd_to_gcj_batch`, `vbd.rs`) is the JavaScript kernel's
+  operations in the same order, so it matches bit for bit (wasm has no fused multiply-add): `f64x2_nearest` for the
+  1.5 2^52 rounding, and the quadrant selection from q mod 4 computed in floating point (floor of q/4), keeping the
+  JavaScript kernel's sn + (cs - sn) rather than cs. The inverse's second pass (a solution at or below -180°) runs
+  only when a lane needs it. WGS84 <-> BD-09 and x/y -> BD-09 run the existing GCJ-02 kernel and the offset as two
+  calls on the workspace, from one JavaScript call with no copy between: fused kernels measured within 2% of that and
+  held a third copy of the GCJ-02 kernel. The Newton pass isn't inlined (one copy per width serves both passes):
+  inlined, the module grew by 43 kB instead of 14 kB, for 3%.

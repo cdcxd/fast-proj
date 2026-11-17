@@ -6,11 +6,14 @@ import vm from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
 import { LAT_MAX, LAT_MIN, LON_MAX, LON_MIN } from '../src/gcj02-constants.js';
 import { fusers } from '../src/geographic.js';
-import { BD09, GCJ02, gcj02, tmerc as jsTmerc, utm, webMercator } from '../src/index.js';
+import { BD09, bd09, GCJ02, gcj02, tmerc as jsTmerc, utm, webMercator } from '../src/index.js';
 import type { Geographic, Projection } from '../src/types.js';
 import { loadWasm, type WasmContext } from '../src/wasm.js';
 
 const url = new URL('../dist/fast-proj.wasm', import.meta.url);
+
+// Interleaved pairs as separate arrays.
+const split = (o: Float64Array) => ({ lon: o.filter((_, i) => i % 2 === 0), lat: o.filter((_, i) => i % 2 === 1) });
 
 type Factories = Pick<WasmContext, 'utm' | 'tmerc'>;
 type Make = (m: Factories, geographic?: Geographic) => Projection;
@@ -225,6 +228,102 @@ describe('loadWasm', () => {
     expect(() => b.fromGcj02(lon, lat)).toThrow(/disposed/);
     expect(() => b.toGcj02Point(116, 40)).toThrow(/disposed/);
     expect(() => b.toWgs84Interleaved([116, 40])).toThrow(/disposed/);
+  });
+
+  it('runs bd09 batches on its wasm kernels, bit for bit with the JavaScript offset', async () => {
+    const module = await WebAssembly.compile(readFileSync(url));
+    const instantiate = WebAssembly.instantiate;
+    const calls: string[] = [];
+    const count =
+      (k: string, f: unknown) =>
+      (...a: unknown[]) => (calls.push(k), (f as (...b: unknown[]) => void)(...a));
+    // Counts the kernel calls, optionally dropping the BD-09 exports as modules older than 0.6.1 do.
+    const load = async (bd: boolean) => {
+      const spy = vi.spyOn(WebAssembly, 'instantiate').mockImplementation((async (m: WebAssembly.Module) => {
+        const { bd_from_gcj_batch, bd_to_gcj_batch, ...exports } = (await instantiate(m, {})).exports as Record<
+          string,
+          unknown
+        >;
+        return {
+          exports: {
+            ...exports,
+            gcj_forward_batch: count('gcjF', exports.gcj_forward_batch),
+            gcj_inverse_batch: count('gcjI', exports.gcj_inverse_batch),
+            tm_gcj_batch: count('tmGcj', exports.tm_gcj_batch),
+            ...(bd && {
+              bd_from_gcj_batch: count('bdF', bd_from_gcj_batch),
+              bd_to_gcj_batch: count('bdT', bd_to_gcj_batch),
+            }),
+          },
+        };
+      }) as unknown as typeof WebAssembly.instantiate);
+      return loadWasm({ source: module }).finally(() => spy.mockRestore());
+    };
+    const ctx = await load(true);
+    const old = await load(false);
+    // Odd and past the workspace: China, the box edges, the world, the antimeridian, the poles, odd values.
+    const n = 70001;
+    const lon = new Float64Array(n);
+    const lat = new Float64Array(n);
+    const odd = [NaN, Infinity, -180, 180, 540.25, -720.5, 72.004, 137.8347];
+    for (let i = 0; i < n; i++) {
+      const u = ((i * 7919) % n) / n;
+      const v = ((i * 104729) % n) / n;
+      const k = i % 6;
+      lon[i] = [72 + 66 * u, 72.004 + 0.02 * (u - 0.5), -180 + 360 * u, 179.99 + 0.02 * u, 360 * u - 180, odd[i % 8]!][
+        k
+      ]!;
+      lat[i] = [0.8 + 55 * v, 0.8293 + 55 * v, -90 + 180 * v, -89 + 178 * v, 89.99 + 0.02 * v, 30][k]!;
+    }
+    const ll = new Float64Array(2 * n);
+    for (let i = 0; i < n; i++) [ll[2 * i], ll[2 * i + 1]] = [lon[i]!, lat[i]!];
+    const same = (r: { lon: Float64Array; lat: Float64Array }, w: { lon: Float64Array; lat: Float64Array }) => {
+      let bad = 0;
+      for (let i = 0; i < n; i++) if (!Object.is(r.lon[i], w.lon[i]) || !Object.is(r.lat[i], w.lat[i])) bad++;
+      return bad;
+    };
+    for (const mode of ['passthrough', 'transform'] as const) {
+      const js = bd09({ outsideChina: mode });
+      const b = ctx.bd09({ outsideChina: mode });
+      const g = ctx.gcj02({ outsideChina: mode });
+      calls.length = 0;
+      expect(same(js.fromGcj02(lon, lat), b.fromGcj02(lon, lat))).toBe(0);
+      expect(same(js.toGcj02(lon, lat), b.toGcj02(lon, lat))).toBe(0);
+      expect(same(js.toGcj02(lon, lat), split(b.toGcj02Interleaved(ll)))).toBe(0);
+      expect(calls).toEqual(['bdF', 'bdF', 'bdT', 'bdT', 'bdT', 'bdT']);
+      // WGS84: this context's GCJ-02, then the offset; in 'transform' mode the JavaScript GCJ-02.
+      const f = g.fromWgs84(lon, lat);
+      const t = js.toGcj02(lon, lat);
+      const tw = g.toWgs84(t.lon, t.lat);
+      calls.length = 0;
+      expect(same(js.fromGcj02(f.lon, f.lat), b.fromWgs84(lon, lat))).toBe(0);
+      expect(same(tw, split(b.toWgs84Interleaved(ll)))).toBe(0);
+      expect(calls).toEqual(mode === 'passthrough' ? ['gcjF', 'bdF', 'gcjF', 'bdF', 'bdT', 'gcjI', 'bdT', 'gcjI'] : []);
+      // Without the BD-09 exports: the JavaScript offset over the wasm GCJ-02, the same results.
+      const o = old.bd09({ outsideChina: mode });
+      expect(same(b.fromWgs84(lon, lat), o.fromWgs84(lon, lat))).toBe(0);
+      expect(same(b.toGcj02(lon, lat), o.toGcj02(lon, lat))).toBe(0);
+    }
+    // x/y -> BD-09: the fused x/y -> GCJ-02 kernel and the offset in one call, as x/y -> GCJ-02 then the offset.
+    const { x, y } = utm({ zone: 50 }).fromLonLat(lon, lat);
+    const xy = new Float64Array(2 * n);
+    for (let i = 0; i < n; i++) [xy[2 * i], xy[2 * i + 1]] = [x[i]!, y[i]!];
+    const viaGcj = ctx.utm({ zone: 50, geographic: ctx.gcj02() }).toLonLat(x, y);
+    const want = BD09.fromGcj02(viaGcj.lon, viaGcj.lat);
+    const p = ctx.utm({ zone: 50, geographic: ctx.bd09() });
+    calls.length = 0;
+    expect(same(want, p.toLonLat(x, y))).toBe(0);
+    expect(same(want, split(p.toLonLatInterleaved(xy)))).toBe(0);
+    expect(calls).toEqual(['tmGcj', 'bdF', 'tmGcj', 'bdF', 'tmGcj', 'bdF', 'tmGcj', 'bdF']);
+    const gp = ctx.utm({ zone: 50, geographic: ctx.gcj02() }).toLonLatPoint(x[3]!, y[3]!);
+    expect(p.toLonLatPoint(x[3]!, y[3]!)).toEqual(BD09.fromGcj02Point(...gp));
+    // 'transform' mode, or a module without the BD-09 exports: two passes.
+    calls.length = 0;
+    ctx.utm({ zone: 50, geographic: ctx.bd09({ outsideChina: 'transform' }) }).toLonLat(x, y);
+    old.utm({ zone: 50, geographic: old.bd09() }).toLonLat(x, y);
+    expect(calls.filter((c) => c === 'tmGcj')).toEqual([]);
+    ctx.dispose();
+    old.dispose();
   });
 
   it('fuses a projection with its own wasm gcj02 into one wasm call', async () => {

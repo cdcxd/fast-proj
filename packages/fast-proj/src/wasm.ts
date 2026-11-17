@@ -52,8 +52,9 @@ export interface WasmContext extends Disposable {
    */
   gcj02(options?: Gcj02Options): Geographic;
   /**
-   * BD-09 over this context's {@link WasmContext.gcj02}: WGS84 <-> BD-09 batches run its GCJ-02 step as that does,
-   * and the BD-09 offset in JavaScript.
+   * BD-09 over this context's {@link WasmContext.gcj02}: batch methods run the wasm offset kernel (bit for bit with the
+   * JavaScript one) and WGS84 <-> BD-09 batches run their GCJ-02 step as that does. As the `geographic` of this
+   * context's `tmerc`/`utm`, x/y -> BD-09 runs as one call in `'passthrough'` mode.
    */
   bd09(options?: Bd09Options): Bd09;
   /** Idempotent. Output arrays already returned stay valid. */

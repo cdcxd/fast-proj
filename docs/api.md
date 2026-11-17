@@ -372,9 +372,12 @@ wasm.dispose(); // or: using wasm = await loadWasm();
   and the result back (about 0.17 ns per point). There is no zero-copy access to wasm memory.
 - **GCJ-02.** The context's `gcj02()` batch methods run the wasm kernel in `'passthrough'` mode (about 1.9–4×
   the JavaScript kernel); `'transform'` mode runs the JavaScript kernel. Each context returns one converter per mode.
-- **BD-09.** The context's `bd09()` runs the BD-09 offset in JavaScript over the context's own `gcj02()`, so
-  `toWgs84`/`fromWgs84` batches run the wasm GCJ-02 kernel in `'passthrough'` mode. Its GCJ-02 methods are the
-  JavaScript ones.
+- **BD-09.** The context's `bd09()` batch methods run wasm kernels: `toGcj02`/`fromGcj02` in both modes, and
+  `toWgs84`/`fromWgs84` in `'passthrough'` mode as the wasm GCJ-02 kernel and the offset in one call. In
+  `'transform'` mode, WGS84 <-> BD-09 runs the JavaScript GCJ-02 kernel and the wasm offset. The offset matches the
+  JavaScript kernel bit for bit, so results differ from the JavaScript backend only by its GCJ-02 step. As the
+  `geographic` of this context's `tmerc`/`utm`, x/y -> BD-09 runs as one call in `'passthrough'` mode. With a
+  `source` older than 0.6.1, the offset runs in JavaScript.
 - **Web Mercator.** `webMercator()` batch methods run a wasm kernel. With a `source` older than 0.4.0, which has no
   such kernel, they run the JavaScript one and `backend` still reports `wasm`.
 - **Single points.** `toLonLatPoint`/`fromLonLatPoint` and `toWgs84Point`/`fromWgs84Point` run the JavaScript kernel:

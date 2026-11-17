@@ -7,7 +7,7 @@ import { checkEven, checkSame, output } from './checks.js';
 import { buildGcj02, gcj02Mode } from './gcj02.js';
 import { type FusedInverse, fusers, tmInverses, withGeographic } from './geographic.js';
 import { parseTmerc, tmerc as jsTmerc } from './tmerc.js';
-import type { Bd09, Geographic, Impl, Projection, TransverseMercator } from './types.js';
+import type { Bd09, Geographic, Impl, Out, Projection, TransverseMercator } from './types.js';
 import { parseUtm, utm as jsUtm } from './utm.js';
 import { parseWebMercator, webMercator as jsWebMercator } from './webmerc.js';
 import type { WasmContext } from './wasm.js';
@@ -29,6 +29,10 @@ export interface Exports {
   // Absent from builds without simd128 and from modules older than 0.4.0.
   wm_forward_batch?(lon: number, lat: number, x: number, y: number, n: number): void;
   wm_inverse_batch?(x: number, y: number, lon: number, lat: number, n: number): void;
+  // GCJ-02 <-> BD-09; boxed: 1 for 'passthrough', 0 for 'transform'. Absent from builds without simd128 and from
+  // modules older than 0.6.1.
+  bd_from_gcj_batch?(lon: number, lat: number, outLon: number, outLat: number, n: number, boxed: number): void;
+  bd_to_gcj_batch?(lon: number, lat: number, outLon: number, outLat: number, n: number, boxed: number): void;
 }
 
 const CAP = 1 << 16;
@@ -119,7 +123,8 @@ export function wasmContext(exports: Exports): WasmContext {
     return e;
   }
 
-  type Kernel = (ex: Exports, m: number) => void;
+  // Reads the workspace's first two buffers and writes its last two, or with `swapped`, its first two.
+  type Kernel = ((ex: Exports, m: number) => void) & { swapped?: boolean };
 
   function run(kernel: Kernel, sa: ArrayLike<number>, sb: ArrayLike<number>, oa: Float64Array, ob: Float64Array) {
     const ex = enter();
@@ -130,8 +135,8 @@ export function wasmContext(exports: Exports): WasmContext {
         copyIn(wa!, sa, i0, m);
         copyIn(wb!, sb, i0, m);
         kernel(ex, m);
-        copyOut(oa, wc!, i0, m);
-        copyOut(ob, wd!, i0, m);
+        copyOut(oa, kernel.swapped ? wa! : wc!, i0, m);
+        copyOut(ob, kernel.swapped ? wb! : wd!, i0, m);
       }
     } finally {
       busy = false;
@@ -144,8 +149,8 @@ export function wasmContext(exports: Exports): WasmContext {
       const half = src.length / 2;
       const A = wa!,
         B = wb!,
-        C = wc!,
-        D = wd!;
+        C = kernel.swapped ? A : wc!,
+        D = kernel.swapped ? B : wd!;
       for (let i0 = 0; i0 < half; i0 += CAP) {
         const m = Math.min(CAP, half - i0);
         for (let j = 0, k = 2 * i0; j < m; j++, k += 2) {
@@ -217,22 +222,39 @@ export function wasmContext(exports: Exports): WasmContext {
     } satisfies Impl<Projection>;
   }
 
-  // x/y -> this context's wasm GCJ-02 in one call, for a projection composed with it; single points run the
-  // JavaScript fused kernel.
+  // x/y -> this context's wasm GCJ-02 in one call, for a projection composed with it, or -> its wasm BD-09 in one
+  // call of two kernels; single points run the JavaScript fused kernel (and the offset).
   function fuse(js: TransverseMercator, g: Geographic | undefined): FusedInverse | undefined {
-    if (!g || g !== wasmGcj || !e!.tm_gcj_batch) return undefined;
+    if (!g || (g !== wasmGcj && g !== wasmBd) || !e!.tm_gcj_batch) return undefined;
     const t = tmInverses.get(js.toLonLat)!;
     const { point } = fusers.get(buildGcj02('passthrough'))!(t);
     const [lon0, k0, falseEasting, falseNorthing, a, f] = params(js);
-    const kernel: Kernel = (ex, m) => ex.tm_gcj_batch!(pa, pb, pc, pd, m, lon0, k0, falseEasting, falseNorthing, a, f);
+    let kernel: Kernel = (ex, m) => ex.tm_gcj_batch!(pa, pb, pc, pd, m, lon0, k0, falseEasting, falseNorthing, a, f);
+    let pt = point;
+    if (g === wasmBd) {
+      const gcj = kernel;
+      kernel = (ex, m) => (gcj(ex, m), ex.bd_from_gcj_batch!(pc, pd, pa, pb, m, 1));
+      kernel.swapped = true;
+      pt = (x, y) => wasmBd!.fromGcj02Point(...point(x, y));
+    }
     return {
       batch: (x, y, lon, lat, _o1, step) => (step === 1 ? run(kernel, x, y, lon, lat) : runInterleaved(kernel, x, lon)),
-      point,
+      point: pt,
     };
   }
 
   const gcjFwd: Kernel = (ex, m) => ex.gcj_forward_batch!(pa, pb, pc, pd, m);
   const gcjInv: Kernel = (ex, m) => ex.gcj_inverse_batch!(pa, pb, pc, pd, m);
+  // WGS84 <-> BD-09 ('passthrough'): both steps on the workspace, with no copy between them.
+  const bdFwd: Kernel = (ex, m) => (
+    ex.gcj_forward_batch!(pa, pb, pc, pd, m),
+    ex.bd_from_gcj_batch!(pc, pd, pa, pb, m, 1)
+  );
+  const bdInv: Kernel = (ex, m) => (
+    ex.bd_to_gcj_batch!(pa, pb, pc, pd, m, 1),
+    ex.gcj_inverse_batch!(pc, pd, pa, pb, m)
+  );
+  bdFwd.swapped = bdInv.swapped = true;
 
   function buildGcj(js: Geographic): Geographic {
     return (wasmGcj = Object.freeze({
@@ -271,10 +293,59 @@ export function wasmContext(exports: Exports): WasmContext {
     } satisfies Impl<Geographic>));
   }
 
+  // `js` with its batch methods on the wasm BD-09 kernels: GCJ-02 <-> BD-09 in both modes, WGS84 <-> BD-09 in
+  // 'passthrough' mode.
+  function buildBd(js: Bd09, mode: 'passthrough' | 'transform'): Bd09 {
+    const boxed = mode === 'passthrough' ? 1 : 0;
+    const from: Kernel = (ex, m) => ex.bd_from_gcj_batch!(pa, pb, pc, pd, m, boxed);
+    const to: Kernel = (ex, m) => ex.bd_to_gcj_batch!(pa, pb, pc, pd, m, boxed);
+    function pair<A extends Out, B extends Out>(
+      k: Kernel,
+      lon: ArrayLike<number>,
+      lat: ArrayLike<number>,
+      outLon: A | undefined,
+      outLat: B | undefined,
+    ) {
+      const n = lon.length;
+      checkSame(n, lat.length, 'lon and lat');
+      const oLon = output(outLon, n, 'outLon'),
+        oLat = output(outLat, n, 'outLat');
+      run(k, lon, lat, oLon, oLat);
+      return { lon: oLon, lat: oLat };
+    }
+    function inter<T extends Out>(k: Kernel, lonlat: ArrayLike<number>, outBuf: T | undefined) {
+      const n = lonlat.length;
+      checkEven(n);
+      const out = output(outBuf, n, 'out');
+      runInterleaved(k, lonlat, out);
+      return out;
+    }
+    const g = guarded(js, () => !e) as Impl<Bd09>;
+    // In 'transform' mode, this context's GCJ-02 and the offset as two passes.
+    const wgs = mode === 'passthrough';
+    const conv = Object.freeze({
+      ...g,
+      toGcj02: (lon, lat, outLon?, outLat?) => pair(to, lon, lat, outLon, outLat),
+      fromGcj02: (lon, lat, outLon?, outLat?) => pair(from, lon, lat, outLon, outLat),
+      toGcj02Interleaved: (lonlat, out?) => inter(to, lonlat, out),
+      fromGcj02Interleaved: (lonlat, out?) => inter(from, lonlat, out),
+      ...(wgs &&
+        ({
+          toWgs84: (lon, lat, outLon?, outLat?) => pair(bdInv, lon, lat, outLon, outLat),
+          fromWgs84: (lon, lat, outLon?, outLat?) => pair(bdFwd, lon, lat, outLon, outLat),
+          toWgs84Interleaved: (lonlat, out?) => inter(bdInv, lonlat, out),
+          fromWgs84Interleaved: (lonlat, out?) => inter(bdFwd, lonlat, out),
+        } satisfies Partial<Impl<Bd09>>)),
+    } satisfies Impl<Bd09>);
+    if (wgs) wasmBd = conv;
+    return conv;
+  }
+
   // One converter per mode, as for the root gcj02().
   const gcj: Partial<Record<'passthrough' | 'transform', Geographic>> = {};
   const bd: Partial<Record<'passthrough' | 'transform', Bd09>> = {};
   let wasmGcj: Geographic | undefined;
+  let wasmBd: Bd09 | undefined;
   const dispose = () => {
     if (busy) throw new Error('fast-proj: dispose() during an active call');
     e = null;
@@ -311,11 +382,15 @@ export function wasmContext(exports: Exports): WasmContext {
       return (gcj[mode] ??=
         mode === 'transform' || !ex.gcj_forward_batch || !ex.gcj_inverse_batch ? guarded(js, () => !e) : buildGcj(js));
     },
-    // The offset runs in JavaScript over this context's GCJ-02, so WGS84 <-> BD-09 batches run its wasm kernel.
     bd09: (o) => {
-      open();
+      const ex = open();
       const mode = gcj02Mode(o, 'bd09');
-      return (bd[mode] ??= guarded(composeBd09(ctx.gcj02({ outsideChina: mode }), mode), () => !e));
+      const js = composeBd09(ctx.gcj02({ outsideChina: mode }), mode);
+      // A module older than 0.6.1: the offset in JavaScript over this context's GCJ-02.
+      return (bd[mode] ??=
+        ex.bd_from_gcj_batch && ex.bd_to_gcj_batch && ex.gcj_forward_batch && ex.gcj_inverse_batch
+          ? buildBd(js, mode)
+          : guarded(js, () => !e));
     },
     dispose,
     [DISPOSE]: dispose,

@@ -1,12 +1,12 @@
 //! Crate root: module wiring and the C-ABI surface (the transverse Mercator
 //! batch exports with scalar/simd dispatch, the GCJ-02 batch exports, and the
-//! fused x/y -> GCJ-02 export, and the Web Mercator batch exports).
+//! fused x/y -> GCJ-02 export, the BD-09 batch exports, and the Web Mercator batch exports).
 //!
 //! Layout: `math` (coefficients/constants + libm scalar wrappers), `simd`
 //! (f64x2 vector math, +simd128 only), `kernel` (UTM series + scalar
 //! kernel), `vkernel` (f64x2 kernel, +simd128 only), `gcj` (GCJ-02 constants
 //! and scalar reference), `vgcj` (f64x2 GCJ-02 kernel, +simd128 only),
-//! `vfused` (f64x2 inverse fused with GCJ-02, +simd128 only), `vwebmerc` (f64x2
+//! `vfused` (f64x2 inverse fused with GCJ-02, +simd128 only), `vbd` (f64x2 BD-09 offset, +simd128 only), `vwebmerc` (f64x2
 //! Web Mercator kernel, +simd128 only), `alloc` (bump
 //! arena), `smoke` (math smoke exports), `tests` (host tests).
 #![cfg_attr(not(test), no_std)]
@@ -22,6 +22,8 @@ mod math;
 #[cfg(target_feature = "simd128")]
 mod simd;
 mod smoke;
+#[cfg(target_feature = "simd128")]
+mod vbd;
 #[cfg(target_feature = "simd128")]
 mod vfused;
 #[cfg(target_feature = "simd128")]
@@ -175,6 +177,42 @@ pub unsafe extern "C" fn tm_gcj_batch(
 ) {
     let k = kernel::make_k_tm(a, f, lon0, k0, feast, fnorth);
     unsafe { vfused::tm_gcj_batch(r(xp, n), r(yp, n), w(lonp, n), w(latp, n), &k, lon0) }
+}
+
+// ---------------------------------------------------------------------------
+// BD-09 batch exports (simd128 only, like GCJ-02): GCJ-02 <-> BD-09 in either mode (`boxed` nonzero for
+// 'passthrough')
+// ---------------------------------------------------------------------------
+
+/// # Safety
+/// Each pointer must be non-null and aligned, even when `n` is 0, and address `n` valid f64s; outputs must not
+/// overlap any other buffer.
+#[cfg(target_feature = "simd128")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn bd_from_gcj_batch(
+    lonp: *const f64,
+    latp: *const f64,
+    olonp: *mut f64,
+    olatp: *mut f64,
+    n: usize,
+    boxed: u32,
+) {
+    unsafe { vbd::from_gcj_batch(r(lonp, n), r(latp, n), w(olonp, n), w(olatp, n), boxed != 0) }
+}
+
+/// # Safety
+/// As `bd_from_gcj_batch`.
+#[cfg(target_feature = "simd128")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn bd_to_gcj_batch(
+    lonp: *const f64,
+    latp: *const f64,
+    olonp: *mut f64,
+    olatp: *mut f64,
+    n: usize,
+    boxed: u32,
+) {
+    unsafe { vbd::to_gcj_batch(r(lonp, n), r(latp, n), w(olonp, n), w(olatp, n), boxed != 0) }
 }
 
 // ---------------------------------------------------------------------------

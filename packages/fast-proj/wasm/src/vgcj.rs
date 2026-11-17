@@ -186,7 +186,7 @@ fn offset<T: Vx, const J: bool>(x: T, y: T, s1: T, c1: T, u1: T, v1: T, cut: f64
 
 /// Loads a pair, reduces lanes outside [-180, 180] by the scalar fmod (rare), and returns the box mask.
 #[inline]
-fn prepare(lon: &[f64], lat: &[f64], i: usize) -> (v128, v128, v128) {
+pub(crate) fn prepare(lon: &[f64], lat: &[f64], i: usize) -> (v128, v128, v128) {
     let mut lon = load_pair(lon, i);
     let lat = load_pair(lat, i);
     if v128_any_true(v128_or(f64x2_gt(lon, spl(180.0)), f64x2_lt(lon, spl(-180.0)))) {

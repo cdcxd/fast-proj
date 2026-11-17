@@ -3,7 +3,7 @@
 
 use crate::math::*;
 use core::arch::wasm32::{
-    f32x4_demote_f64x2_zero, f64x2, f64x2_abs, f64x2_add, f64x2_div, f64x2_eq, f64x2_ge,
+    f32x4_demote_f64x2_zero, f64x2, f64x2_abs, f64x2_add, f64x2_div, f64x2_floor, f64x2_eq, f64x2_ge,
     f64x2_gt, f64x2_le, f64x2_lt, f64x2_mul, f64x2_neg, f64x2_ne, f64x2_nearest, f64x2_pmax,
     f64x2_pmin, f64x2_splat, f64x2_sqrt, f64x2_sub, i32x4_trunc_sat_f32x4,
     i64x2_add, i64x2_extend_low_i32x4, i64x2_lt, i64x2_shl, i64x2_splat, i64x2_sub,
@@ -27,6 +27,9 @@ pub trait Vx: Copy {
     fn sqrt(self) -> Self;
     fn abs(self) -> Self;
     fn neg(self) -> Self;
+    /// Round to nearest, ties to even.
+    fn nearest(self) -> Self;
+    fn floor(self) -> Self;
     fn gt(self, o: Self) -> Self;
     fn lt(self, o: Self) -> Self;
     fn le(self, o: Self) -> Self;
@@ -74,6 +77,14 @@ impl Vx for v128 {
     #[inline(always)]
     fn neg(self) -> Self {
         f64x2_neg(self)
+    }
+    #[inline(always)]
+    fn nearest(self) -> Self {
+        f64x2_nearest(self)
+    }
+    #[inline(always)]
+    fn floor(self) -> Self {
+        f64x2_floor(self)
     }
     #[inline(always)]
     fn gt(self, o: Self) -> Self {
@@ -153,6 +164,14 @@ impl Vx for [v128; 2] {
     #[inline(always)]
     fn neg(self) -> Self {
         [self[0].neg(), self[1].neg()]
+    }
+    #[inline(always)]
+    fn nearest(self) -> Self {
+        [self[0].nearest(), self[1].nearest()]
+    }
+    #[inline(always)]
+    fn floor(self) -> Self {
+        [self[0].floor(), self[1].floor()]
     }
     #[inline(always)]
     fn gt(self, o: Self) -> Self {

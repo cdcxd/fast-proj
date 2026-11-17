@@ -39,16 +39,18 @@ GCJ-02 against **gcoord 1.0.7**:
 | GCJ-02 → WGS84 | JavaScript  | **14.8×** | **12.7×** |    **13.0×** |
 |                | WebAssembly | **24.5×** | **17.1×** |    **20.0×** |
 
-BD-09 against **gcoord 1.0.7** (GCJ-02 ↔ BD-09 runs in JavaScript in both backends):
+BD-09 against **gcoord 1.0.7**:
 
 | Operation      | Backend     |   Node 24 |   Bun 1.4 | Chromium 156 |
 | -------------- | ----------- | --------: | --------: | -----------: |
-| WGS84 → BD-09  | JavaScript  | **19.6×** | **14.1×** |    **14.1×** |
-|                | WebAssembly | **22.8×** | **16.2×** |    **16.5×** |
-| BD-09 → WGS84  | JavaScript  | **10.2×** |  **8.8×** |     **9.2×** |
-|                | WebAssembly | **13.2×** | **10.5×** |    **11.9×** |
-| GCJ-02 → BD-09 | JavaScript  | **37.4×** | **21.9×** |    **22.3×** |
-| BD-09 → GCJ-02 | JavaScript  | **15.5×** | **10.7×** |     **8.8×** |
+| WGS84 → BD-09  | JavaScript  | **19.0×** | **13.9×** |    **13.6×** |
+|                | WebAssembly | **24.1×** | **19.6×** |    **18.8×** |
+| BD-09 → WGS84  | JavaScript  |  **9.9×** |  **8.8×** |     **9.0×** |
+|                | WebAssembly | **15.8×** | **12.5×** |    **14.5×** |
+| GCJ-02 → BD-09 | JavaScript  | **34.5×** | **21.1×** |    **20.2×** |
+|                | WebAssembly | **45.7×** | **31.7×** |    **26.9×** |
+| BD-09 → GCJ-02 | JavaScript  | **14.5×** | **10.6×** |     **8.4×** |
+|                | WebAssembly | **23.4×** | **16.3×** |    **14.3×** |
 
 UTM zone 50 with `geographic: GCJ02` against proj4 + gcoord:
 
