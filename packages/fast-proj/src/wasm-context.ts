@@ -385,9 +385,11 @@ export function wasmContext(exports: Exports): WasmContext {
     bd09: (o) => {
       const ex = open();
       const mode = gcj02Mode(o, 'bd09');
+      const cached = bd[mode];
+      if (cached) return cached;
       const js = composeBd09(ctx.gcj02({ outsideChina: mode }), mode);
       // A module older than 0.6.1: the offset in JavaScript over this context's GCJ-02.
-      return (bd[mode] ??=
+      return (bd[mode] =
         ex.bd_from_gcj_batch && ex.bd_to_gcj_batch && ex.gcj_forward_batch && ex.gcj_inverse_batch
           ? buildBd(js, mode)
           : guarded(js, () => !e));

@@ -7,7 +7,7 @@ and WGS84 ↔ GCJ-02 ↔ BD-09 for maps of China, with typed-array APIs and an o
   ≈6e-9 m / 1.3e-13° vs proj4.
 - GCJ-02: the published formula, 7–20× faster than gcoord (16–29× with WebAssembly); the inverse is accurate to 3e-12°
   (gcoord: 1e-6°).
-- BD-09 (Baidu), from WGS84 or directly from GCJ-02: 9–19× faster than gcoord through WGS84 (12–24× with
+- BD-09 (Baidu), from WGS84 or directly from GCJ-02: 9–19× faster than gcoord through WGS84 (13–24× with
   WebAssembly); both directions within 1.5e-14° of the formula (gcoord's inverse: 2e-6°).
 - Web Mercator (EPSG:3857): within five ulps of the correctly rounded exact value up to the poles; no clamping at ±85.05°.
 - No per-point allocations in the batch APIs; optional output buffers, in-place conversion.

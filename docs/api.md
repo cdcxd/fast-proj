@@ -374,7 +374,7 @@ wasm.dispose(); // or: using wasm = await loadWasm();
   the JavaScript kernel); `'transform'` mode runs the JavaScript kernel. Each context returns one converter per mode.
 - **BD-09.** The context's `bd09()` batch methods run wasm kernels: `toGcj02`/`fromGcj02` in both modes, and
   `toWgs84`/`fromWgs84` in `'passthrough'` mode as the wasm GCJ-02 kernel and the offset in one call. In
-  `'transform'` mode, WGS84 <-> BD-09 runs the JavaScript GCJ-02 kernel and the wasm offset. The offset matches the
+  `'transform'` mode, WGS84 <-> BD-09 runs in JavaScript. The offset matches the
   JavaScript kernel bit for bit, so results differ from the JavaScript backend only by its GCJ-02 step. As the
   `geographic` of this context's `tmerc`/`utm`, x/y -> BD-09 runs as one call in `'passthrough'` mode. With a
   `source` older than 0.6.1, the offset runs in JavaScript.
