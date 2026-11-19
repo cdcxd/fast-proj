@@ -64,10 +64,11 @@ const offsets: { passthrough?: Offset; transform?: Offset } = {};
 
 // box: 'passthrough' mode, which returns points outside the China box unchanged (longitude reduced), as GCJ-02 does.
 function makeOffset(box: boolean): Offset {
-  let rx = 0;
-  let ry = 0;
+  // Kernel results. A double in a closure variable is boxed on every write (V8 allocates a HeapNumber), so the
+  // kernels return through a typed array: res[0], res[1].
+  const res = new Float64Array(2);
 
-  // rx, ry = sin, cos of 3000 deg degrees, by quarter turns taken off in degrees: 3000 deg rounds by under 6e-11
+  // res[0], res[1] = sin, cos of 3000 deg degrees, by quarter turns taken off in degrees: 3000 deg rounds by under 6e-11
   // degrees (1e-12 radians) up to 180, the rest is exact, and the offset needs these to about 1e-12. Math.sin and
   // Math.cos of thousands of radians cost twice as much.
   // @kernel
@@ -81,8 +82,8 @@ function makeOffset(box: boolean): Offset {
     const cs = 1 - 0.5 * z + z * z * (C1 + z * (C2 + z * (C3 + z * (C4 + z * C5))));
     // Rotated by q quarter turns without branches, which random quadrants would mispredict.
     const o = q & 1;
-    rx = (1 - (q & 2)) * (sn + o * (cs - sn));
-    ry = (1 - ((q + 1) & 2)) * (cs + o * (sn - cs));
+    res[0] = (1 - (q & 2)) * (sn + o * (cs - sn));
+    res[1] = (1 - ((q + 1) & 2)) * (cs + o * (sn - cs));
   }
 
   // GCJ-02 -> BD-09. Latitudes beyond +-90, in or out, give NaN in 'transform' mode.
@@ -90,13 +91,13 @@ function makeOffset(box: boolean): Offset {
   function fromGcj02(lon: number, lat: number): void {
     if (lon > 180 || lon < -180) lon = reduce(lon);
     if (box && !(lon >= LON_MIN && lon <= LON_MAX && lat >= LAT_MIN && lat <= LAT_MAX)) {
-      rx = lon;
-      ry = lat;
+      res[0] = lon;
+      res[1] = lat;
       return;
     }
     if (!(lat >= -90 && lat <= 90)) {
-      rx = NaN;
-      ry = NaN;
+      res[0] = NaN;
+      res[1] = NaN;
       return;
     }
     // The offset differs at longitudes 180 and -180; use 180 for both, as GCJ-02 does.
@@ -110,7 +111,7 @@ function makeOffset(box: boolean): Offset {
     let cx = 0;
     // oxlint-disable-next-line no-unused-vars -- cos(lat K) and sin(lon K), which the forward doesn't use
     let cl, sx;
-    // @inline turn(lat); rx = sl; ry = cl
+    // @inline turn(lat); res[0] = sl; res[1] = cl
     {
       const deg = lat;
       const t = 3000 * deg;
@@ -139,7 +140,7 @@ function makeOffset(box: boolean): Offset {
       cl = (1 - ((q + 1) & 2)) * (cs + o * (sn - cs));
     }
     // @end
-    // @inline turn(lon); rx = sx; ry = cx
+    // @inline turn(lon); res[0] = sx; res[1] = cx
     {
       const deg = lon;
       const t = 3000 * deg;
@@ -179,13 +180,13 @@ function makeOffset(box: boolean): Offset {
     const ps = sa + (sa * cm + ca * sd);
     const shifted = lat + (lat * cm + lon * sd + w * ps + DLAT);
     if (Math.abs(shifted) > 90) {
-      rx = NaN;
-      ry = NaN;
+      res[0] = NaN;
+      res[1] = NaN;
       return;
     }
     const x = lon + (lon * cm - lat * sd + w * pc + DLON);
-    rx = x > 180 ? x - 360 : x;
-    ry = shifted;
+    res[0] = x > 180 ? x - 360 : x;
+    res[1] = shifted;
   }
 
   // BD-09 -> GCJ-02: Newton steps on F(w) = (lon, lat), F the forward, from w = (lon, lat) - (0.0065, 0.006). The
@@ -195,13 +196,13 @@ function makeOffset(box: boolean): Offset {
   function toGcj02(lon: number, lat: number): void {
     if (lon > 180 || lon < -180) lon = reduce(lon);
     if (box && !(lon >= LON_MIN && lon <= LON_MAX && lat >= LAT_MIN && lat <= LAT_MAX)) {
-      rx = lon;
-      ry = lat;
+      res[0] = lon;
+      res[1] = lat;
       return;
     }
     if (!(lat >= -90 && lat <= 90)) {
-      rx = NaN;
-      ry = NaN;
+      res[0] = NaN;
+      res[1] = NaN;
       return;
     }
     let gx = lon;
@@ -214,7 +215,7 @@ function makeOffset(box: boolean): Offset {
       let cy = 0;
       let sx = 0;
       let cx = 0;
-      // @inline turn(y); rx = sy; ry = cy
+      // @inline turn(y); res[0] = sy; res[1] = cy
       {
         const deg = y;
         const t = 3000 * deg;
@@ -243,7 +244,7 @@ function makeOffset(box: boolean): Offset {
         cy = (1 - ((q + 1) & 2)) * (cs + o * (sn - cs));
       }
       // @end
-      // @inline turn(x); rx = sx; ry = cx
+      // @inline turn(x); res[0] = sx; res[1] = cx
       {
         const deg = x;
         const t = 3000 * deg;
@@ -323,22 +324,22 @@ function makeOffset(box: boolean): Offset {
       gx += 360;
     }
     if (x > -180 && x <= 180 && y >= -90 && y <= 90) {
-      rx = x;
-      ry = y;
+      res[0] = x;
+      res[1] = y;
     } else {
-      rx = NaN;
-      ry = NaN;
+      res[0] = NaN;
+      res[1] = NaN;
     }
   }
 
   return {
     fromGcj02Point(lon, lat) {
       fromGcj02(lon, lat);
-      return [rx, ry];
+      return [res[0]!, res[1]!];
     },
     toGcj02Point(lon, lat) {
       toGcj02(lon, lat);
-      return [rx, ry];
+      return [res[0]!, res[1]!];
     },
   };
 }
@@ -355,7 +356,7 @@ function fromGcj02Batch(
   end: number,
 ): void {
   for (let j = 0; j < end; j += step) {
-    // @inline fromGcj02(a[j]!, b[j + o1]!); rx = outA[j]; ry = outB[j + o1]
+    // @inline fromGcj02(a[j]!, b[j + o1]!); res[0] = outA[j]; res[1] = outB[j + o1]
     {
       let lon = a[j]!;
       const lat = b[j + o1]!;
@@ -465,7 +466,7 @@ function toGcj02Batch(
   end: number,
 ): void {
   for (let j = 0; j < end; j += step) {
-    // @inline toGcj02(a[j]!, b[j + o1]!); rx = outA[j]; ry = outB[j + o1]
+    // @inline toGcj02(a[j]!, b[j + o1]!); res[0] = outA[j]; res[1] = outB[j + o1]
     {
       let lon = a[j]!;
       const lat = b[j + o1]!;

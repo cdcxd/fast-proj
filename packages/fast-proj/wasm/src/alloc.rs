@@ -26,11 +26,13 @@ pub extern "C" fn alloc(n_f64: usize) -> *mut f64 {
     }
 }
 
+#[cfg(feature = "large-heap")]
 #[unsafe(no_mangle)]
 pub extern "C" fn heap_reset() {
     unsafe { OFFSET = 0 }
 }
 
+#[cfg(feature = "large-heap")]
 #[unsafe(no_mangle)]
 pub extern "C" fn heap_used() -> usize {
     unsafe { OFFSET }

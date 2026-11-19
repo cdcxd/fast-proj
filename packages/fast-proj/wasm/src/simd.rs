@@ -331,6 +331,8 @@ pub fn vatan2(y: v128, x: v128) -> v128 {
     v128_bitselect(spl(f64::NAN), m, nan_in)
 }
 
+// Used only by the bench exports (smoke.rs).
+#[cfg(feature = "large-heap")]
 pub fn vsincos(x: v128) -> (v128, v128) {
     vsincos_p::<false>(x)
 }
@@ -375,6 +377,8 @@ fn vsincos_p<const EO: bool>(x: v128) -> (v128, v128) {
 /// exp with the exponent k clamped to +-1000 (|x| <= ~693 covers the UTM
 /// kernel and the diagnostics suite; beyond that, classification differs
 /// from libm — documented in RESULTS.md).
+// Used only by the bench exports (smoke.rs).
+#[cfg(feature = "large-heap")]
 pub fn vexp(x: v128) -> v128 {
     vexp_p::<false>(x)
 }
@@ -399,6 +403,8 @@ fn vexp_p<const EO: bool>(x: v128) -> v128 {
 
 /// log for positive normals; mantissa normalized into [sqrt(0.5), sqrt(2)),
 /// the L fit domain.
+// Used only by the bench exports (smoke.rs).
+#[cfg(feature = "large-heap")]
 pub fn vlog(x: v128) -> v128 {
     vlog_p::<false>(x)
 }
@@ -460,6 +466,8 @@ fn i64x2_extract_lane1(v: v128) -> i64 {
 }
 
 /// log1p(t) for t in [-0.75, 2048]; ~1 ulp.
+// Used only by the bench exports (smoke.rs).
+#[cfg(feature = "large-heap")]
 pub fn vlog1p(t: v128) -> v128 {
     vlog1p_p::<false>(t)
 }

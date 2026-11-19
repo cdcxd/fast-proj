@@ -135,8 +135,9 @@ export function transverseMercator(
     bp2 = b3 - 3 * b5,
     bp3 = b4 - 4 * b6;
 
-  let rx = 0;
-  let ry = 0;
+  // Kernel results. A double in a closure variable is boxed on every write (V8 allocates a HeapNumber), so the
+  // kernels return through a typed array: res[0], res[1].
+  const res = new Float64Array(2);
 
   // @kernel
   function forward(lonDeg: number, latDeg: number): void {
@@ -197,8 +198,8 @@ export function transverseMercator(
       cl = Math.cos(lam);
     }
     if (!(cl > 1e-15)) {
-      rx = NaN;
-      ry = NaN;
+      res[0] = NaN;
+      res[1] = NaN;
       return;
     }
 
@@ -249,8 +250,8 @@ export function transverseMercator(
     const sr = s2 * ch;
     const si = c2x * sh;
 
-    rx = fe + kA * (etap + tr * si + ti * sr);
-    ry = fn + kA * (xip + tr * sr - ti * si);
+    res[0] = fe + kA * (etap + tr * si + ti * sr);
+    res[1] = fn + kA * (xip + tr * sr - ti * si);
   }
 
   // @kernel
@@ -336,8 +337,8 @@ export function transverseMercator(
     let lon = (lon0 + lam) * R2D;
     if (lon > 180) lon -= 360;
     else if (lon < -180) lon += 360;
-    rx = lon;
-    ry = phi * R2D;
+    res[0] = lon;
+    res[1] = phi * R2D;
   }
 
   // Batch loops over element j of a and b[j + o1], every `step` up to `end`, written to the same places in outA and
@@ -371,7 +372,7 @@ export function transverseMercator(
       lon0L = lon0;
     // @end
     for (let j = 0; j < end; j += step) {
-      // @inline inverse(a[j]!, b[j + o1]!); rx = outA[j]; ry = outB[j + o1]; locals
+      // @inline inverse(a[j]!, b[j + o1]!); res[0] = outA[j]; res[1] = outB[j + o1]; locals
       {
         const x = a[j]!;
         const y = b[j + o1]!;
@@ -506,7 +507,7 @@ export function transverseMercator(
       lon0L = lon0;
     // @end
     for (let j = 0; j < end; j += step) {
-      // @inline forward(a[j]!, b[j + o1]!); rx = outA[j]; ry = outB[j + o1]; locals
+      // @inline forward(a[j]!, b[j + o1]!); res[0] = outA[j]; res[1] = outB[j + o1]; locals
       {
         let lonDeg = a[j]!;
         const latDeg = b[j + o1]!;
@@ -693,11 +694,11 @@ export function transverseMercator(
     },
     toLonLatPoint(x, y) {
       inverse(x, y);
-      return [rx, ry];
+      return [res[0]!, res[1]!];
     },
     fromLonLatPoint(lon, lat) {
       forward(lon, lat);
-      return [rx, ry];
+      return [res[0]!, res[1]!];
     },
   };
   // Keyed by the method: each converter needs its own toLonLat closure, or the last one registered wins.

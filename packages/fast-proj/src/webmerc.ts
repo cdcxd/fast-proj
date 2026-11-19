@@ -79,15 +79,17 @@ export function parseWebMercator(options: WebMercatorOptions = {}): [Projection,
 }
 
 function sphericalMercator(): Projection {
-  let rx = 0;
-  let ry = 0;
+  // Kernel results. A double in a closure variable is boxed on every write (V8 allocates a HeapNumber), so the
+  // kernels return through a typed array: res[0], res[1].
+  const res = new Float64Array(2);
 
   // @kernel
+  // oxlint-disable-next-line no-unused-vars -- only ever copied in
   function wmForward(lonDeg: number, latDeg: number): void {
     // The poles have no finite y (tan(pi/2) rounds to a finite 1.6e16); infinite longitudes have no x.
     if (!(latDeg < 90 && latDeg > -90 && Math.abs(lonDeg) < Infinity)) {
-      rx = NaN;
-      ry = NaN;
+      res[0] = NaN;
+      res[1] = NaN;
       return;
     }
     // Whole turns first, exactly, as in tmerc.ts.
@@ -96,7 +98,7 @@ function sphericalMercator(): Projection {
       if (lonDeg > 180) lonDeg -= 360;
       else if (lonDeg < -180) lonDeg += 360;
     }
-    rx = K * lonDeg;
+    res[0] = K * lonDeg;
     // y = R ln tan(pi/4 + phi/2) = R ln((c + s) / (c - s)) for s, c = sin, cos(phi/2): log1p for the accuracy near the
     // equator; poleward of 45, R ln(c' / s') from half the colatitude, which is exact there (phi in radians would lose
     // digits as it nears pi/2).
@@ -106,7 +108,7 @@ function sphericalMercator(): Projection {
     const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
     const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
     // latDeg = 0 keeps its sign.
-    ry =
+    res[1] =
       alat <= 45
         ? latDeg === 0
           ? latDeg
@@ -115,11 +117,12 @@ function sphericalMercator(): Projection {
   }
 
   // @kernel
+  // oxlint-disable-next-line no-unused-vars -- only ever copied in
   function wmInverse(x: number, y: number): void {
     // An infinite y would give ±90; keep infinite input NaN, as in the other projections.
     if (!(Math.abs(x) < Infinity && Math.abs(y) < Infinity)) {
-      rx = NaN;
-      ry = NaN;
+      res[0] = NaN;
+      res[1] = NaN;
       return;
     }
     let lon = x / K;
@@ -128,7 +131,7 @@ function sphericalMercator(): Projection {
       if (lon > 180) lon -= 360;
       else if (lon < -180) lon += 360;
     }
-    rx = lon;
+    res[0] = lon;
     // phi = gd(v) for v = |y| / R, from exp(r), v = k ln 2 + r. Below v = asinh(1), where phi = pi/4, phi = 2 atan(m /
     // (m + 2)) with m = expm1(v) = 2^k (1 + expm1(r)) - 1, an exact cancellation for k = 0; above, phi = pi/2 - 2
     // atan(exp(-v)) with exp(-v) = 2^-k (1 + expm1(-r)). Either atan argument is within tan(pi/8). Beyond v = 40, phi
@@ -152,7 +155,7 @@ function sphericalMercator(): Projection {
     const w = 2 * (u + u * t * (ae + t * ao));
     const g = near ? w : PI_2 - (w - PI_2_LO);
     // y = -0 keeps its sign.
-    ry = g * Math.sign(y) * R2D;
+    res[1] = g * Math.sign(y) * R2D;
   }
 
   return {
@@ -186,12 +189,112 @@ function sphericalMercator(): Projection {
       forwardBatch(lonlat, lonlat, out, out, 1, 2, n);
       return out;
     },
+    // Copies of the kernels, whose module constants a copy takes as literals: up to 2x faster than calling them in V8.
     toLonLatPoint(x, y) {
-      wmInverse(x, y);
+      let rx = 0;
+      let ry = 0;
+      // @inline wmInverse(x, y); res[0] = rx; res[1] = ry; return = return [rx, ry]
+      {
+        if (!(Math.abs(x) < Infinity && Math.abs(y) < Infinity)) {
+          rx = NaN;
+          ry = NaN;
+          return [rx, ry];
+        }
+        let lon = x / 111319.49079327358;
+        if (lon > 180 || lon < -180) {
+          lon %= 360;
+          if (lon > 180) lon -= 360;
+          else if (lon < -180) lon += 360;
+        }
+        rx = lon;
+        let v = Math.abs(y * (1 / 6378137));
+        if (v > 40) v = 40;
+        const k = Math.round(v * Math.LOG2E);
+        const r = v - k * 0.6931471803691238 - k * 1.9082149292705877e-10;
+        const r2 = r * r;
+        const qe =
+          0.5000000000000001 +
+          r2 *
+            (0.04166666666662416 +
+              r2 * (0.0013888888917198588 + r2 * (0.000024801521319879672 + r2 * 2.762007691611333e-7)));
+        const qo =
+          0.1666666666666667 +
+          r2 *
+            (0.008333333333326141 +
+              r2 * (0.00019841269874802173 + r2 * (0.000002755725542387984 + r2 * 2.510520706464424e-8)));
+        const near = v < 0.881373587019543;
+        const rr = near ? r : -r;
+        const q = rr + r2 * (qe + rr * qo);
+        const s = POW2[k]!;
+        const u = near ? (s * q + (s - 1)) / (s * q + (s + 1)) : (1 + q) / s;
+        const t = u * u;
+        const t2 = t * t;
+        const ae =
+          -0.3333333333333325 +
+          t2 *
+            (-0.14285714266539506 +
+              t2 * (-0.09090853344129342 + t2 * (-0.06649743882366685 + t2 * -0.04485655846626989)));
+        const ao =
+          0.19999999999901275 +
+          t2 *
+            (0.11111109662900268 + t2 * (0.07691068361407245 + t2 * (0.05737080629289906 + t2 * 0.022780530526983894)));
+        const w = 2 * (u + u * t * (ae + t * ao));
+        const g = near ? w : 1.5707963267948966 - (w - 6.123233995736766e-17);
+        ry = g * Math.sign(y) * 57.29577951308232;
+      }
+      // @end
       return [rx, ry];
     },
     fromLonLatPoint(lon, lat) {
-      wmForward(lon, lat);
+      let rx = 0;
+      let ry = 0;
+      // @inline wmForward(lon, lat); res[0] = rx; res[1] = ry; return = return [rx, ry]
+      {
+        let lonDeg = lon;
+        const latDeg = lat;
+        if (!(latDeg < 90 && latDeg > -90 && Math.abs(lonDeg) < Infinity)) {
+          rx = NaN;
+          ry = NaN;
+          return [rx, ry];
+        }
+        if (lonDeg > 180 || lonDeg < -180) {
+          lonDeg %= 360;
+          if (lonDeg > 180) lonDeg -= 360;
+          else if (lonDeg < -180) lonDeg += 360;
+        }
+        rx = 111319.49079327358 * lonDeg;
+        const alat = Math.abs(latDeg);
+        const hx = 0.5 * 0.017453292519943295 * (alat <= 45 ? latDeg : 90 - alat);
+        const z = hx * hx;
+        const sn =
+          hx +
+          hx *
+            z *
+            (-0.16666666666666632 +
+              z *
+                (0.00833333333332249 +
+                  z *
+                    (-0.0001984126982985795 +
+                      z * (0.0000027557313707070068 + z * (-2.5050760253406863e-8 + z * 1.58969099521155e-10)))));
+        const cs =
+          1 -
+          0.5 * z +
+          z *
+            z *
+            (0.0416666666666666 +
+              z *
+                (-0.001388888888887411 +
+                  z *
+                    (0.00002480158728947673 +
+                      z * (-2.7557314351390663e-7 + z * (2.087572321298175e-9 + z * -1.1359647557788195e-11)))));
+        ry =
+          alat <= 45
+            ? latDeg === 0
+              ? latDeg
+              : 6378137 * Math.log1p((2 * sn) / (cs - sn))
+            : 6378137 * Math.sign(latDeg) * Math.log(cs / sn);
+      }
+      // @end
       return [rx, ry];
     },
   } satisfies Impl<Projection>;
@@ -208,7 +311,7 @@ function inverseBatch(
   end: number,
 ): void {
   for (let j = 0; j < end; j += step) {
-    // @inline wmInverse(a[j]!, b[j + o1]!); rx = outA[j]; ry = outB[j + o1]
+    // @inline wmInverse(a[j]!, b[j + o1]!); res[0] = outA[j]; res[1] = outB[j + o1]
     {
       const x = a[j]!;
       const y = b[j + o1]!;
@@ -273,7 +376,7 @@ function forwardBatch(
   end: number,
 ): void {
   for (let j = 0; j < end; j += step) {
-    // @inline wmForward(a[j]!, b[j + o1]!); rx = outA[j]; ry = outB[j + o1]
+    // @inline wmForward(a[j]!, b[j + o1]!); res[0] = outA[j]; res[1] = outB[j + o1]
     {
       let lonDeg = a[j]!;
       const latDeg = b[j + o1]!;

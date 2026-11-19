@@ -21,8 +21,9 @@ const S35 = K.S35;
 export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => FusedInverse {
   const all = mode === 'transform';
 
-  let rx = 0;
-  let ry = 0;
+  // Kernel results. A double in a closure variable is boxed on every write (V8 allocates a HeapNumber), so the
+  // kernels return through a typed array: res[0], res[1].
+  const res = new Float64Array(2);
 
   function inDomain(lon: number, lat: number): boolean {
     return all ? lat > -90 && lat < 90 : lon >= LON_MIN && lon <= LON_MAX && lat >= LAT_MIN && lat <= LAT_MAX;
@@ -43,7 +44,7 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
       let wp = 0;
       let offLon = 0;
       let offLat = 0;
-      // @inline inverse(x, y); rx = wl; ry = wp; scope = open
+      // @inline inverse(x, y); res[0] = wl; res[1] = wp; scope = open
       const xi = (y - fn) * invKA;
       const eta = (x - fe) * invKA;
 
@@ -143,8 +144,8 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
       wp = phi * 57.29577951308232;
       // @end
       if (!inDomain(wl, wp)) {
-        rx = all ? NaN : wl;
-        ry = all ? NaN : wp;
+        res[0] = all ? NaN : wl;
+        res[1] = all ? NaN : wp;
         return;
       }
       if (wl === -180) wl = 180;
@@ -170,7 +171,7 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
       const gc = c3 * C3 - s3 * S3;
       const gx = wl - 105;
       const gy = wp - 35;
-      // @inline offset(gx, gy, gs, gc, gu, gv); ox = offLon; oy = offLat; x = gx; y = gy; s1 = gs; c1 = gc; u1 = gu; v1 = gv; s2 = gs2; u3 = gu3
+      // @inline offset(gx, gy, gs, gc, gu, gv); res[2] = offLon; res[3] = offLat; x = gx; y = gy; s1 = gs; c1 = gc; u1 = gu; v1 = gv; s2 = gs2; u3 = gu3
       {
         const gs2 = 2 * gs * gc;
         const c2 = 1 - 2 * gs * gs;
@@ -239,24 +240,24 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
       }
       // @end
       if (!all) {
-        rx = wl + offLon;
-        ry = wp + offLat;
+        res[0] = wl + offLon;
+        res[1] = wp + offLat;
         return;
       }
       const shifted = wp + offLat;
       if (Math.abs(shifted) <= 90) {
-        rx = reduce(wl + offLon);
-        ry = shifted;
+        res[0] = reduce(wl + offLon);
+        res[1] = shifted;
       } else {
-        rx = NaN;
-        ry = NaN;
+        res[0] = NaN;
+        res[1] = NaN;
       }
     }
 
     return {
       batch(a, b, outA, outB, o1, step, end) {
         for (let j = 0; j < end; j += step) {
-          // @inline tmToGcj(a[j]!, b[j + o1]!); rx = outA[j]; ry = outB[j + o1]
+          // @inline tmToGcj(a[j]!, b[j + o1]!); res[0] = outA[j]; res[1] = outB[j + o1]
           {
             const x = a[j]!;
             const y = b[j + o1]!;
@@ -474,7 +475,7 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
       },
       point(x, y) {
         tmToGcj(x, y);
-        return [rx, ry];
+        return [res[0]!, res[1]!];
       },
     };
   }

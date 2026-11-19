@@ -29,6 +29,9 @@ export interface Exports {
   // Absent from builds without simd128 and from modules older than 0.4.0.
   wm_forward_batch?(lon: number, lat: number, x: number, y: number, n: number): void;
   wm_inverse_batch?(x: number, y: number, lon: number, lat: number, n: number): void;
+  // Absent from builds without simd128 and from modules older than 0.6.1.
+  deinterleave?(src: number, a: number, b: number, n: number): void;
+  interleave?(a: number, b: number, dst: number, n: number): void;
 }
 
 const CAP = 1 << 16;
@@ -111,6 +114,12 @@ export function wasmContext(exports: Exports): WasmContext {
     pb = wb.byteOffset,
     pc = wc.byteOffset,
     pd = wd.byteOffset;
+  // wa, wb and wc, wd are adjacent (bump allocator), so each pair holds 2 CAP interleaved values: interleaved input
+  // goes in with one copy and the wasm (de)interleave does the rest.
+  const pair = (p: number, q: number) =>
+    q === p + 8 * CAP && e!.deinterleave && e!.interleave ? new Float64Array(e!.memory.buffer, p, 2 * CAP) : null;
+  let wab = pair(pa, pb);
+  let wcd = pair(pc, pd);
 
   function enter(): Exports {
     if (!e) throw new Error('fast-proj: converter used after its wasm context was disposed');
@@ -142,6 +151,19 @@ export function wasmContext(exports: Exports): WasmContext {
     const ex = enter();
     try {
       const half = src.length / 2;
+      if (wab && wcd && src instanceof Float64Array) {
+        const AB = wab,
+          CD = wcd;
+        for (let i0 = 0; i0 < half; i0 += CAP) {
+          const m = Math.min(CAP, half - i0);
+          CD.set(src.subarray(2 * i0, 2 * (i0 + m)));
+          ex.deinterleave!(pc, pa, pb, m);
+          kernel(ex, m);
+          ex.interleave!(pc, pd, pa, m);
+          out.set(AB.subarray(0, 2 * m), 2 * i0);
+        }
+        return;
+      }
       const A = wa!,
         B = wb!,
         C = wc!,
@@ -278,7 +300,7 @@ export function wasmContext(exports: Exports): WasmContext {
   const dispose = () => {
     if (busy) throw new Error('fast-proj: dispose() during an active call');
     e = null;
-    wa = wb = wc = wd = null;
+    wa = wb = wc = wd = wab = wcd = null;
   };
   const open = () => {
     if (!e) throw new Error('fast-proj: context used after dispose()');

@@ -4,8 +4,9 @@
 // file, or in a file before it in FILES (whose closure must then bind the non-numeric names the kernel reads). Engines
 // optimize a loop with the kernel written out in it much better than one calling a kernel that returns through
 // closure variables (Node and Chromium up to 2×), so the batch loops hold copies and the point methods call the
-// kernel. Options rename identifiers in the copy, parameters included (`rx = out[i]`); `return = ...` replaces a bare
-// `return;` (default `continue;`); `scope = open` leaves out the enclosing block, so code after the region can read
+// kernel. Options rename identifiers or result slots in the copy, parameters included (`x = a[i]`, `res[0] = out[i]`;
+// kernels return through a typed array, as V8 boxes a double written to a closure variable); `return = ...` replaces a
+// bare `return;`, its statement written without the semicolon (default `continue;`); `scope = open` leaves out the enclosing block, so code after the region can read
 // the copy's locals. A kernel's own regions are expanded before it is copied. --check fails if a region is stale.
 //
 // `// @locals name` ... `// @end` before a loop declares the closure constants kernel `name` reads as locals (`kAL =
@@ -123,6 +124,10 @@ function splitArgs(s: string): string[] {
 const REGION = /^(\s*)\/\/ @inline (\w+)\((.*?)\)((?:; [^;]+)*)$/;
 const LOCALS = /^(\s*)\/\/ @locals (\w+)$/;
 
+// A rename's source, as a regex: a name (`rx`) or an element of a closure array (`res[0]`).
+const nameRe = (from: string): string =>
+  `(?<![.\\w$])${from.replace(/[[\]]/g, '\\$&')}${/\w$/.test(from) ? '\\b' : ''}`;
+
 // Names a kernel declares: `const a = ...`, `let a, b;`, `, b = ...`.
 function declaredIn(text: string): Set<string> {
   const out = new Set<string>();
@@ -152,6 +157,8 @@ function closureNames(k: Kernel): string[] {
   for (const m of code.matchAll(/(?<![.\w$])[A-Za-z_$][\w$]*\b(?!\s*:(?!\s*[\w(-]))/g)) {
     const n = m[0];
     if (NOT_FREE.has(n) || declared.has(n) || k.params.includes(n) || k.consts.has(n) || k.mutable.has(n)) continue;
+    // A result slot (`res[0] = ...`), which the copies rename.
+    if (/^\[\d+\]/.test(code.slice(m.index + n.length))) continue;
     names.add(n);
   }
   const out = [...names].toSorted();
@@ -197,19 +204,19 @@ function expand(k: Kernel, name: string, args: string[], opts: [string, string][
   const open = opts.some(([key, v]) => key === 'scope' && v === 'open');
   const pad = open ? '' : '  ';
   const out = open ? [] : ['{'];
-  const exit = opts.find(([key]) => key === 'return')?.[1] ?? 'continue;';
+  // Options are split on semicolons, so a replacement statement is written without its own.
+  const ret = opts.find(([key]) => key === 'return')?.[1];
+  const exit = ret === undefined ? 'continue;' : `${ret};`;
   const renames = opts.filter(([key]) => key !== 'return' && key !== 'scope' && key !== 'locals');
   if (opts.some(([key]) => key === 'locals'))
     for (const n of closureNames(k)) if (!renames.some(([from]) => from === n)) renames.push([n, `${n}L`]);
   for (const [from] of renames)
-    if (!k.params.includes(from) && !new RegExp(`(?<![.\\w$])${from}\\b`).test(text))
+    if (!k.params.includes(from) && !new RegExp(nameRe(from)).test(text))
       throw new Error(`@inline ${name}: rename ${from} matches nothing`);
   // One pass, so a rename's target is never renamed again (s1 = s2; s2 = s3).
   const renamed = new Map(renames);
   if (renamed.size < renames.length) throw new Error(`@inline ${name}: a name renamed twice`);
-  const renameRe = renames.length
-    ? new RegExp(`(?<![.\\w$])(?:${renames.map(([from]) => from).join('|')})\\b`, 'g')
-    : null;
+  const renameRe = renames.length ? new RegExp(renames.map(([from]) => nameRe(from)).join('|'), 'g') : null;
   // The name each parameter is bound to in the copy.
   const bounds = k.params.map((p) => renames.find(([from]) => from === p)?.[1] ?? p);
   // Constants the copy doesn't shadow, as literals; a property name or key (`.K`, `K:`) is left alone.
@@ -235,7 +242,8 @@ function expand(k: Kernel, name: string, args: string[], opts: [string, string][
     if (/\breturn;/.test(line) && nested.includes(true))
       throw new Error(`@inline ${name}: return inside a nested loop or function`);
     for (const [from] of renames)
-      if (new RegExp(`['"\`][^'"\`]*\\b${from}\\b`).test(line)) throw new Error(`@inline ${name}: ${from} in a string`);
+      if (new RegExp(`['"\`][^'"\`]*${nameRe(from)}`).test(line))
+        throw new Error(`@inline ${name}: ${from} in a string`);
     for (const ch of line) {
       if (ch === '{') nested.push(/^\s*(?:for|while|do)\b|=>|\bfunction\b/.test(line));
       if (ch === '}') nested.pop();
