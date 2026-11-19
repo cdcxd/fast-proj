@@ -35,6 +35,7 @@ export interface Exports {
 }
 
 const CAP = 1 << 16;
+const F64 = Float64Array.prototype;
 const DISPOSE: typeof Symbol.dispose = Symbol.dispose ?? (Symbol.for('Symbol.dispose') as typeof Symbol.dispose);
 
 // Wraps a JavaScript converter so it throws once its context is disposed. A wrapped geographic system keeps fusing
@@ -151,12 +152,13 @@ export function wasmContext(exports: Exports): WasmContext {
     const ex = enter();
     try {
       const half = src.length / 2;
-      if (wab && wcd && src instanceof Float64Array) {
+      // Plain Float64Arrays only: a subclass may override subarray or set, and an untyped caller may pass an Array out.
+      if (wab && wcd && Object.getPrototypeOf(src) === F64 && Object.getPrototypeOf(out) === F64) {
         const AB = wab,
           CD = wcd;
         for (let i0 = 0; i0 < half; i0 += CAP) {
           const m = Math.min(CAP, half - i0);
-          CD.set(src.subarray(2 * i0, 2 * (i0 + m)));
+          CD.set((src as Float64Array).subarray(2 * i0, 2 * (i0 + m)));
           ex.deinterleave!(pc, pa, pb, m);
           kernel(ex, m);
           ex.interleave!(pc, pd, pa, m);

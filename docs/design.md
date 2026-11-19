@@ -295,7 +295,7 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
   no faster than the JavaScript kernel, so since 0.1.1 those engines get the JavaScript backend (`backend: 'js'`).
 - The JavaScript kernels are written once, as per-point functions returning through a closure `Float64Array` (`res`);
   the point methods call them, except Web Mercator's, which hold copies too (their module constants as literals: 36-53%
-  faster in V8, Bun even to 7% faster). Each batch method runs one loop per direction with a copy of the kernel in it, shared by separate and
+  faster in V8, 0-7% in Bun). Each batch method runs one loop per direction with a copy of the kernel in it, shared by separate and
   interleaved arrays (element `j` of `a` and `b[j + o1]` every `step`), expanded by `scripts/inline.ts` from `// @inline`
   markers; `build` fails if a copy is stale. The copies are bit-identical to the kernels and measured 23-37% faster for
   `utm` and 28-89% for `gcj02` (Node, Bun, Chromium): engines don't keep a called kernel's closure results in registers.
@@ -335,7 +335,7 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
   compute.
 - Since 0.6.1 an interleaved `Float64Array` goes into the wasm workspace with one `set()` into two adjacent buffers
   (the bump allocator places them back to back; the context checks) and is split and merged in wasm (`deinterleave`,
-  `interleave`: an `i64x2_shuffle` per two points), rather than by a JavaScript loop: 2-8% faster in V8, Bun even.
+  `interleave`: an `i64x2_shuffle` per two points), rather than by a JavaScript loop: 2-7% faster in V8, Bun even.
   Other array-likes take the loop.
 - The bench-only exports (`smoke.rs`'s math batches, `copy_f64`, `noop`, `heap_reset`, `heap_used`) build only with
   `large-heap`, as the bench builds do: the shipped `.wasm` went from 78 to 72 kB (24 to 23 kB gzipped) in 0.6.1,

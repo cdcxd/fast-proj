@@ -16,6 +16,13 @@ type Factories = Pick<WasmContext, 'utm' | 'tmerc'>;
 type Make = (m: Factories, geographic?: Geographic) => Projection;
 const zone1: Make = (m, geographic) => m.utm({ zone: 1, geographic });
 
+// Element-wise Object.is mismatches (toEqual is slow at this size).
+const diff = (a: ArrayLike<number>, b: ArrayLike<number>) => {
+  let d = Math.abs(a.length - b.length);
+  for (let i = 0; i < Math.min(a.length, b.length); i++) if (!Object.is(a[i], b[i])) d++;
+  return d;
+};
+
 describe('loadWasm', () => {
   it('accepts a URL, bytes or a compiled module', async () => {
     const bytes = readFileSync(url);
@@ -110,6 +117,47 @@ describe('loadWasm', () => {
       max = Math.max(max, Math.abs(inter[2 * i]! - js.x[i]!), Math.abs(inter[2 * i + 1]! - js.y[i]!));
     }
     expect(max).toBeLessThan(5e-9);
+  });
+
+  it('splits interleaved Float64Arrays in wasm, bit for bit with separate arrays', async () => {
+    const ctx = await loadWasm({ source: url });
+    const p = ctx.utm({ zone: 50 });
+    class Sub extends Float64Array {
+      override subarray(): never {
+        throw new Error('not called');
+      }
+    }
+    for (const n of [0, 1, 3, 65536, 65537, 131075]) {
+      const ll = new Float64Array(2 * n + 2);
+      for (let i = 0; i < n + 1; i++) {
+        ll[2 * i] = 100 + ((i * 0.618034) % 30);
+        ll[2 * i + 1] = -60 + ((i * 0.414214) % 120);
+      }
+      // Input at a nonzero byteOffset.
+      const src = ll.subarray(2, 2 * n + 2);
+      const sep = p.fromLonLat(
+        Float64Array.from({ length: n }, (_, i) => src[2 * i]!),
+        Float64Array.from({ length: n }, (_, i) => src[2 * i + 1]!),
+      );
+      const want = new Float64Array(2 * n);
+      for (let i = 0; i < n; i++) {
+        want[2 * i] = sep.x[i]!;
+        want[2 * i + 1] = sep.y[i]!;
+      }
+      expect(diff(p.fromLonLatInterleaved(src), want)).toBe(0);
+      const inPlace = src.slice();
+      expect(p.fromLonLatInterleaved(inPlace, inPlace)).toBe(inPlace);
+      expect(diff(inPlace, want)).toBe(0);
+      const out = new Float64Array(2 * n + 4).subarray(1);
+      p.fromLonLatInterleaved(src, out);
+      expect(diff(out.subarray(0, 2 * n), want)).toBe(0);
+      // A subclass or an untyped Array out takes the JavaScript loop.
+      expect(diff(p.fromLonLatInterleaved(Sub.from(src)), want)).toBe(0);
+      const arr = Array.from({ length: 2 * n }, () => 0) as unknown as Float64Array;
+      p.fromLonLatInterleaved(src, arr);
+      expect(diff(arr, want)).toBe(0);
+    }
+    ctx.dispose();
   });
 
   it('ships the wasm gcj02 kernel', async () => {

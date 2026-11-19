@@ -4,7 +4,7 @@
 // file, or in a file before it in FILES (whose closure must then bind the non-numeric names the kernel reads). Engines
 // optimize a loop with the kernel written out in it much better than one calling a kernel that returns through
 // closure variables (Node and Chromium up to 2×), so the batch loops hold copies and the point methods call the
-// kernel. Options rename identifiers or result slots in the copy, parameters included (`x = a[i]`, `res[0] = out[i]`;
+// kernel (Web Mercator's hold copies too). Options rename identifiers or result slots in the copy, parameters included (`x = a[i]`, `res[0] = out[i]`;
 // kernels return through a typed array, as V8 boxes a double written to a closure variable); `return = ...` replaces a
 // bare `return;`, its statement written without the semicolon (default `continue;`); `scope = open` leaves out the enclosing block, so code after the region can read
 // the copy's locals. A kernel's own regions are expanded before it is copied. --check fails if a region is stale.
@@ -125,8 +125,7 @@ const REGION = /^(\s*)\/\/ @inline (\w+)\((.*?)\)((?:; [^;]+)*)$/;
 const LOCALS = /^(\s*)\/\/ @locals (\w+)$/;
 
 // A rename's source, as a regex: a name (`rx`) or an element of a closure array (`res[0]`).
-const nameRe = (from: string): string =>
-  `(?<![.\\w$])${from.replace(/[[\]]/g, '\\$&')}${/\w$/.test(from) ? '\\b' : ''}`;
+const nameRe = (from: string): string => `(?<![.\\w$])${from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w$])`;
 
 // Names a kernel declares: `const a = ...`, `let a, b;`, `, b = ...`.
 function declaredIn(text: string): Set<string> {
@@ -157,8 +156,8 @@ function closureNames(k: Kernel): string[] {
   for (const m of code.matchAll(/(?<![.\w$])[A-Za-z_$][\w$]*\b(?!\s*:(?!\s*[\w(-]))/g)) {
     const n = m[0];
     if (NOT_FREE.has(n) || declared.has(n) || k.params.includes(n) || k.consts.has(n) || k.mutable.has(n)) continue;
-    // A result slot (`res[0] = ...`), which the copies rename.
-    if (/^\[\d+\]/.test(code.slice(m.index + n.length))) continue;
+    // A slot of the kernels' result array (`res[0] = ...`), which the copies rename.
+    if (n === 'res' && /^\[\d+\]/.test(code.slice(m.index + n.length))) continue;
     names.add(n);
   }
   const out = [...names].toSorted();
