@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="492" viewBox="0 0 960 492" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" role="img">
+<title>Single-point calls</title>
+<rect width="960" height="492" rx="8" fill="#1a1a19"/>
+<text x="20" y="36" font-size="17" font-weight="600" fill="#f0efec">Single-point calls</text>
+<text x="20" y="58" font-size="13" fill="#c3c2b7">Times faster than the baseline library, one point per call (higher is better)</text>
+<text x="216" y="91" font-size="13" font-weight="600" fill="#f0efec">Node 26</text>
+<text x="465.33333333333337" y="91" font-size="13" font-weight="600" fill="#f0efec">Bun 1.4</text>
+<text x="714.6666666666667" y="91" font-size="13" font-weight="600" fill="#f0efec">Chromium 156</text>
+<line x1="216" y1="100" x2="216" y2="454" stroke="#4a4a46" stroke-width="1"/>
+<text x="216" y="469" font-size="11" text-anchor="middle" fill="#9a998f">0×</text>
+<line x1="307.6666666666667" y1="100" x2="307.6666666666667" y2="454" stroke="#2c2c2a" stroke-width="1"/>
+<text x="307.6666666666667" y="469" font-size="11" text-anchor="middle" fill="#9a998f">10×</text>
+<line x1="399.33333333333337" y1="100" x2="399.33333333333337" y2="454" stroke="#2c2c2a" stroke-width="1"/>
+<text x="399.33333333333337" y="469" font-size="11" text-anchor="middle" fill="#9a998f">20×</text>
+<line x1="465.33333333333337" y1="100" x2="465.33333333333337" y2="454" stroke="#4a4a46" stroke-width="1"/>
+<text x="465.33333333333337" y="469" font-size="11" text-anchor="middle" fill="#9a998f">0×</text>
+<line x1="557" y1="100" x2="557" y2="454" stroke="#2c2c2a" stroke-width="1"/>
+<text x="557" y="469" font-size="11" text-anchor="middle" fill="#9a998f">10×</text>
+<line x1="648.6666666666667" y1="100" x2="648.6666666666667" y2="454" stroke="#2c2c2a" stroke-width="1"/>
+<text x="648.6666666666667" y="469" font-size="11" text-anchor="middle" fill="#9a998f">20×</text>
+<line x1="714.6666666666667" y1="100" x2="714.6666666666667" y2="454" stroke="#4a4a46" stroke-width="1"/>
+<text x="714.6666666666667" y="469" font-size="11" text-anchor="middle" fill="#9a998f">0×</text>
+<line x1="806.3333333333334" y1="100" x2="806.3333333333334" y2="454" stroke="#2c2c2a" stroke-width="1"/>
+<text x="806.3333333333334" y="469" font-size="11" text-anchor="middle" fill="#9a998f">10×</text>
+<line x1="898.0000000000001" y1="100" x2="898.0000000000001" y2="454" stroke="#2c2c2a" stroke-width="1"/>
+<text x="898.0000000000001" y="469" font-size="11" text-anchor="middle" fill="#9a998f">20×</text>
+<text x="20" y="115" font-size="12" fill="#9a998f">vs proj4</text>
+<text x="20" y="137.5" font-size="13" fill="#f0efec">UTM → WGS84</text>
+<path fill="#3987e5" d="M216 128H235.83333333333334Q239.83333333333334 128 239.83333333333334 132V134Q239.83333333333334 138 235.83333333333334 138H216Z"><title>UTM → WGS84, JavaScript, Node 26: 2.6× faster than proj4</title></path>
+<text x="244.83333333333334" y="137" font-size="11" fill="#c3c2b7">2.6×</text>
+<path fill="#3987e5" d="M465.33333333333337 128H487.00000000000006Q491.00000000000006 128 491.00000000000006 132V134Q491.00000000000006 138 487.00000000000006 138H465.33333333333337Z"><title>UTM → WGS84, JavaScript, Bun 1.4: 2.8× faster than proj4</title></path>
+<text x="496.00000000000006" y="137" font-size="11" fill="#c3c2b7">2.8×</text>
+<path fill="#3987e5" d="M714.6666666666667 128H744.5833333333334Q748.5833333333334 128 748.5833333333334 132V134Q748.5833333333334 138 744.5833333333334 138H714.6666666666667Z"><title>UTM → WGS84, JavaScript, Chromium 156: 3.7× faster than proj4</title></path>
+<text x="753.5833333333334" y="137" font-size="11" fill="#c3c2b7">3.7×</text>
+<text x="20" y="167" font-size="12" fill="#9a998f">vs gcoord</text>
+<text x="20" y="189.5" font-size="13" fill="#f0efec">WGS84 → GCJ-02</text>
+<path fill="#3987e5" d="M216 180H338.5Q342.5 180 342.5 184V186Q342.5 190 338.5 190H216Z"><title>WGS84 → GCJ-02, JavaScript, Node 26: 13.8× faster than gcoord</title></path>
+<text x="347.5" y="189" font-size="11" fill="#c3c2b7">13.8×</text>
+<path fill="#3987e5" d="M465.33333333333337 180H636.4166666666667Q640.4166666666667 180 640.4166666666667 184V186Q640.4166666666667 190 636.4166666666667 190H465.33333333333337Z"><title>WGS84 → GCJ-02, JavaScript, Bun 1.4: 19.1× faster than gcoord</title></path>
+<text x="645.4166666666667" y="189" font-size="11" fill="#c3c2b7">19.1×</text>
+<path fill="#3987e5" d="M714.6666666666667 180H851.8333333333335Q855.8333333333335 180 855.8333333333335 184V186Q855.8333333333335 190 851.8333333333335 190H714.6666666666667Z"><title>WGS84 → GCJ-02, JavaScript, Chromium 156: 15.4× faster than gcoord</title></path>
+<text x="860.8333333333335" y="189" font-size="11" fill="#c3c2b7">15.4×</text>
+<text x="20" y="211.5" font-size="13" fill="#f0efec">GCJ-02 → WGS84</text>
+<path fill="#3987e5" d="M216 202H300.9166666666667Q304.9166666666667 202 304.9166666666667 206V208Q304.9166666666667 212 300.9166666666667 212H216Z"><title>GCJ-02 → WGS84, JavaScript, Node 26: 9.7× faster than gcoord</title></path>
+<text x="309.9166666666667" y="211" font-size="11" fill="#c3c2b7">9.7×</text>
+<path fill="#3987e5" d="M465.33333333333337 202H567.6666666666667Q571.6666666666667 202 571.6666666666667 206V208Q571.6666666666667 212 567.6666666666667 212H465.33333333333337Z"><title>GCJ-02 → WGS84, JavaScript, Bun 1.4: 11.6× faster than gcoord</title></path>
+<text x="576.6666666666667" y="211" font-size="11" fill="#c3c2b7">11.6×</text>
+<path fill="#3987e5" d="M714.6666666666667 202H817.0000000000001Q821.0000000000001 202 821.0000000000001 206V208Q821.0000000000001 212 817.0000000000001 212H714.6666666666667Z"><title>GCJ-02 → WGS84, JavaScript, Chromium 156: 11.6× faster than gcoord</title></path>
+<text x="826.0000000000001" y="211" font-size="11" fill="#c3c2b7">11.6×</text>
+<text x="20" y="233.5" font-size="13" fill="#f0efec">WGS84 → BD-09</text>
+<path fill="#3987e5" d="M216 224H291.75Q295.75 224 295.75 228V230Q295.75 234 291.75 234H216Z"><title>WGS84 → BD-09, JavaScript, Node 26: 8.7× faster than gcoord</title></path>
+<text x="300.75" y="233" font-size="11" fill="#c3c2b7">8.7×</text>
+<path fill="#3987e5" d="M465.33333333333337 224H553.9166666666667Q557.9166666666667 224 557.9166666666667 228V230Q557.9166666666667 234 553.9166666666667 234H465.33333333333337Z"><title>WGS84 → BD-09, JavaScript, Bun 1.4: 10.1× faster than gcoord</title></path>
+<text x="562.9166666666667" y="233" font-size="11" fill="#c3c2b7">10.1×</text>
+<path fill="#3987e5" d="M714.6666666666667 224H800.5000000000001Q804.5000000000001 224 804.5000000000001 228V230Q804.5000000000001 234 800.5000000000001 234H714.6666666666667Z"><title>WGS84 → BD-09, JavaScript, Chromium 156: 9.8× faster than gcoord</title></path>
+<text x="809.5000000000001" y="233" font-size="11" fill="#c3c2b7">9.8×</text>
+<text x="20" y="255.5" font-size="13" fill="#f0efec">BD-09 → WGS84</text>
+<path fill="#3987e5" d="M216 246H269.75Q273.75 246 273.75 250V252Q273.75 256 269.75 256H216Z"><title>BD-09 → WGS84, JavaScript, Node 26: 6.3× faster than gcoord</title></path>
+<text x="278.75" y="255" font-size="11" fill="#c3c2b7">6.3×</text>
+<path fill="#3987e5" d="M465.33333333333337 246H525.5Q529.5 246 529.5 250V252Q529.5 256 525.5 256H465.33333333333337Z"><title>BD-09 → WGS84, JavaScript, Bun 1.4: 7.0× faster than gcoord</title></path>
+<text x="534.5" y="255" font-size="11" fill="#c3c2b7">7.0×</text>
+<path fill="#3987e5" d="M714.6666666666667 246H781.2500000000001Q785.2500000000001 246 785.2500000000001 250V252Q785.2500000000001 256 781.2500000000001 256H714.6666666666667Z"><title>BD-09 → WGS84, JavaScript, Chromium 156: 7.7× faster than gcoord</title></path>
+<text x="790.2500000000001" y="255" font-size="11" fill="#c3c2b7">7.7×</text>
+<text x="20" y="277.5" font-size="13" fill="#f0efec">GCJ-02 → BD-09</text>
+<path fill="#3987e5" d="M216 268H324.75Q328.75 268 328.75 272V274Q328.75 278 324.75 278H216Z"><title>GCJ-02 → BD-09, JavaScript, Node 26: 12.3× faster than gcoord</title></path>
+<text x="333.75" y="277" font-size="11" fill="#c3c2b7">12.3×</text>
+<path fill="#3987e5" d="M465.33333333333337 268H584.1666666666667Q588.1666666666667 268 588.1666666666667 272V274Q588.1666666666667 278 584.1666666666667 278H465.33333333333337Z"><title>GCJ-02 → BD-09, JavaScript, Bun 1.4: 13.4× faster than gcoord</title></path>
+<text x="593.1666666666667" y="277" font-size="11" fill="#c3c2b7">13.4×</text>
+<path fill="#3987e5" d="M714.6666666666667 268H828.0000000000001Q832.0000000000001 268 832.0000000000001 272V274Q832.0000000000001 278 828.0000000000001 278H714.6666666666667Z"><title>GCJ-02 → BD-09, JavaScript, Chromium 156: 12.8× faster than gcoord</title></path>
+<text x="837.0000000000001" y="277" font-size="11" fill="#c3c2b7">12.8×</text>
+<text x="20" y="299.5" font-size="13" fill="#f0efec">BD-09 → GCJ-02</text>
+<path fill="#3987e5" d="M216 290H275.25Q279.25 290 279.25 294V296Q279.25 300 275.25 300H216Z"><title>BD-09 → GCJ-02, JavaScript, Node 26: 6.9× faster than gcoord</title></path>
+<text x="284.25" y="299" font-size="11" fill="#c3c2b7">6.9×</text>
+<path fill="#3987e5" d="M465.33333333333337 290H531Q535 290 535 294V296Q535 300 531 300H465.33333333333337Z"><title>BD-09 → GCJ-02, JavaScript, Bun 1.4: 7.6× faster than gcoord</title></path>
+<text x="540" y="299" font-size="11" fill="#c3c2b7">7.6×</text>
+<path fill="#3987e5" d="M714.6666666666667 290H770.2500000000001Q774.2500000000001 290 774.2500000000001 294V296Q774.2500000000001 300 770.2500000000001 300H714.6666666666667Z"><title>BD-09 → GCJ-02, JavaScript, Chromium 156: 6.5× faster than gcoord</title></path>
+<text x="779.2500000000001" y="299" font-size="11" fill="#c3c2b7">6.5×</text>
+<text x="20" y="329" font-size="12" fill="#9a998f">vs proj4 + gcoord</text>
+<text x="20" y="351.5" font-size="13" fill="#f0efec">UTM → GCJ-02</text>
+<path fill="#3987e5" d="M216 342H281.6666666666667Q285.6666666666667 342 285.6666666666667 346V348Q285.6666666666667 352 281.6666666666667 352H216Z"><title>UTM → GCJ-02, JavaScript, Node 26: 7.6× faster than proj4 + gcoord</title></path>
+<text x="290.6666666666667" y="351" font-size="11" fill="#c3c2b7">7.6×</text>
+<path fill="#3987e5" d="M465.33333333333337 342H542Q546 342 546 346V348Q546 352 542 352H465.33333333333337Z"><title>UTM → GCJ-02, JavaScript, Bun 1.4: 8.8× faster than proj4 + gcoord</title></path>
+<text x="551" y="351" font-size="11" fill="#c3c2b7">8.8×</text>
+<path fill="#3987e5" d="M714.6666666666667 342H792.2500000000001Q796.2500000000001 342 796.2500000000001 346V348Q796.2500000000001 352 792.2500000000001 352H714.6666666666667Z"><title>UTM → GCJ-02, JavaScript, Chromium 156: 8.9× faster than proj4 + gcoord</title></path>
+<text x="801.2500000000001" y="351" font-size="11" fill="#c3c2b7">8.9×</text>
+<text x="20" y="373.5" font-size="13" fill="#f0efec">GCJ-02 → UTM</text>
+<path fill="#3987e5" d="M216 364H271.5833333333333Q275.5833333333333 364 275.5833333333333 368V370Q275.5833333333333 374 271.5833333333333 374H216Z"><title>GCJ-02 → UTM, JavaScript, Node 26: 6.5× faster than proj4 + gcoord</title></path>
+<text x="280.5833333333333" y="373" font-size="11" fill="#c3c2b7">6.5×</text>
+<path fill="#3987e5" d="M465.33333333333337 364H539.25Q543.25 364 543.25 368V370Q543.25 374 539.25 374H465.33333333333337Z"><title>GCJ-02 → UTM, JavaScript, Bun 1.4: 8.5× faster than proj4 + gcoord</title></path>
+<text x="548.25" y="373" font-size="11" fill="#c3c2b7">8.5×</text>
+<path fill="#3987e5" d="M714.6666666666667 364H787.6666666666667Q791.6666666666667 364 791.6666666666667 368V370Q791.6666666666667 374 787.6666666666667 374H714.6666666666667Z"><title>GCJ-02 → UTM, JavaScript, Chromium 156: 8.4× faster than proj4 + gcoord</title></path>
+<text x="796.6666666666667" y="373" font-size="11" fill="#c3c2b7">8.4×</text>
+<text x="20" y="403" font-size="12" fill="#9a998f">vs proj4</text>
+<text x="20" y="425.5" font-size="13" fill="#f0efec">WGS84 → Web Mercator</text>
+<path fill="#3987e5" d="M216 416H232.16666666666669Q236.16666666666669 416 236.16666666666669 420V422Q236.16666666666669 426 232.16666666666669 426H216Z"><title>WGS84 → Web Mercator, JavaScript, Node 26: 2.2× faster than proj4</title></path>
+<text x="241.16666666666669" y="425" font-size="11" fill="#c3c2b7">2.2×</text>
+<path fill="#3987e5" d="M465.33333333333337 416H483.33333333333337Q487.33333333333337 416 487.33333333333337 420V422Q487.33333333333337 426 483.33333333333337 426H465.33333333333337Z"><title>WGS84 → Web Mercator, JavaScript, Bun 1.4: 2.4× faster than proj4</title></path>
+<text x="492.33333333333337" y="425" font-size="11" fill="#c3c2b7">2.4×</text>
+<path fill="#3987e5" d="M714.6666666666667 416H733.5833333333334Q737.5833333333334 416 737.5833333333334 420V422Q737.5833333333334 426 733.5833333333334 426H714.6666666666667Z"><title>WGS84 → Web Mercator, JavaScript, Chromium 156: 2.5× faster than proj4</title></path>
+<text x="742.5833333333334" y="425" font-size="11" fill="#c3c2b7">2.5×</text>
+<text x="20" y="447.5" font-size="13" fill="#f0efec">Web Mercator → WGS84</text>
+<path fill="#3987e5" d="M216 438H245Q249 438 249 442V444Q249 448 245 448H216Z"><title>Web Mercator → WGS84, JavaScript, Node 26: 3.6× faster than proj4</title></path>
+<text x="254" y="447" font-size="11" fill="#c3c2b7">3.6×</text>
+<path fill="#3987e5" d="M465.33333333333337 438H478.75000000000006Q482.75000000000006 438 482.75000000000006 442V444Q482.75000000000006 448 478.75000000000006 448H465.33333333333337Z"><title>Web Mercator → WGS84, JavaScript, Bun 1.4: 1.9× faster than proj4</title></path>
+<text x="487.75000000000006" y="447" font-size="11" fill="#c3c2b7">1.9×</text>
+<path fill="#3987e5" d="M714.6666666666667 438H747.3333333333334Q751.3333333333334 438 751.3333333333334 442V444Q751.3333333333334 448 747.3333333333334 448H714.6666666666667Z"><title>Web Mercator → WGS84, JavaScript, Chromium 156: 4.0× faster than proj4</title></path>
+<text x="756.3333333333334" y="447" font-size="11" fill="#c3c2b7">4.0×</text>
+</svg>
