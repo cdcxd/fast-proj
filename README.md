@@ -68,6 +68,22 @@ Web Mercator (EPSG:3857) against proj4:
 | Web Mercator → WGS84 | JavaScript  | **5.0×** | **2.8×** |     **6.9×** |
 |                      | WebAssembly | **5.9×** | **3.8×** |     **6.9×** |
 
+Single-point calls (`toLonLatPoint`, `fromWgs84Point`, ...; the JavaScript kernel in both backends):
+
+| Operation            | Baseline       |   Node 26 |   Bun 1.4 | Chromium 156 |
+| -------------------- | -------------- | --------: | --------: | -----------: |
+| UTM → WGS84          | proj4          |  **2.6×** |  **2.8×** |     **3.7×** |
+| WGS84 → GCJ-02       | gcoord         | **13.8×** | **19.1×** |    **15.4×** |
+| GCJ-02 → WGS84       | gcoord         |  **9.7×** | **11.6×** |    **11.6×** |
+| WGS84 → BD-09        | gcoord         |  **8.7×** | **10.1×** |     **9.8×** |
+| BD-09 → WGS84        | gcoord         |  **6.3×** |  **7.0×** |     **7.7×** |
+| GCJ-02 → BD-09       | gcoord         | **12.3×** | **13.4×** |    **12.8×** |
+| BD-09 → GCJ-02       | gcoord         |  **6.9×** |  **7.6×** |     **6.5×** |
+| UTM → GCJ-02         | proj4 + gcoord |  **7.6×** |  **8.8×** |     **8.9×** |
+| GCJ-02 → UTM         | proj4 + gcoord |  **6.5×** |  **8.5×** |     **8.4×** |
+| WGS84 → Web Mercator | proj4          |  **2.2×** |  **2.4×** |     **2.5×** |
+| Web Mercator → WGS84 | proj4          |  **3.6×** |  **1.9×** |     **4.0×** |
+
 Timings vary with hardware, runtime and dataset. See the [full benchmark and reproduction commands](packages/fast-proj/README.md#benchmark).
 
 ## Development
