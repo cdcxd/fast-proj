@@ -78,86 +78,86 @@ export function parseWebMercator(options: WebMercatorOptions = {}): [Projection,
   return [sphericalMercator(), geographic];
 }
 
+// The kernels: templates the converters' methods hold copies of, at module scope so a converter allocates nothing
+// for them. They return through a typed array, as V8 boxes a double written to a closure variable: res[0], res[1].
+const res = new Float64Array(2);
+
+// @kernel
+// oxlint-disable-next-line no-unused-vars -- only ever copied in
+function wmForward(lonDeg: number, latDeg: number): void {
+  // The poles have no finite y (tan(pi/2) rounds to a finite 1.6e16); infinite longitudes have no x.
+  if (!(latDeg < 90 && latDeg > -90 && Math.abs(lonDeg) < Infinity)) {
+    res[0] = NaN;
+    res[1] = NaN;
+    return;
+  }
+  // Whole turns first, exactly, as in tmerc.ts.
+  if (lonDeg > 180 || lonDeg < -180) {
+    lonDeg %= 360;
+    if (lonDeg > 180) lonDeg -= 360;
+    else if (lonDeg < -180) lonDeg += 360;
+  }
+  res[0] = K * lonDeg;
+  // y = R ln tan(pi/4 + phi/2) = R ln((c + s) / (c - s)) for s, c = sin, cos(phi/2): log1p for the accuracy near the
+  // equator; poleward of 45, R ln(c' / s') from half the colatitude, which is exact there (phi in radians would lose
+  // digits as it nears pi/2).
+  const alat = Math.abs(latDeg);
+  const hx = 0.5 * D2R * (alat <= 45 ? latDeg : 90 - alat);
+  const z = hx * hx;
+  const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
+  const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+  // latDeg = 0 keeps its sign.
+  res[1] =
+    alat <= 45
+      ? latDeg === 0
+        ? latDeg
+        : R * Math.log1p((2 * sn) / (cs - sn))
+      : R * Math.sign(latDeg) * Math.log(cs / sn);
+}
+
+// @kernel
+// oxlint-disable-next-line no-unused-vars -- only ever copied in
+function wmInverse(x: number, y: number): void {
+  // An infinite y would give ±90; keep infinite input NaN, as in the other projections.
+  if (!(Math.abs(x) < Infinity && Math.abs(y) < Infinity)) {
+    res[0] = NaN;
+    res[1] = NaN;
+    return;
+  }
+  let lon = x / K;
+  if (lon > 180 || lon < -180) {
+    lon %= 360;
+    if (lon > 180) lon -= 360;
+    else if (lon < -180) lon += 360;
+  }
+  res[0] = lon;
+  // phi = gd(v) for v = |y| / R, from exp(r), v = k ln 2 + r. Below v = asinh(1), where phi = pi/4, phi = 2 atan(m /
+  // (m + 2)) with m = expm1(v) = 2^k (1 + expm1(r)) - 1, an exact cancellation for k = 0; above, phi = pi/2 - 2
+  // atan(exp(-v)) with exp(-v) = 2^-k (1 + expm1(-r)). Either atan argument is within tan(pi/8). Beyond v = 40, phi
+  // rounds to pi/2.
+  let v = Math.abs(y * (1 / R));
+  if (v > 40) v = 40;
+  const k = Math.round(v * LOG2E);
+  const r = v - k * LN2_HI - k * LN2_LO;
+  const r2 = r * r;
+  const qe = KE0 + r2 * (KE2 + r2 * (KE4 + r2 * (KE6 + r2 * KE8)));
+  const qo = KE1 + r2 * (KE3 + r2 * (KE5 + r2 * (KE7 + r2 * KE9)));
+  const near = v < ASINH1;
+  const rr = near ? r : -r;
+  const q = rr + r2 * (qe + rr * qo);
+  const s = POW2[k]!;
+  const u = near ? (s * q + (s - 1)) / (s * q + (s + 1)) : (1 + q) / s;
+  const t = u * u;
+  const t2 = t * t;
+  const ae = KA0 + t2 * (KA2 + t2 * (KA4 + t2 * (KA6 + t2 * KA8)));
+  const ao = KA1 + t2 * (KA3 + t2 * (KA5 + t2 * (KA7 + t2 * KA9)));
+  const w = 2 * (u + u * t * (ae + t * ao));
+  const g = near ? w : PI_2 - (w - PI_2_LO);
+  // y = -0 keeps its sign.
+  res[1] = g * Math.sign(y) * R2D;
+}
+
 function sphericalMercator(): Projection {
-  // Kernel results. A double in a closure variable is boxed on every write (V8 allocates a HeapNumber), so the
-  // kernels return through a typed array: res[0], res[1].
-  const res = new Float64Array(2);
-
-  // @kernel
-  // oxlint-disable-next-line no-unused-vars -- only ever copied in
-  function wmForward(lonDeg: number, latDeg: number): void {
-    // The poles have no finite y (tan(pi/2) rounds to a finite 1.6e16); infinite longitudes have no x.
-    if (!(latDeg < 90 && latDeg > -90 && Math.abs(lonDeg) < Infinity)) {
-      res[0] = NaN;
-      res[1] = NaN;
-      return;
-    }
-    // Whole turns first, exactly, as in tmerc.ts.
-    if (lonDeg > 180 || lonDeg < -180) {
-      lonDeg %= 360;
-      if (lonDeg > 180) lonDeg -= 360;
-      else if (lonDeg < -180) lonDeg += 360;
-    }
-    res[0] = K * lonDeg;
-    // y = R ln tan(pi/4 + phi/2) = R ln((c + s) / (c - s)) for s, c = sin, cos(phi/2): log1p for the accuracy near the
-    // equator; poleward of 45, R ln(c' / s') from half the colatitude, which is exact there (phi in radians would lose
-    // digits as it nears pi/2).
-    const alat = Math.abs(latDeg);
-    const hx = 0.5 * D2R * (alat <= 45 ? latDeg : 90 - alat);
-    const z = hx * hx;
-    const sn = hx + hx * z * (KS1 + z * (KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)))));
-    const cs = 1 - 0.5 * z + z * z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
-    // latDeg = 0 keeps its sign.
-    res[1] =
-      alat <= 45
-        ? latDeg === 0
-          ? latDeg
-          : R * Math.log1p((2 * sn) / (cs - sn))
-        : R * Math.sign(latDeg) * Math.log(cs / sn);
-  }
-
-  // @kernel
-  // oxlint-disable-next-line no-unused-vars -- only ever copied in
-  function wmInverse(x: number, y: number): void {
-    // An infinite y would give ±90; keep infinite input NaN, as in the other projections.
-    if (!(Math.abs(x) < Infinity && Math.abs(y) < Infinity)) {
-      res[0] = NaN;
-      res[1] = NaN;
-      return;
-    }
-    let lon = x / K;
-    if (lon > 180 || lon < -180) {
-      lon %= 360;
-      if (lon > 180) lon -= 360;
-      else if (lon < -180) lon += 360;
-    }
-    res[0] = lon;
-    // phi = gd(v) for v = |y| / R, from exp(r), v = k ln 2 + r. Below v = asinh(1), where phi = pi/4, phi = 2 atan(m /
-    // (m + 2)) with m = expm1(v) = 2^k (1 + expm1(r)) - 1, an exact cancellation for k = 0; above, phi = pi/2 - 2
-    // atan(exp(-v)) with exp(-v) = 2^-k (1 + expm1(-r)). Either atan argument is within tan(pi/8). Beyond v = 40, phi
-    // rounds to pi/2.
-    let v = Math.abs(y * (1 / R));
-    if (v > 40) v = 40;
-    const k = Math.round(v * LOG2E);
-    const r = v - k * LN2_HI - k * LN2_LO;
-    const r2 = r * r;
-    const qe = KE0 + r2 * (KE2 + r2 * (KE4 + r2 * (KE6 + r2 * KE8)));
-    const qo = KE1 + r2 * (KE3 + r2 * (KE5 + r2 * (KE7 + r2 * KE9)));
-    const near = v < ASINH1;
-    const rr = near ? r : -r;
-    const q = rr + r2 * (qe + rr * qo);
-    const s = POW2[k]!;
-    const u = near ? (s * q + (s - 1)) / (s * q + (s + 1)) : (1 + q) / s;
-    const t = u * u;
-    const t2 = t * t;
-    const ae = KA0 + t2 * (KA2 + t2 * (KA4 + t2 * (KA6 + t2 * KA8)));
-    const ao = KA1 + t2 * (KA3 + t2 * (KA5 + t2 * (KA7 + t2 * KA9)));
-    const w = 2 * (u + u * t * (ae + t * ao));
-    const g = near ? w : PI_2 - (w - PI_2_LO);
-    // y = -0 keeps its sign.
-    res[1] = g * Math.sign(y) * R2D;
-  }
-
   return {
     toLonLat(x, y, lonBuf?, latBuf?) {
       const n = x.length;
