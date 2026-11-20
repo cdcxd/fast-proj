@@ -201,58 +201,6 @@ pub unsafe extern "C" fn wm_inverse_batch(xp: *const f64, yp: *const f64, lonp: 
     unsafe { vwebmerc::inverse_batch(r(xp, n), r(yp, n), w(lonp, n), w(latp, n)) }
 }
 
-// ---------------------------------------------------------------------------
-// Interleaved <-> separate copies for the JS boundary (simd128 only)
-// ---------------------------------------------------------------------------
-
-/// src[2i], src[2i + 1] -> a[i], b[i].
-///
-/// # Safety
-/// `src` must address 2n valid f64s, `a` and `b` n each, none overlapping.
-#[cfg(target_feature = "simd128")]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn deinterleave(src: *const f64, a: *mut f64, b: *mut f64, n: usize) {
-    use core::arch::wasm32::*;
-    let mut i = 0;
-    unsafe {
-        while i + 2 <= n {
-            let p = v128_load(src.add(2 * i) as *const v128);
-            let q = v128_load(src.add(2 * i + 2) as *const v128);
-            v128_store(a.add(i) as *mut v128, i64x2_shuffle::<0, 2>(p, q));
-            v128_store(b.add(i) as *mut v128, i64x2_shuffle::<1, 3>(p, q));
-            i += 2;
-        }
-        if i < n {
-            *a.add(i) = *src.add(2 * i);
-            *b.add(i) = *src.add(2 * i + 1);
-        }
-    }
-}
-
-/// a[i], b[i] -> dst[2i], dst[2i + 1].
-///
-/// # Safety
-/// `dst` must address 2n valid f64s, `a` and `b` n each, none overlapping.
-#[cfg(target_feature = "simd128")]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn interleave(a: *const f64, b: *const f64, dst: *mut f64, n: usize) {
-    use core::arch::wasm32::*;
-    let mut i = 0;
-    unsafe {
-        while i + 2 <= n {
-            let p = v128_load(a.add(i) as *const v128);
-            let q = v128_load(b.add(i) as *const v128);
-            v128_store(dst.add(2 * i) as *mut v128, i64x2_shuffle::<0, 2>(p, q));
-            v128_store(dst.add(2 * i + 2) as *mut v128, i64x2_shuffle::<1, 3>(p, q));
-            i += 2;
-        }
-        if i < n {
-            *dst.add(2 * i) = *a.add(i);
-            *dst.add(2 * i + 1) = *b.add(i);
-        }
-    }
-}
-
 #[cfg(not(test))]
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {

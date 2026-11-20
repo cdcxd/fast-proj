@@ -334,15 +334,12 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
   the general reduction: 7-12% faster.
 - The wasm converters' single-point methods run the JavaScript kernel: one point costs more to pass into wasm than to
   compute.
-- Since 0.6.1 an interleaved `Float64Array` of 256 points or more goes into the wasm workspace with one `set()` into
-  two adjacent buffers (the bump allocator places them back to back; the context checks) and is split and merged in
-  wasm (`deinterleave`, `interleave`: an `i64x2_shuffle` per two points), rather than by a JavaScript loop: 3-7%
-  faster in V8, 1-3% slower in Bun (which it never speeds up; three views per call cost Bun 5-7% at 256 points, one
-  view and a whole-array copy 2-3%). Below 256 the two extra wasm calls cost more than they save (V8 breaks even near
-  128; one point took 2.4x as long). Only genuine `Float64Array`s take it, checked by internal slots
-  (`%TypedArray%.prototype`'s getters) and copied by `%TypedArray%.prototype.set` into and from views the context
-  makes, so no caller-defined `subarray` or `set`, subclass method, Proxy trap or species constructor runs (`subarray`
-  would look up the species); other array-likes take the loop.
+- Tried and rejected (0.6.1): splitting an interleaved `Float64Array` in wasm (`deinterleave`/`interleave` exports, an
+  `i64x2_shuffle` per two points) after one bulk copy into adjacent workspace buffers. 3-7% faster in V8 from 256
+  points, but 1-4% slower in Bun at every size and slower everywhere below about 128 points (one point 2.4x as long).
+  A bulk copy of a caller's array also needed guards the indexed loop doesn't: own `subarray`/`set` properties, a
+  changed `Float64Array[Symbol.species]`, and a growable `SharedArrayBuffer` resized by a worker between the length
+  check and the copy each broke it in review. Not worth that for a few percent.
 - The bench-only exports (`smoke.rs`'s math batches, `copy_f64`, `noop`, `heap_reset`, `heap_used`) build only with
   `large-heap`, as the bench builds do: the shipped `.wasm` went from 78 to 72 kB (24 to 23 kB gzipped) in 0.6.1,
   with the kernels unchanged.
