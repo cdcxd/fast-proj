@@ -109,8 +109,24 @@ Web Mercator: `webMercator()`, points in eastern China, against proj4's `EPSG:38
 |                      | `toLonLat`, JavaScript    | 0.24 ms (5.0×) | 0.28 ms (2.8×) | 0.20 ms (6.9×) |
 |                      | `toLonLat`, WebAssembly   | 0.20 ms (5.9×) | 0.20 ms (3.8×) | 0.20 ms (6.9×) |
 
-The interleaved variants run at the same speed as the array form. Single-point methods use the JavaScript kernel in
-both backends. Single runs: `node bench/run.mts`, `bun bench/run.mts`, `node bench/run.mts --browser` (needs
+Single points: 10k calls of the point method (`toLonLatPoint`, `fromWgs84Point`, ...) on the same points, against the
+same baselines, which convert one point per call too. Point methods run the JavaScript kernel in both backends.
+
+| Operation            | Baseline       | Node 26                 | Bun 1.4                  | Chromium 156             |
+| -------------------- | -------------- | ----------------------- | ------------------------ | ------------------------ |
+| UTM → WGS84          | proj4          | 0.73 ms vs 1.88 (2.6×)  | 0.75 ms vs 2.12 (2.8×)   | 0.72 ms vs 2.65 (3.7×)   |
+| WGS84 → GCJ-02       | gcoord         | 0.44 ms vs 6.07 (13.8×) | 0.42 ms vs 8.01 (19.1×)  | 0.44 ms vs 6.78 (15.4×)  |
+| GCJ-02 → WGS84       | gcoord         | 1.04 ms vs 10.04 (9.7×) | 1.20 ms vs 13.86 (11.6×) | 1.00 ms vs 11.62 (11.6×) |
+| WGS84 → BD-09        | gcoord         | 0.79 ms vs 6.86 (8.7×)  | 0.93 ms vs 9.44 (10.1×)  | 0.78 ms vs 7.64 (9.8×)   |
+| BD-09 → WGS84        | gcoord         | 1.75 ms vs 11.08 (6.3×) | 2.18 ms vs 15.29 (7.0×)  | 1.73 ms vs 13.37 (7.7×)  |
+| GCJ-02 → BD-09       | gcoord         | 0.40 ms vs 4.91 (12.3×) | 0.50 ms vs 6.75 (13.4×)  | 0.38 ms vs 4.85 (12.8×)  |
+| BD-09 → GCJ-02       | gcoord         | 0.72 ms vs 4.99 (6.9×)  | 0.88 ms vs 6.68 (7.6×)   | 0.74 ms vs 4.85 (6.5×)   |
+| UTM → GCJ-02         | proj4 + gcoord | 1.07 ms vs 8.18 (7.6×)  | 1.20 ms vs 10.58 (8.8×)  | 1.06 ms vs 9.41 (8.9×)   |
+| GCJ-02 → UTM         | proj4 + gcoord | 1.90 ms vs 12.29 (6.5×) | 1.94 ms vs 16.52 (8.5×)  | 1.82 ms vs 15.27 (8.4×)  |
+| WGS84 → Web Mercator | proj4          | 0.52 ms vs 1.15 (2.2×)  | 0.31 ms vs 0.75 (2.4×)   | 0.44 ms vs 1.09 (2.5×)   |
+| Web Mercator → WGS84 | proj4          | 0.33 ms vs 1.21 (3.6×)  | 0.40 ms vs 0.77 (1.9×)   | 0.34 ms vs 1.37 (4.0×)   |
+
+The interleaved variants run at the same speed as the array form. Single runs: `node bench/run.mts`, `bun bench/run.mts`, `node bench/run.mts --browser` (needs
 `bunx playwright install chromium`).
 
 ## License
