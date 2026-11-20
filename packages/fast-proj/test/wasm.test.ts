@@ -8,6 +8,7 @@ import { LAT_MAX, LAT_MIN, LON_MAX, LON_MIN } from '../src/gcj02-constants.js';
 import { fusers } from '../src/geographic.js';
 import { BD09, GCJ02, gcj02, tmerc as jsTmerc, utm, webMercator } from '../src/index.js';
 import type { Geographic, Projection } from '../src/types.js';
+import { type Exports, wasmContext } from '../src/wasm-context.js';
 import { loadWasm, type WasmContext } from '../src/wasm.js';
 
 const url = new URL('../dist/fast-proj.wasm', import.meta.url);
@@ -120,14 +121,20 @@ describe('loadWasm', () => {
   });
 
   it('splits interleaved Float64Arrays in wasm, bit for bit with separate arrays', async () => {
-    const ctx = await loadWasm({ source: url });
+    const module = await WebAssembly.compile(readFileSync(url));
+    const names = WebAssembly.Module.exports(module).map((e) => e.name);
+    expect(names).toEqual(expect.arrayContaining(['deinterleave', 'interleave']));
+    const raw = (await WebAssembly.instantiate(module, {})).exports as unknown as Exports;
+    const deinterleave = vi.fn<NonNullable<Exports['deinterleave']>>(raw.deinterleave!);
+    const interleave = vi.fn<NonNullable<Exports['interleave']>>(raw.interleave!);
+    const ctx = wasmContext({ ...raw, deinterleave, interleave });
     const p = ctx.utm({ zone: 50 });
     class Sub extends Float64Array {
       override subarray(): never {
         throw new Error('not called');
       }
     }
-    for (const n of [0, 1, 3, 65536, 65537, 131075]) {
+    for (const n of [0, 1, 3, 255, 256, 65536, 65537, 131075]) {
       const ll = new Float64Array(2 * n + 2);
       for (let i = 0; i < n + 1; i++) {
         ll[2 * i] = 100 + ((i * 0.618034) % 30);
@@ -144,19 +151,31 @@ describe('loadWasm', () => {
         want[2 * i] = sep.x[i]!;
         want[2 * i + 1] = sep.y[i]!;
       }
+      deinterleave.mockClear();
       expect(diff(p.fromLonLatInterleaved(src), want)).toBe(0);
+      // One wasm split per workspace chunk from 256 points; the JavaScript loop below.
+      expect(deinterleave.mock.calls.length).toBe(n < 256 ? 0 : Math.ceil(n / 65536));
       const inPlace = src.slice();
       expect(p.fromLonLatInterleaved(inPlace, inPlace)).toBe(inPlace);
       expect(diff(inPlace, want)).toBe(0);
       const out = new Float64Array(2 * n + 4).subarray(1);
       p.fromLonLatInterleaved(src, out);
       expect(diff(out.subarray(0, 2 * n), want)).toBe(0);
-      // A subclass or an untyped Array out takes the JavaScript loop.
+      // No method of the caller's arrays runs: a subclass, own subarray/set properties.
       expect(diff(p.fromLonLatInterleaved(Sub.from(src)), want)).toBe(0);
+      const own = src.slice();
+      Object.defineProperty(own, 'subarray', { value: () => new Float64Array(2 * n) });
+      const ownOut = new Float64Array(2 * n);
+      Object.defineProperty(ownOut, 'set', { value: () => {} });
+      p.fromLonLatInterleaved(own, ownOut);
+      expect(diff(ownOut, want)).toBe(0);
+      // Untyped callers: an Array out, a Proxy input.
       const arr = Array.from({ length: 2 * n }, () => 0) as unknown as Float64Array;
       p.fromLonLatInterleaved(src, arr);
       expect(diff(arr, want)).toBe(0);
+      expect(diff(p.fromLonLatInterleaved(new Proxy(Array.from(src), {})), want)).toBe(0);
     }
+    expect(interleave).toHaveBeenCalled();
     ctx.dispose();
   });
 

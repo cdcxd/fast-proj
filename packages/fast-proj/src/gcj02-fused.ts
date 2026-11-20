@@ -22,7 +22,8 @@ export function fuser(mode: 'passthrough' | 'transform'): (t: TmInverse) => Fuse
   const all = mode === 'transform';
 
   // Kernel results. A double in a closure variable is boxed on every write (V8 allocates a HeapNumber), so the
-  // kernels return through a typed array: res[0], res[1].
+  // kernels return through a typed array: res[0], res[1]. The GCJ-02 offset copied in below writes res[2] and res[3]
+  // in its own file: every copy here must rename both, or the writes would fall silently past this array's end.
   const res = new Float64Array(2);
 
   function inDomain(lon: number, lat: number): boolean {

@@ -35,7 +35,17 @@ export interface Exports {
 }
 
 const CAP = 1 << 16;
-const F64 = Float64Array.prototype;
+// %TypedArray%.prototype's getters, which read a typed array's internal slots: no caller-defined property, subclass
+// method or Proxy trap runs. The tag getter gives undefined for anything that isn't a genuine typed array.
+const TA = Object.getPrototypeOf(Float64Array.prototype) as object;
+const getter = (k: PropertyKey) => Object.getOwnPropertyDescriptor(TA, k)!.get!;
+const tagOf = getter(Symbol.toStringTag) as (this: unknown) => string | undefined;
+const bufferOf = getter('buffer') as (this: Float64Array) => ArrayBufferLike;
+const offsetOf = getter('byteOffset') as (this: Float64Array) => number;
+const lengthOf = getter('length') as (this: Float64Array) => number;
+// Below this many points the JavaScript (de)interleave loop is faster: V8 breaks even near 128; Bun runs the loop 1-3.5%
+// faster from 256 points up (it never gains in Bun).
+const BULK = 256;
 const DISPOSE: typeof Symbol.dispose = Symbol.dispose ?? (Symbol.for('Symbol.dispose') as typeof Symbol.dispose);
 
 // Wraps a JavaScript converter so it throws once its context is disposed. A wrapped geographic system keeps fusing
@@ -152,17 +162,31 @@ export function wasmContext(exports: Exports): WasmContext {
     const ex = enter();
     try {
       const half = src.length / 2;
-      // Plain Float64Arrays only: a subclass may override subarray or set, and an untyped caller may pass an Array out.
-      if (wab && wcd && Object.getPrototypeOf(src) === F64 && Object.getPrototypeOf(out) === F64) {
+      // Genuine Float64Arrays only (an untyped caller may pass an Array out), copied through views of their buffers
+      // made here, so no method of the caller's objects runs.
+      // The lengths are checked from the slots too: a view past a typed array's own end would reach other data.
+      if (
+        wab &&
+        wcd &&
+        half >= BULK &&
+        tagOf.call(src) === 'Float64Array' &&
+        tagOf.call(out) === 'Float64Array' &&
+        lengthOf.call(src as Float64Array) === 2 * half &&
+        lengthOf.call(out) >= 2 * half
+      ) {
+        const sBuf = bufferOf.call(src as Float64Array),
+          sOff = offsetOf.call(src as Float64Array),
+          oBuf = bufferOf.call(out),
+          oOff = offsetOf.call(out);
         const AB = wab,
           CD = wcd;
         for (let i0 = 0; i0 < half; i0 += CAP) {
           const m = Math.min(CAP, half - i0);
-          CD.set((src as Float64Array).subarray(2 * i0, 2 * (i0 + m)));
+          CD.set(new Float64Array(sBuf, sOff + 16 * i0, 2 * m));
           ex.deinterleave!(pc, pa, pb, m);
           kernel(ex, m);
           ex.interleave!(pc, pd, pa, m);
-          out.set(AB.subarray(0, 2 * m), 2 * i0);
+          new Float64Array(oBuf, oOff + 16 * i0, 2 * m).set(AB.subarray(0, 2 * m));
         }
         return;
       }
