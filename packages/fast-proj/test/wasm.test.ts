@@ -176,6 +176,15 @@ describe('loadWasm', () => {
       expect(diff(p.fromLonLatInterleaved(new Proxy(Array.from(src), {})), want)).toBe(0);
     }
     expect(interleave).toHaveBeenCalled();
+    // A changed Float64Array species doesn't reach the copies.
+    const ll = new Float64Array(2000).fill(40);
+    const want = p.fromLonLatInterleaved(ll);
+    Object.defineProperty(Float64Array, Symbol.species, { get: () => Float32Array, configurable: true });
+    try {
+      expect(diff(p.fromLonLatInterleaved(ll), want)).toBe(0);
+    } finally {
+      Reflect.deleteProperty(Float64Array, Symbol.species);
+    }
     ctx.dispose();
   });
 

@@ -43,8 +43,10 @@ const tagOf = getter(Symbol.toStringTag) as (this: unknown) => string | undefine
 const bufferOf = getter('buffer') as (this: Float64Array) => ArrayBufferLike;
 const offsetOf = getter('byteOffset') as (this: Float64Array) => number;
 const lengthOf = getter('length') as (this: Float64Array) => number;
-// Below this many points the JavaScript (de)interleave loop is faster: V8 breaks even near 128; Bun runs the loop 1-3.5%
-// faster from 256 points up (it never gains in Bun).
+// %TypedArray%.prototype.set: from a typed array it copies by internal slots, with no species lookup (subarray has one).
+const setTo = (TA as { set: Float64Array['set'] }).set;
+// Below this many points the JavaScript (de)interleave loop is faster in V8 (break-even near 128). From 256 the wasm
+// path is 3-7% faster in V8 and 1-3% slower in Bun, which it never speeds up.
 const BULK = 256;
 const DISPOSE: typeof Symbol.dispose = Symbol.dispose ?? (Symbol.for('Symbol.dispose') as typeof Symbol.dispose);
 
@@ -127,10 +129,8 @@ export function wasmContext(exports: Exports): WasmContext {
     pd = wd.byteOffset;
   // wa, wb and wc, wd are adjacent (bump allocator), so each pair holds 2 CAP interleaved values: interleaved input
   // goes in with one copy and the wasm (de)interleave does the rest.
-  const pair = (p: number, q: number) =>
-    q === p + 8 * CAP && e!.deinterleave && e!.interleave ? new Float64Array(e!.memory.buffer, p, 2 * CAP) : null;
-  let wab = pair(pa, pb);
-  let wcd = pair(pc, pd);
+  const bulk = pb === pa + 8 * CAP && pd === pc + 8 * CAP && !!e.deinterleave && !!e.interleave;
+  let wcd: Float64Array | null = bulk ? new Float64Array(e.memory.buffer, pc, 2 * CAP) : null;
 
   function enter(): Exports {
     if (!e) throw new Error('fast-proj: converter used after its wasm context was disposed');
@@ -162,11 +162,11 @@ export function wasmContext(exports: Exports): WasmContext {
     const ex = enter();
     try {
       const half = src.length / 2;
-      // Genuine Float64Arrays only (an untyped caller may pass an Array out), copied through views of their buffers
-      // made here, so no method of the caller's objects runs.
-      // The lengths are checked from the slots too: a view past a typed array's own end would reach other data.
+      // Genuine Float64Arrays only (an untyped caller may pass an Array out), checked by internal slots and copied by
+      // %TypedArray%.prototype.set into and from views made here, so no method of the caller's objects, subclass,
+      // Proxy trap or species constructor runs. A view past a typed array's own end would reach other data: the
+      // lengths come from the slots too.
       if (
-        wab &&
         wcd &&
         half >= BULK &&
         tagOf.call(src) === 'Float64Array' &&
@@ -174,19 +174,17 @@ export function wasmContext(exports: Exports): WasmContext {
         lengthOf.call(src as Float64Array) === 2 * half &&
         lengthOf.call(out) >= 2 * half
       ) {
-        const sBuf = bufferOf.call(src as Float64Array),
-          sOff = offsetOf.call(src as Float64Array),
-          oBuf = bufferOf.call(out),
-          oOff = offsetOf.call(out);
-        const AB = wab,
-          CD = wcd;
+        const s = src as Float64Array,
+          CD = wcd,
+          mem = ex.memory.buffer;
         for (let i0 = 0; i0 < half; i0 += CAP) {
           const m = Math.min(CAP, half - i0);
-          CD.set(new Float64Array(sBuf, sOff + 16 * i0, 2 * m));
+          // One chunk, the common case, copies the input whole, without a view.
+          setTo.call(CD, half <= CAP ? s : new Float64Array(bufferOf.call(s), offsetOf.call(s) + 16 * i0, 2 * m));
           ex.deinterleave!(pc, pa, pb, m);
           kernel(ex, m);
           ex.interleave!(pc, pd, pa, m);
-          new Float64Array(oBuf, oOff + 16 * i0, 2 * m).set(AB.subarray(0, 2 * m));
+          setTo.call(out, new Float64Array(mem, pa, 2 * m), 2 * i0);
         }
         return;
       }
@@ -326,7 +324,7 @@ export function wasmContext(exports: Exports): WasmContext {
   const dispose = () => {
     if (busy) throw new Error('fast-proj: dispose() during an active call');
     e = null;
-    wa = wb = wc = wd = wab = wcd = null;
+    wa = wb = wc = wd = wcd = null;
   };
   const open = () => {
     if (!e) throw new Error('fast-proj: context used after dispose()');

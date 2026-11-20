@@ -302,8 +302,8 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
   A per-point function writing to the output array or a `Float64Array(2)` scratch gained 0-4% on JavaScriptCore.
   Before 0.6.1 the kernels returned through closure variables, which V8 boxes on every write (a HeapNumber per
   double): the typed array made the point methods 17-36% faster in Node and Chromium (Bun within 2%), and the
-  `'transform'` GCJ-02 inverse, whose solver now holds a copy of the offset, 40-46% (Bun 15%). Finite results are bit-identical; a NaN from a point method now has the positive sign the
-  batch methods give (the closure variable had kept the sign of an arithmetic NaN).
+  `'transform'` GCJ-02 inverse, whose solver now holds a copy of the offset, 40-46% (Bun 15%). Finite results are bit-identical; the sign and payload of a NaN result may differ, as they
+  may between engines.
 - Since 0.5 the JavaScript kernels take sin/cos from fdlibm's kernel polynomials (`src/poly.ts`) on half the angle,
   then double (no quadrant branches while |angle| < π/2, which covers φ, ξ, UTM's λ and GCJ-02's x·π/60), falling back
   to `Math` outside; the TM inverse takes sinh/cosh of η from their series for |η| < 0.35 instead of `Math.exp`. A
@@ -336,11 +336,13 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
   compute.
 - Since 0.6.1 an interleaved `Float64Array` of 256 points or more goes into the wasm workspace with one `set()` into
   two adjacent buffers (the bump allocator places them back to back; the context checks) and is split and merged in
-  wasm (`deinterleave`, `interleave`: an `i64x2_shuffle` per two points), rather than by a JavaScript loop: 3-8%
-  faster in V8 from 256 points, about 1% slower in Bun. Below 256 the two extra wasm calls cost more than they save
-  (V8 breaks even near 128; one point took 2.4x as long). Only genuine `Float64Array`s take it, checked and copied
-  through `%TypedArray%.prototype`'s getters and views made by the context, so no caller-defined `subarray`, `set`,
-  subclass method or Proxy trap runs; other array-likes take the loop.
+  wasm (`deinterleave`, `interleave`: an `i64x2_shuffle` per two points), rather than by a JavaScript loop: 3-7%
+  faster in V8, 1-3% slower in Bun (which it never speeds up; three views per call cost Bun 5-7% at 256 points, one
+  view and a whole-array copy 2-3%). Below 256 the two extra wasm calls cost more than they save (V8 breaks even near
+  128; one point took 2.4x as long). Only genuine `Float64Array`s take it, checked by internal slots
+  (`%TypedArray%.prototype`'s getters) and copied by `%TypedArray%.prototype.set` into and from views the context
+  makes, so no caller-defined `subarray` or `set`, subclass method, Proxy trap or species constructor runs (`subarray`
+  would look up the species); other array-likes take the loop.
 - The bench-only exports (`smoke.rs`'s math batches, `copy_f64`, `noop`, `heap_reset`, `heap_used`) build only with
   `large-heap`, as the bench builds do: the shipped `.wasm` went from 78 to 72 kB (24 to 23 kB gzipped) in 0.6.1,
   with the kernels unchanged.
