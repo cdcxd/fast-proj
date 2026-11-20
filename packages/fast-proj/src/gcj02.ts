@@ -104,13 +104,10 @@ export function buildGcj02(mode: 'passthrough' | 'transform'): Geographic {
 function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
   const all = mode === 'transform';
 
-  let ox = 0;
-  let oy = 0;
-  let rx = 0;
-  let ry = 0;
-  // Results of the 'transform'-mode solver.
-  let tx = 0;
-  let ty = 0;
+  // Kernel results. A double in a closure variable is boxed on every write (V8 allocates a HeapNumber), so the
+  // kernels return through a typed array: res[0], res[1] are the result; res[2], res[3] the offset; res[4], res[5]
+  // the 'transform'-mode solver's result.
+  const res = new Float64Array(6);
 
   // x = lon - 105, y = lat - 35; s1, c1 = sin, cos(x pi/60); u1, v1 = sin, cos(y pi/180).
   // @kernel
@@ -179,8 +176,8 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
     const qcm = 1 / (cp * m);
     const icp = m * qcm;
     const fLon = KLON * sm * icp;
-    ox = dLon * fLon;
-    oy = dLat * KLAT * m * sm;
+    res[2] = dLon * fLon;
+    res[3] = dLat * KLAT * m * sm;
   }
 
   function inDomain(lon: number, lat: number): boolean {
@@ -193,8 +190,8 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
     let offLat = 0;
     if (lon > 180 || lon < -180) lon = reduce(lon);
     if (!inDomain(lon, lat)) {
-      rx = all ? NaN : lon;
-      ry = all ? NaN : lat;
+      res[0] = all ? NaN : lon;
+      res[1] = all ? NaN : lat;
       return;
     }
     // The offset differs at longitudes 180 and -180; use 180 for both.
@@ -220,7 +217,7 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
       uY = Math.sin(y * KY);
       vY = Math.cos(y * KY);
     }
-    // @inline offset(x, y, sX, cX, uY, vY); ox = offLon; oy = offLat
+    // @inline offset(x, y, sX, cX, uY, vY); res[2] = offLon; res[3] = offLat
     {
       const s1 = sX;
       const c1 = cX;
@@ -293,18 +290,18 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
     }
     // @end
     if (!all) {
-      rx = lon + offLon;
-      ry = lat + offLat;
+      res[0] = lon + offLon;
+      res[1] = lat + offLat;
       return;
     }
     // Near the poles the offset can exceed a turn of longitude or push latitude past 90.
     const shifted = lat + offLat;
     if (Math.abs(shifted) <= 90) {
-      rx = reduce(lon + offLon);
-      ry = shifted;
+      res[0] = reduce(lon + offLon);
+      res[1] = shifted;
     } else {
-      rx = NaN;
-      ry = NaN;
+      res[0] = NaN;
+      res[1] = NaN;
     }
   }
 
@@ -341,17 +338,92 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
         u = Math.sin((wy - 35) * KY);
         v = Math.cos((wy - 35) * KY);
       }
-      offset(wx - 105, wy - 35, s, c, u, v);
-      const nx = lon - ox;
-      const ny = lat - oy;
+      let oX = 0;
+      let oY = 0;
+      // @inline offset(wx - 105, wy - 35, s, c, u, v); res[2] = oX; res[3] = oY
+      {
+        const x = wx - 105;
+        const y = wy - 35;
+        const s1 = s;
+        const c1 = c;
+        const u1 = u;
+        const v1 = v;
+        const s2 = 2 * s1 * c1;
+        const c2 = 1 - 2 * s1 * s1;
+        const s4 = 2 * s2 * c2;
+        const c4 = 1 - 2 * s2 * s2;
+        const s5 = s4 * c1 + c4 * s1;
+        const c5 = c4 * c1 - s4 * s1;
+        const s10 = 2 * s5 * c5;
+        const c10 = 1 - 2 * s5 * s5;
+        const s20 = 2 * s10 * c10;
+        const c20 = 1 - 2 * s10 * s10;
+        const s60 = s20 * (3 - 4 * s20 * s20);
+        const c60 = c20 * (4 * c20 * c20 - 3);
+        const s120 = 2 * s60 * c60;
+        const s360 = s120 * (3 - 4 * s120 * s120);
+
+        const u3 = u1 * (3 - 4 * u1 * u1);
+        const v3 = v1 * (4 * v1 * v1 - 3);
+        const u6 = 2 * u3 * v3;
+        const v6 = 1 - 2 * u3 * u3;
+        const u12 = 2 * u6 * v6;
+        const v12 = 1 - 2 * u6 * u6;
+        const u15 = u12 * v3 + v12 * u3;
+        const v15 = v12 * v3 - u12 * u3;
+        const u30 = 2 * u15 * v15;
+        const v30 = 1 - 2 * u15 * u15;
+        const u60 = 2 * u30 * v30;
+        const u180 = u60 * (3 - 4 * u60 * u60);
+
+        const sp = u1 * 0.8191520442889918 + v1 * 0.573576436351046;
+        const cp = v1 * 0.8191520442889918 - u1 * 0.573576436351046;
+
+        const r = Math.sqrt(Math.abs(x));
+        const common = (40 / 3) * (s360 + s120);
+        const dLat =
+          -100 +
+          2 * x +
+          3 * y +
+          0.2 * y * y +
+          0.1 * x * y +
+          0.2 * r +
+          common +
+          (40 / 3) * u180 +
+          (80 / 3) * u60 +
+          (320 / 3) * u15 +
+          (640 / 3) * u6;
+        const dLon =
+          300 +
+          x +
+          2 * y +
+          0.1 * x * x +
+          0.1 * x * y +
+          0.1 * r +
+          common +
+          (40 / 3) * s60 +
+          (80 / 3) * s20 +
+          100 * s5 +
+          200 * s2;
+        const m = 1 - 0.006693421622965943 * sp * sp;
+        const sm = Math.sqrt(m);
+        const qcm = 1 / (cp * m);
+        const icp = m * qcm;
+        const fLon = 0.000008983000733443498 * sm * icp;
+        oX = dLon * fLon;
+        oY = dLat * 0.000009043532912185927 * m * sm;
+      }
+      // @end
+      const nx = lon - oX;
+      const ny = lat - oY;
       d = (nx - wx) * KX;
       e = (ny - wy) * KY;
       step = Math.abs(nx - wx) + Math.abs(ny - wy);
       wx = nx;
       wy = ny;
     }
-    tx = wx;
-    ty = wy;
+    res[4] = wx;
+    res[5] = wy;
     return step < LOOSE && Math.abs(wy) < 90;
   }
 
@@ -359,31 +431,31 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
   // branch (180, or the double above -180, since -180 is treated as 180) and keep it only if the forward still hits
   // the target.
   function snap(lon: number, lat: number): boolean {
-    const wx = tx > 180 ? 180 : -180 + 2 ** -45;
-    const wy = ty;
+    const wx = res[4]! > 180 ? 180 : -180 + 2 ** -45;
+    const wy = res[5]!;
     const x = wx - 105;
     const y = wy - 35;
     offset(x, y, Math.sin(x * KX), Math.cos(x * KX), Math.sin(y * KY), Math.cos(y * KY));
-    let dx = Math.abs(wx + ox - lon) % 360;
+    let dx = Math.abs(wx + res[2]! - lon) % 360;
     if (dx > 180) dx = 360 - dx;
-    tx = wx;
-    return dx + Math.abs(wy + oy - lat) < LOOSE;
+    res[4] = wx;
+    return dx + Math.abs(wy + res[3]! - lat) < LOOSE;
   }
 
   function seam(lon: number, lat: number): boolean {
-    if (tx >= -180 && tx <= 180 && tx !== -180) return true;
-    if (Math.abs(Math.abs(tx) - 180) < LOOSE) return snap(lon, lat);
+    if (res[4]! >= -180 && res[4]! <= 180 && res[4]! !== -180) return true;
+    if (Math.abs(Math.abs(res[4]!) - 180) < LOOSE) return snap(lon, lat);
     return false;
   }
 
   function toWgs84All(lon: number, lat: number): void {
     let ok = solve(lon, lat);
     if (ok && !seam(lon, lat)) {
-      ok = solve(tx > 0 ? lon - 360 : lon + 360, lat) && seam(lon, lat);
+      ok = solve(res[4]! > 0 ? lon - 360 : lon + 360, lat) && seam(lon, lat);
     }
     if (!ok) {
-      tx = NaN;
-      ty = NaN;
+      res[4] = NaN;
+      res[5] = NaN;
     }
   }
 
@@ -393,14 +465,14 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
     let offLat = 0;
     if (lon > 180 || lon < -180) lon = reduce(lon);
     if (!inDomain(lon, lat)) {
-      rx = all ? NaN : lon;
-      ry = all ? NaN : lat;
+      res[0] = all ? NaN : lon;
+      res[1] = all ? NaN : lat;
       return;
     }
     if (all) {
       toWgs84All(lon, lat);
-      rx = tx;
-      ry = ty;
+      res[0] = res[4]!;
+      res[1] = res[5]!;
       return;
     }
     const x0 = lon - 105;
@@ -428,7 +500,7 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
     let wy = lat;
     // Newton steps on w + offset(w) = (lon, lat), from w = (lon, lat).
     for (let k = 1; ; k++) {
-      // @inline offset(wx - 105, wy - 35, s, c, u, v); ox = offLon; oy = offLat; scope = open
+      // @inline offset(wx - 105, wy - 35, s, c, u, v); res[2] = offLon; res[3] = offLat; scope = open
       const x = wx - 105;
       const y = wy - 35;
       const s1 = s;
@@ -549,8 +621,8 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
       u = u0 * ce + v * se;
       v = v * ce - u0 * se;
     }
-    rx = wx;
-    ry = wy;
+    res[0] = wx;
+    res[1] = wy;
   }
 
   // Batch loops over element j of a and b[j + o1], every `step` up to `end`, written to the same places in outA and
@@ -565,7 +637,7 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
     end: number,
   ): void {
     for (let j = 0; j < end; j += step) {
-      // @inline toWgs84(a[j]!, b[j + o1]!); rx = outA[j]; ry = outB[j + o1]
+      // @inline toWgs84(a[j]!, b[j + o1]!); res[0] = outA[j]; res[1] = outB[j + o1]
       {
         let lon = a[j]!;
         const lat = b[j + o1]!;
@@ -579,8 +651,8 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
         }
         if (all) {
           toWgs84All(lon, lat);
-          outA[j] = tx;
-          outB[j + o1] = ty;
+          outA[j] = res[4]!;
+          outB[j + o1] = res[5]!;
           continue;
         }
         const x0 = lon - 105;
@@ -792,7 +864,7 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
     end: number,
   ): void {
     for (let j = 0; j < end; j += step) {
-      // @inline fromWgs84(a[j]!, b[j + o1]!); rx = outA[j]; ry = outB[j + o1]
+      // @inline fromWgs84(a[j]!, b[j + o1]!); res[0] = outA[j]; res[1] = outB[j + o1]
       {
         let lon = a[j]!;
         const lat = b[j + o1]!;
@@ -984,11 +1056,11 @@ function makeGcj02(mode: 'passthrough' | 'transform'): Geographic {
     },
     toWgs84Point(lon, lat) {
       toWgs84(lon, lat);
-      return [rx, ry];
+      return [res[0]!, res[1]!];
     },
     fromWgs84Point(lon, lat) {
       fromWgs84(lon, lat);
-      return [rx, ry];
+      return [res[0]!, res[1]!];
     },
   } satisfies Impl<Geographic>);
   fusers.set(g, fuser(mode));

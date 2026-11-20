@@ -21,6 +21,8 @@ mod kernel;
 mod math;
 #[cfg(target_feature = "simd128")]
 mod simd;
+// Bench-only math exports; the bench builds turn this on with large-heap.
+#[cfg(feature = "large-heap")]
 mod smoke;
 #[cfg(target_feature = "simd128")]
 mod vfused;

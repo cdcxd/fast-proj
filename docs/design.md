@@ -293,12 +293,17 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
   workspace once.
 - One wasm file ships, `fast-proj.wasm` (SIMD). 0.1.0 also shipped a scalar build for engines without SIMD; it measured
   no faster than the JavaScript kernel, so since 0.1.1 those engines get the JavaScript backend (`backend: 'js'`).
-- The JavaScript kernels are written once, as per-point functions returning through closure variables; the point methods
-  call them. Each batch method runs one loop per direction with a copy of the kernel in it, shared by separate and
+- The JavaScript kernels are written once, as per-point functions returning through a closure `Float64Array` (`res`);
+  the point methods call them, except Web Mercator's, which hold copies too (their module constants as literals: 36-53%
+  faster in V8, 0-7% in Bun). Each batch method runs one loop per direction with a copy of the kernel in it, shared by separate and
   interleaved arrays (element `j` of `a` and `b[j + o1]` every `step`), expanded by `scripts/inline.ts` from `// @inline`
   markers; `build` fails if a copy is stale. The copies are bit-identical to the kernels and measured 23-37% faster for
   `utm` and 28-89% for `gcj02` (Node, Bun, Chromium): engines don't keep a called kernel's closure results in registers.
   A per-point function writing to the output array or a `Float64Array(2)` scratch gained 0-4% on JavaScriptCore.
+  Before 0.6.1 the kernels returned through closure variables, which V8 boxes on every write (a HeapNumber per
+  double): the typed array made the point methods 17-36% faster in Node and Chromium (Bun within 2%), and the
+  `'transform'` GCJ-02 inverse, whose solver now holds a copy of the offset, 40-46% (Bun 15%). Finite results are bit-identical; the sign and payload of a NaN result may differ, as they
+  may between engines.
 - Since 0.5 the JavaScript kernels take sin/cos from fdlibm's kernel polynomials (`src/poly.ts`) on half the angle,
   then double (no quadrant branches while |angle| < π/2, which covers φ, ξ, UTM's λ and GCJ-02's x·π/60), falling back
   to `Math` outside; the TM inverse takes sinh/cosh of η from their series for |η| < 0.35 instead of `Math.exp`. A
@@ -329,6 +334,15 @@ wasm.dispose(); // or `using wasm = await loadWasm()`
   the general reduction: 7-12% faster.
 - The wasm converters' single-point methods run the JavaScript kernel: one point costs more to pass into wasm than to
   compute.
+- Tried and rejected (0.6.1): splitting an interleaved `Float64Array` in wasm (`deinterleave`/`interleave` exports, an
+  `i64x2_shuffle` per two points) after one bulk copy into adjacent workspace buffers. 3-7% faster in V8 from 256
+  points, but 1-4% slower in Bun at every size and slower everywhere below about 128 points (one point 2.4x as long).
+  A bulk copy of a caller's array also needed guards the indexed loop doesn't: own `subarray`/`set` properties, a
+  changed `Float64Array[Symbol.species]`, and a growable `SharedArrayBuffer` resized by a worker between the length
+  check and the copy each broke it in review. Not worth that for a few percent.
+- The bench-only exports (`smoke.rs`'s math batches, `copy_f64`, `noop`, `heap_reset`, `heap_used`) build only with
+  `large-heap`, as the bench builds do: the shipped `.wasm` went from 78 to 72 kB (24 to 23 kB gzipped) in 0.6.1,
+  with the kernels unchanged.
 - Re-entrant calls into a context (from array-like getters) throw; `dispose()` during a call throws.
 - `gcj02` (0.2) has a wasm kernel since 0.2.1, for `'passthrough'` mode (`gcj_forward_batch` / `gcj_inverse_batch`, SIMD
   build only, so other modules fall back to JavaScript). Its 11 sines come from two sin/cos pairs by multiple-angle
