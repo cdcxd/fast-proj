@@ -56,6 +56,7 @@
     "inline": "bun scripts/inline.ts",
     "prepack": "bun run build",
     "test": "vitest run",
+    "bench:charts": "node bench/charts.mts",
     "bench": "bun run build && node bench/run.mts && bun bench/run.mts && node bench/run.mts --browser"
   },
   "engines": {
