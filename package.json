@@ -22,6 +22,8 @@
     "@types/node": "^26.6.5",
     "coordtransform": "^2.1.2",
     "gcoord": "^1.0.7",
+    "leaflet": "2.0.0-beta.5",
+    "leaflet1": "npm:leaflet@1.9.4",
     "oxfmt": "^0.72.0",
     "oxlint": "^1.87.0",
     "playwright": "^1.64.0",

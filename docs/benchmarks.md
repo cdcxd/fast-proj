@@ -89,6 +89,28 @@ same baselines, which convert one point per call too. Point methods run the Java
 | WGS84 → Web Mercator | proj4          | 0.52 ms vs 1.15 (2.2×)  | 0.31 ms vs 0.75 (2.4×)   | 0.44 ms vs 1.09 (2.5×)   |
 | Web Mercator → WGS84 | proj4          | 0.33 ms vs 1.21 (3.6×)  | 0.40 ms vs 0.77 (1.9×)   | 0.34 ms vs 1.37 (4.0×)   |
 
+## Leaflet
+
+`FastPolyline` against `L.Polyline` on Leaflet's canvas renderer (`bun run bench:leaflet`): a 1M-point drive (one fix
+per second over about 11 days of driving), 1024×768 at DPR 2, Chromium 156. Times are the work of each step, including
+canvas rasterization, without the wait for the next frame; `add` includes building `L.Polyline`'s `[lat, lng]` arrays.
+
+| Leaflet | Step               | L.Polyline | FastPolyline | Speedup |
+| ------- | ------------------ | ---------: | -----------: | ------: |
+| 1.9.4   | add                |   413.6 ms |      88.2 ms |    4.7× |
+|         | pan (whole track)  |    32.2 ms |      15.4 ms |    2.1× |
+|         | zoom in 2-3 levels |   436.3 ms |      12.5 ms |   34.9× |
+|         | pan (zoomed in)    |     6.4 ms |       6.6 ms |    1.0× |
+|         | zoom out           |   389.6 ms |      13.7 ms |   28.4× |
+| 2.0 β5  | add                |   454.7 ms |      84.6 ms |    5.4× |
+|         | pan (whole track)  |    32.9 ms |      15.6 ms |    2.1× |
+|         | zoom in 2-3 levels |   397.1 ms |      13.0 ms |   30.5× |
+|         | pan (zoomed in)    |     9.0 ms |       6.6 ms |    1.4× |
+|         | zoom out           |   363.7 ms |      12.1 ms |   30.1× |
+
+Leaflet re-projects every point on each zoom; `FastPolyline` projects once and only rescales. Pans are close because
+Leaflet only clips and simplifies on a pan (no re-projection), and both spend most of a pan stroking the canvas.
+
 ## Notes
 
 The interleaved variants run at the same speed as the array form. Single runs: `node bench/run.mts`, `bun bench/run.mts`, `node bench/run.mts --browser` (needs

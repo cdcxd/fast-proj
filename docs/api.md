@@ -3,6 +3,7 @@
 ```ts
 import { BD09, bd09, GCJ02, gcj02, tmerc, utm, utmFor, utmZoneFor, webMercator, WGS84, GRS80 } from 'fast-proj';
 import { positions, lineString, latLngs } from 'fast-proj/geojson';
+import { FastPolyline } from 'fast-proj/leaflet'; // needs leaflet ^1.9 or ^2.0
 import { loadWasm } from 'fast-proj/wasm';
 ```
 
@@ -24,6 +25,8 @@ or re-entering one throws a plain `Error`. Messages start with `fast-proj:`.
 - [Zones: `utmFor`, `utmZoneFor`](#zones)
 - [Ellipsoids](#ellipsoids)
 - [GeoJSON and Leaflet helpers](#geojson-and-leaflet-helpers)
+- [Leaflet layer: `FastPolyline`](#leaflet-layer)
+- [Screen paths: `screenPath`](#screen-paths)
 - [WebAssembly backend](#webassembly-backend)
 - [Domain and accuracy](#domain-and-accuracy)
 - [Chaining](#chaining)
@@ -321,6 +324,94 @@ Each takes interleaved input, or separate `lon` and `lat` arrays such as the res
 `RangeError` for an odd interleaved length or arrays of different lengths. `latLngs` returns Leaflet's latitude-first
 order.
 
+## Leaflet layer
+
+`fast-proj/leaflet` draws large polylines in Leaflet 1.9 and 2.0 (the `leaflet` peer dependency, imported as
+`import * as L from 'leaflet'`; with Leaflet 1.9 from a script tag, use a bundler or an import map to the ESM build).
+
+```ts
+class FastPolyline extends L.Layer {
+  constructor(lonlat: ArrayLike<number>, options?: FastPolylineOptions); // interleaved WGS84 [lon0, lat0, ...]
+  setData(lonlat: ArrayLike<number>): this;
+  setStyle(style: { color?; weight?; opacity?; lineCap?; lineJoin?; tolerance? }): this;
+  redraw(): this;
+}
+
+interface FastPolylineOptions extends L.LayerOptions {
+  color?: string; // default '#3388ff'
+  weight?: number; // CSS pixels, default 3
+  opacity?: number; // of the whole layer, default 1
+  lineCap?: CanvasLineCap; // default 'round'
+  lineJoin?: CanvasLineJoin; // default 'round'
+  basemap?: Geographic; // the basemap's system, e.g. GCJ02 for AMap or Tencent tiles; default WGS84
+  tolerance?: number; // simplification, device pixels, default 0.5; 0 keeps every visible point
+  padding?: number; // canvas beyond the view on each side, as a fraction, default 0.1 (as L.Renderer)
+}
+```
+
+```ts
+const track = new FastPolyline(lonlat, { color: '#e34948', weight: 2 }).addTo(map);
+new FastPolyline(gps, { basemap: GCJ02 }).addTo(amapMap); // WGS84 GPS points on GCJ-02 tiles
+```
+
+- **How it draws.** The points are converted once, when added or on `setData`, to Leaflet's zoom-0 pixels (Web
+  Mercator for EPSG:3857 maps, after `basemap.fromWgs84`; `map.project` for other CRSs), and kept in a `Float64Array`.
+  A redraw only scales them to the current zoom, clips them to the canvas and simplifies them with
+  [`screenPath`](#screen-paths), then strokes. The layer has its own canvas in its pane (`overlayPane` by default),
+  redrawn on `moveend` and moved with CSS during zoom animations, like Leaflet's renderers, and in step with the tiles.
+- **Line breaks.** A `NaN` longitude or latitude ends one part of the line and the next point starts another, as
+  separate parts of an `L.Polyline`.
+- **What it does not do.** No events, popups or hit-testing (`pointer-events: none`), no fill or dash. `opacity` is the
+  canvas's CSS opacity, so overlapping parts of the line do not darken. The data is read when the layer is added and
+  on `setData`; changing the array in place needs `setData` again.
+- **Differences from `L.Polyline`.** Points are not rounded to whole pixels (Leaflet 1.9 rounds them), and the default
+  tolerance is half a device pixel (`smoothFactor` 1, one CSS pixel, in 1.9; 0.5 in 2.0). The result is within a
+  pixel of `L.Polyline` with `smoothFactor: 0`; see `test/leaflet-browser.mts`.
+- **Speed.** For 1M points in Chromium: adding the layer 5× faster than `L.Polyline` (no `LatLng` objects), zooming
+  30× faster (no re-projection), panning 2× faster. See [benchmarks](benchmarks.md#leaflet).
+
+## Screen paths
+
+`screenPath` (from the root entry) turns a polyline in world coordinates into canvas or WebGL coordinates: it scales
+and offsets the points, clips each segment to a box (Liang–Barsky), and simplifies what is visible to within a
+tolerance, in one pass with no allocation (`FastPolyline` redraws with it).
+
+```ts
+interface ScreenView {
+  scale: number; // screen = world * scale + offset
+  offsetX: number;
+  offsetY: number;
+  minX: number; // the clip box, in screen units
+  minY: number;
+  maxX: number;
+  maxY: number;
+  tolerance: number; // in screen units; 0 keeps every visible point
+}
+interface ScreenPath {
+  xy: Float32Array; // the runs' points, interleaved, back to back
+  runs: Uint32Array; // run k is points runs[k] to runs[k + 1] (exclusive)
+  runCount: number;
+}
+function screenPath(world: ArrayLike<number>, view: ScreenView, out?: ScreenPath): ScreenPath;
+```
+
+```ts
+const p = (path = screenPath(world, view, path)); // reuses the buffers of the last call
+for (let k = 0; k < p.runCount; k++) {
+  ctx.moveTo(p.xy[2 * p.runs[k]], p.xy[2 * p.runs[k] + 1]);
+  for (let j = p.runs[k] + 1; j < p.runs[k + 1]; j++) ctx.lineTo(p.xy[2 * j], p.xy[2 * j + 1]);
+}
+```
+
+- A segment wholly outside the box is skipped and ends the run; one that crosses it is cut at the box edge. A
+  non-finite coordinate breaks the line.
+- Simplification is a corridor test (Reumann–Witkam), linear in the point count: a point is skipped while it stays
+  within `tolerance` of the line from the last kept point and does not move back along it. Every visible input point
+  is within twice the tolerance of the output. At half a device pixel the stroked result differs from the full line in
+  about 1% of its pixels, at the edges.
+- About 6 ms per million points in V8 and Bun (Chromium 156: the first two calls take 2-4x longer, before the JIT
+  has optimized it).
+
 ## WebAssembly backend
 
 `fast-proj/wasm` runs the batch methods in one combined Rust module (f64x2 SIMD where supported). It is opt-in: the
@@ -481,9 +572,13 @@ map.addLayer({ id: 'track', type: 'line', source: 'track' });
 ### Leaflet: polyline
 
 ```ts
+import { FastPolyline } from 'fast-proj/leaflet';
+
+new FastPolyline(zone.toLonLatInterleaved(xy)).addTo(map); // large data; see Leaflet layer
+
 import { latLngs } from 'fast-proj/geojson';
 
-L.polyline(latLngs(zone.toLonLatInterleaved(xy))).addTo(map);
+L.polyline(latLngs(zone.toLonLatInterleaved(xy))).addTo(map); // L.Polyline: events, popups, editing plugins
 ```
 
 ### deck.gl: binary attributes, no per-point arrays
