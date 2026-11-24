@@ -74,6 +74,7 @@ export function screenPath(world: ArrayLike<number>, view: ScreenView, out?: Scr
   }
   const m = I[1]!;
   const r = I[2]!;
+  if (runs.length <= r) runs = grow(runs, r + 1) as Uint32Array;
   runs[r] = m;
   if (out) {
     out.xy = xy;
@@ -85,7 +86,7 @@ export function screenPath(world: ArrayLike<number>, view: ScreenView, out?: Scr
 }
 
 function grow(a: Float32Array | Uint32Array, min: number): Float32Array | Uint32Array {
-  let k = a.length * 2;
+  let k = Math.max(a.length * 2, 16);
   while (k < min) k *= 2;
   const b = a instanceof Float32Array ? new Float32Array(k) : new Uint32Array(k);
   b.set(a);
@@ -171,8 +172,8 @@ function chunk(world: ArrayLike<number>, i0: number, i1: number, n: number, xy: 
           if (lo > t0) t0 = lo;
           if (hi < t1) t1 = hi;
         }
-        if (t0 > t1) {
-          // Misses the box (crosses only the corner region outside it).
+        if (!(t0 <= t1) || dx - dx !== 0 || dy - dy !== 0) {
+          // Misses the box (crosses only the corner region outside it), or spans more than a double can hold.
           if (open) {
             if (pend) {
               xy[2 * m] = cx;

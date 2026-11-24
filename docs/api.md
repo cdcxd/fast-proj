@@ -327,7 +327,9 @@ order.
 ## Leaflet layer
 
 `fast-proj/leaflet` draws large polylines in Leaflet 1.9 and 2.0 (the `leaflet` peer dependency, imported as
-`import * as L from 'leaflet'`; with Leaflet 1.9 from a script tag, use a bundler or an import map to the ESM build).
+`import * as L from 'leaflet'`). With Leaflet 1.9, use a bundler, or an import map to `leaflet/dist/leaflet-src.esm.js`
+(1.9's package has no ESM entry, so plain Node ESM, such as a jsdom test, needs that alias too); TypeScript users of 1.9
+need `@types/leaflet`.
 
 ```ts
 class FastPolyline extends L.Layer {
@@ -359,22 +361,26 @@ new FastPolyline(gps, { basemap: GCJ02 }).addTo(amapMap); // WGS84 GPS points on
   A redraw only scales them to the current zoom, clips them to the canvas and simplifies them with
   [`screenPath`](#screen-paths), then strokes. The layer has its own canvas in its pane (`overlayPane` by default),
   redrawn on `moveend` and moved with CSS during zoom animations, like Leaflet's renderers, and in step with the tiles.
-- **Line breaks.** A `NaN` longitude or latitude ends one part of the line and the next point starts another, as
+- **Line breaks.** A non-finite longitude or latitude ends one part of the line and the next point starts another, as
   separate parts of an `L.Polyline`.
+- **Longitudes are not wrapped**, as in `L.Polyline`: a track from 179° to 181° crosses the antimeridian as a short line,
+  and data shifted by 360° draws on the next copy of the world.
 - **What it does not do.** No events, popups or hit-testing (`pointer-events: none`), no fill or dash. `opacity` is the
   canvas's CSS opacity, so overlapping parts of the line do not darken. The data is read when the layer is added and
-  on `setData`; changing the array in place needs `setData` again.
+  on `setData`; to show an array changed in place, call `setData` again.
 - **Differences from `L.Polyline`.** Points are not rounded to whole pixels (Leaflet 1.9 rounds them), and the default
   tolerance is half a device pixel (`smoothFactor` 1, one CSS pixel, in 1.9; 0.5 in 2.0). The result is within a
   pixel of `L.Polyline` with `smoothFactor: 0`; see `test/leaflet-browser.mts`.
-- **Speed.** For 1M points in Chromium: adding the layer 5× faster than `L.Polyline` (no `LatLng` objects), zooming
-  30× faster (no re-projection), panning 2× faster. See [benchmarks](benchmarks.md#leaflet).
+- **Speed.** For 1M points in Chromium: adding the layer 5× faster than `L.Polyline` (no `LatLng` objects) and zooming
+  30-60× faster (no re-projection); panning 2× faster with the whole line in view, and about the same when zoomed in.
+  See [benchmarks](benchmarks.md#leaflet).
 
 ## Screen paths
 
 `screenPath` (from the root entry) turns a polyline in world coordinates into canvas or WebGL coordinates: it scales
 and offsets the points, clips each segment to a box (Liang–Barsky), and simplifies what is visible to within a
-tolerance, in one pass with no allocation (`FastPolyline` redraws with it).
+tolerance, in one pass with no per-point allocation (`FastPolyline` redraws with it). Pass the last result as `out` to
+reuse its buffers, which grow as needed.
 
 ```ts
 interface ScreenView {
@@ -403,14 +409,14 @@ for (let k = 0; k < p.runCount; k++) {
 }
 ```
 
-- A segment wholly outside the box is skipped and ends the run; one that crosses it is cut at the box edge. A
+- The box must have `minX ≤ maxX` and `minY ≤ maxY`. A segment wholly outside it is skipped and ends the run; one that crosses it is cut at the box edge. A
   non-finite coordinate breaks the line.
 - Simplification is a corridor test (Reumann–Witkam), linear in the point count: a point is skipped while it stays
   within `tolerance` of the line from the last kept point and does not move back along it. Every visible input point
   is within twice the tolerance of the output. At half a device pixel the stroked result differs from the full line in
   about 1% of its pixels, at the edges.
-- About 6 ms per million points in V8 and Bun (Chromium 156: the first two calls take 2-4x longer, before the JIT
-  has optimized it).
+- 5 to 15 ms per million points in V8 and Bun: the less of the line is visible, the faster. In Chromium 156 the first
+  two calls take 2-4× longer, before the JIT has optimized it.
 
 ## WebAssembly backend
 

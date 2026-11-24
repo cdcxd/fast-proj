@@ -19,7 +19,7 @@ const page = (entry: string) => `<!doctype html><meta charset="utf-8">
 <link rel="stylesheet" href="/leaflet/leaflet.css">
 <style>.leaflet-zoom-anim .leaflet-zoom-animated { transition: none !important; }</style>
 <script type="importmap">{"imports":{"leaflet":"/leaflet/${entry}"}}</script>
-<body style="margin:0"><div id="map" style="width:900px;height:640px"></div>
+<body style="margin:0"><div id="map" style="width:900px;height:640px"></div><div id="map2" style="width:400px;height:300px"></div>
 <script type="module">
 import * as L from 'leaflet';
 import { FastPolyline } from '/dist/leaflet.js';
@@ -69,6 +69,47 @@ window.tileOffsets = () => {
       Math.abs(tr.y - (cr.y + (y * 256 * f - fast._origin.y) * sc)),
     );
   });
+};
+// Edge cases on a second map, as numbers: [check, ok, detail].
+window.extra = () => {
+  const out = [];
+  const el = document.getElementById('map2');
+  const fresh = (opts) => { if (window.m2) window.m2.remove(); return (window.m2 = new L.Map(el, { fadeAnimation: false, zoomAnimation: false, ...opts })); };
+  const pts = (layer) => layer._path.runs[layer._path.runCount];
+  const span = (layer) => { const p = layer._path; let a = Infinity, b = -Infinity; for (let i = 0; i < pts(layer); i++) { a = Math.min(a, p.xy[2 * i]); b = Math.max(b, p.xy[2 * i]); } return (b - a) / window.devicePixelRatio; };
+  // Across the antimeridian, as L.Polyline: 179 to 181 is 2 degrees, not 358.
+  let m = fresh({});
+  m.setView([0, 180], 5);
+  let f = new FastPolyline([179, 0, 181, 0], { tolerance: 0 }).addTo(m);
+  const want = m.latLngToLayerPoint([0, 181]).x - m.latLngToLayerPoint([0, 179]).x;
+  out.push(['antimeridian', Math.abs(span(f) - want) < 1, span(f) + ' vs ' + want]);
+  // NaN breaks on a non-Mercator CRS.
+  m = fresh({ crs: v2 ? L.EPSG4326 : L.CRS.EPSG4326 });
+  m.setView([0, 10], 3);
+  try {
+    f = new FastPolyline([0, 0, 10, 10, NaN, NaN, 20, 0, 25, 5], { tolerance: 0 }).addTo(m);
+    out.push(['EPSG:4326 with a break', f._path.runCount === 2, f._path.runCount + ' runs']);
+  } catch (e) { out.push(['EPSG:4326 with a break', false, e.message]); }
+  // An explicit undefined option keeps the default.
+  m = fresh({});
+  const zig = []; for (let i = 0; i < 50; i++) zig.push(i * 0.01, (i % 2) * 0.01);
+  m.fitBounds([[0, 0], [0.01, 0.49]], { animate: false });
+  const plain = new FastPolyline(zig).addTo(m);
+  f = new FastPolyline(zig, { tolerance: undefined, padding: undefined }).addTo(m);
+  out.push(['undefined options', pts(f) === pts(plain) && pts(f) > 40, pts(f) + ' points, ' + pts(plain) + ' by default']);
+  plain.remove();
+  // One draw per view change.
+  let draws = 0; const orig = f._redraw; f._redraw = function () { draws++; return orig.call(this); };
+  m.setView([0.006, 0.25], 15, { animate: false });
+  const a = draws; m.invalidateSize(); m.panBy([10, 0], { animate: false });
+  out.push(['draws per change', a === 1 && draws === 2, a + ', then ' + draws]);
+  // Data changed in place is read again when the layer is added again.
+  const data = new Float64Array([0, 0, 0.1, 0]);
+  f = new FastPolyline(data, { tolerance: 0 }).addTo(m);
+  f.remove(); data[2] = 0.2; f.addTo(m);
+  out.push(['re-add reads the data', Math.abs(f._world[2] - (128 + 0.2 * 256 / 360)) < 1e-12, String(f._world[2])]);
+  m.remove();
+  return out;
 };
 window.api = () => {
   fast.setStyle({ color: '#00ff00', opacity: 0.5 });
@@ -195,6 +236,13 @@ for (const v of versions) {
         check(Math.max(...settled) < slack, `${tag}, after zoom animation ${dz}: tile offsets ${Math.max(...settled)}`);
       }
       await compare('after zoom animations');
+      if (dpr === 1 && !gcj) {
+        for (const [name, ok, detail] of await p.evaluate(
+          () => (window as any).extra() as [string, boolean, string][],
+        )) {
+          check(ok, `Leaflet ${v.name}, ${name}: ${detail}`);
+        }
+      }
       const [before, after] = await p.evaluate(() => (window as any).api());
       check(before === 1 && after === 0, `${tag}, setStyle, setData, remove: canvases ${before} then ${after}`);
       await p.close();

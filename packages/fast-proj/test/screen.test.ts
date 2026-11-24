@@ -34,6 +34,8 @@ function distToSegment(px: number, py: number, ax: number, ay: number, bx: numbe
   return Math.hypot(px - ax - t * dx, py - ay - t * dy);
 }
 
+const empty = (): ScreenPath => ({ xy: new Float32Array(0), runs: new Uint32Array(0), runCount: 0 });
+
 const view = (o: Partial<ScreenView>): ScreenView => ({
   scale: 1,
   offsetX: 0,
@@ -74,6 +76,8 @@ describe('screenPath', () => {
       [4, 4, 5, 5],
     ]);
     expect(screenPath([], view({})).runCount).toBe(0);
+    // A span that overflows a double is skipped, not drawn as NaN.
+    expect(screenPath([-1e308, 50, 1e308, 50], view({})).runCount).toBe(0);
     expect(screenPath([1, 2], view({})).runCount).toBe(0);
   });
 
@@ -133,6 +137,12 @@ describe('screenPath', () => {
       }
       expect(worst).toBeLessThanOrEqual(2 * tol + 1e-3);
     }
+  });
+
+  it('grows empty buffers passed as out', () => {
+    expect(runsOf(screenPath([0, 0, 1, 1], view({}), empty()))).toEqual([[0, 0, 1, 1]]);
+    expect(screenPath([5, 5], view({}), empty()).runs[0]).toBe(0);
+    expect(screenPath([], view({}), empty()).runs[0]).toBe(0);
   });
 
   it('gives the same result when called again with its output', () => {

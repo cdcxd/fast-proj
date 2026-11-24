@@ -81,9 +81,19 @@ window.run = async (kind, n) => {
   }
   const pan = (i) => map.panBy([i % 2 ? -150 : 150, 60], { animate: false });
   out.pan = await median(pan);
-  out.zoomIn = await median((i) => map.setZoom(z + (i % 2 ? 2 : 3), { animate: false }));
+  // Each zoom from the other level, set untimed before it.
+  const zoom = async (from, to) => {
+    const t = [];
+    for (let k = 0; k < 5; k++) {
+      map.setZoom(from, { animate: false });
+      flushFrames();
+      t.push(await timed(() => map.setZoom(to, { animate: false })));
+    }
+    return t.sort((a, b) => a - b)[2];
+  };
+  out.zoomIn = await zoom(z, z + 3);
   out.panZoomedIn = await median(pan);
-  out.zoomOut = await median((i) => map.setZoom(i % 2 ? z : z + 3, { animate: false }));
+  out.zoomOut = await zoom(z + 3, z);
   return out;
 };
 window.ready = true;

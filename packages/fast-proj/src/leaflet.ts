@@ -36,6 +36,10 @@ const R = 6378137;
 const MAX_LAT = 85.0511287798; // L.Projection.SphericalMercator.MAX_LATITUDE
 
 type Point = { x: number; y: number };
+
+// Without its undefined values: L.Util.setOptions copies them over the defaults.
+const defined = <T extends object>(o: T | undefined): T =>
+  Object.fromEntries(Object.entries(o ?? {}).filter(([, v]) => v !== undefined)) as T;
 type ZoomAnimEvent = { center: L.LatLng; zoom: number };
 
 /**
@@ -63,12 +67,14 @@ export class FastPolyline extends L.Layer {
   // The canvas was drawn at _zoom with its top left corner at the absolute pixel _origin.
   private _zoom = 0;
   private _origin: Point = { x: 0, y: 0 };
+  // The view the canvas was last drawn for: viewreset, resize and moveend often come together for one change.
+  private _drawn = '';
 
   constructor(lonlat: ArrayLike<number>, options?: FastPolylineOptions) {
     super();
     if (lonlat.length % 2) throw new RangeError('fast-proj: lonlat must have an even length');
     this._lonlat = lonlat;
-    L.Util.setOptions(this, options);
+    L.Util.setOptions(this, defined(options));
   }
 
   /** Replaces the points. */
@@ -83,7 +89,7 @@ export class FastPolyline extends L.Layer {
   setStyle(
     style: Pick<FastPolylineOptions, 'color' | 'weight' | 'opacity' | 'lineCap' | 'lineJoin' | 'tolerance'>,
   ): this {
-    L.Util.setOptions(this, style as L.LayerOptions);
+    L.Util.setOptions(this, defined(style) as L.LayerOptions);
     if (this._canvas) this._canvas.style.opacity = String(this._opts.opacity);
     return this.redraw();
   }
@@ -108,6 +114,9 @@ export class FastPolyline extends L.Layer {
   }
 
   override onRemove(): this {
+    // Read the data again on the next add.
+    this._worldCrs = null;
+    this._drawn = '';
     this._canvas?.remove();
     this._canvas = undefined;
     this._ctx = null;
@@ -139,7 +148,8 @@ export class FastPolyline extends L.Layer {
     const world = n === this._world.length ? this._world : new Float64Array(n);
     if ((crs as { code?: string }).code === 'EPSG:3857') {
       // L.CRS.EPSG3857: x = 256 (1/2 + X / 2piR), y = 256 (1/2 - Y / 2piR) of the spherical Mercator X, Y, from a
-      // latitude clamped as L.Projection.SphericalMercator does.
+      // latitude clamped as L.Projection.SphericalMercator does. x is linear in the longitude and, as in Leaflet, not
+      // wrapped (webMercator wraps it to [-180, 180]): a track across the antimeridian stays continuous.
       for (let i = 1; i < n; i += 2) {
         const lat = ll[i]!;
         if (lat > MAX_LAT) ll[i] = MAX_LAT;
@@ -148,14 +158,26 @@ export class FastPolyline extends L.Layer {
       webMercator().fromLonLatInterleaved(ll, world);
       const k = 256 / (2 * Math.PI * R);
       for (let i = 0; i < n; i += 2) {
-        world[i] = 128 + world[i]! * k;
-        world[i + 1] = 128 - world[i + 1]! * k;
+        const lon = ll[i]!;
+        const lat = ll[i + 1]!;
+        // Non-finite input breaks the line (a clamped infinite latitude would not).
+        const ok = lon - lon === 0 && lat - lat === 0;
+        world[i] = ok ? 128 + lon * (256 / 360) : NaN;
+        world[i + 1] = ok ? 128 - world[i + 1]! * k : NaN;
       }
     } else {
       for (let i = 0; i < n; i += 2) {
-        const p = map.project([ll[i + 1]!, ll[i]!], 0);
-        world[i] = p.x;
-        world[i + 1] = p.y;
+        const lon = ll[i]!;
+        const lat = ll[i + 1]!;
+        if (lon - lon === 0 && lat - lat === 0) {
+          const p = map.project([lat, lon], 0);
+          world[i] = p.x;
+          world[i + 1] = p.y;
+        } else {
+          // A break; LatLng rejects NaN.
+          world[i] = NaN;
+          world[i + 1] = NaN;
+        }
       }
     }
     this._world = world;
@@ -181,10 +203,13 @@ export class FastPolyline extends L.Layer {
     canvas.style.height = `${h}px`;
     const bw = Math.round(w * dpr);
     const bh = Math.round(h * dpr);
+    const view = `${this._zoom} ${this._origin.x} ${this._origin.y} ${bw} ${bh}`;
+    if (view === this._drawn && canvas.width === bw && canvas.height === bh) return;
     if (canvas.width !== bw || canvas.height !== bh) {
       canvas.width = bw;
       canvas.height = bh;
     }
+    this._drawn = view;
     this._redraw();
   }
 

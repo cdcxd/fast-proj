@@ -95,18 +95,18 @@ same baselines, which convert one point per call too. Point methods run the Java
 per second over about 11 days of driving), 1024×768 at DPR 2, Chromium 156. Times are the work of each step, including
 canvas rasterization, without the wait for the next frame; `add` includes building `L.Polyline`'s `[lat, lng]` arrays.
 
-| Leaflet | Step               | L.Polyline | FastPolyline | Speedup |
-| ------- | ------------------ | ---------: | -----------: | ------: |
-| 1.9.4   | add                |   413.6 ms |      88.2 ms |    4.7× |
-|         | pan (whole track)  |    32.2 ms |      15.4 ms |    2.1× |
-|         | zoom in 2-3 levels |   436.3 ms |      12.5 ms |   34.9× |
-|         | pan (zoomed in)    |     6.4 ms |       6.6 ms |    1.0× |
-|         | zoom out           |   389.6 ms |      13.7 ms |   28.4× |
-| 2.0 β5  | add                |   454.7 ms |      84.6 ms |    5.4× |
-|         | pan (whole track)  |    32.9 ms |      15.6 ms |    2.1× |
-|         | zoom in 2-3 levels |   397.1 ms |      13.0 ms |   30.5× |
-|         | pan (zoomed in)    |     9.0 ms |       6.6 ms |    1.4× |
-|         | zoom out           |   363.7 ms |      12.1 ms |   30.1× |
+| Leaflet | Step              | L.Polyline | FastPolyline | Speedup |
+| ------- | ----------------- | ---------: | -----------: | ------: |
+| 1.9.4   | add               |   420.8 ms |      92.4 ms |    4.6× |
+|         | pan (whole track) |    30.3 ms |      15.2 ms |    2.0× |
+|         | zoom in 3 levels  |   413.6 ms |       6.8 ms |   60.8× |
+|         | pan (zoomed in)   |     6.3 ms |       6.5 ms |    1.0× |
+|         | zoom out 3 levels |   466.2 ms |      14.3 ms |   32.6× |
+| 2.0 β5  | add               |   436.9 ms |      90.1 ms |    4.8× |
+|         | pan (whole track) |    32.6 ms |      15.3 ms |    2.1× |
+|         | zoom in 3 levels  |   370.5 ms |       6.7 ms |   55.3× |
+|         | pan (zoomed in)   |     7.1 ms |       6.6 ms |    1.1× |
+|         | zoom out 3 levels |   408.2 ms |      14.3 ms |   28.5× |
 
 Leaflet re-projects every point on each zoom; `FastPolyline` projects once and only rescales. Pans are close because
 Leaflet only clips and simplifies on a pan (no re-projection), and both spend most of a pan stroking the canvas.
