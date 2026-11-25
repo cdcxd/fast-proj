@@ -138,7 +138,11 @@ window.extra = () => {
   const crss = {
     '512-pixel tiles': { code: 'EPSG:3857', scale: (z) => 512 * 2 ** z, zoom: (k) => Math.log2(k / 512) },
     'no scale below zoom 5': { code: 'X:1', scale: (z) => (z < 5 ? NaN : 256 * 2 ** z) },
-    'zoom-dependent offset': { code: 'X:2', latLngToPoint(ll, z) { const p = base.latLngToPoint.call(this, ll, z); p.x += 10 * z; return p; } },
+    'zoom-dependent offset': {
+      code: 'X:2',
+      latLngToPoint(ll, z) { const p = base.latLngToPoint.call(this, ll, z); p.x += 10 * z; return p; },
+      pointToLatLng(p, z) { return base.pointToLatLng.call(this, new L.Point(p.x - 10 * z, p.y), z); },
+    },
   };
   for (const [name, o] of Object.entries(crss)) {
     m = fresh({ crs: Object.assign(Object.create(base), o) });
@@ -150,6 +154,21 @@ window.extra = () => {
       const k = f._worldScale(z);
       const d = Math.abs(f._world[0] * k - q.x) + Math.abs(f._world[1] * k - q.y);
       out.push(['custom CRS, ' + name + ', zoom ' + z, d < 1e-6 && f._path.runCount === 1, 'off by ' + d + ', ' + f._path.runCount + ' runs']);
+    }
+    // A zoom animation to 13 moves the canvas where the map projects the track at 13 (no animation without 3D).
+    if (L.Browser?.any3d !== false) {
+      const c = m.getCenter();
+      f._animateZoom({ center: c, zoom: 13 });
+      // Leaflet 1.9's setTransform leaves getPosition as it was.
+      const t = new DOMMatrix(f._canvas.style.transform);
+      const pos = { x: t.e, y: t.f };
+      const s = t.a;
+      const k = f._worldScale(12);
+      const o = m.project(c, 13).subtract(m.getSize().divideBy(2)).subtract(m.containerPointToLayerPoint([0, 0])).round();
+      const want = m.project([39.9, 116.3], 13).subtract(o);
+      const d = Math.abs(pos.x + s * (f._world[0] * k - f._origin.x) - want.x) + Math.abs(pos.y + s * (f._world[1] * k - f._origin.y) - want.y);
+      out.push(['custom CRS, ' + name + ', zoom animation', d < 1e-6, 'off by ' + d]);
+      f._onZoom();
     }
   }
   // Leaflet 2.0 runs init hooks after the constructor (1.x runs them in super(), before it).

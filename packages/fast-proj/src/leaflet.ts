@@ -92,6 +92,9 @@ export class FastPolyline extends L.Layer {
   // The canvas was drawn at _zoom with its top left corner at the absolute pixel _origin.
   private _zoom = 0;
   private _origin: Point = { x: 0, y: 0 };
+  // The canvas centre, as a LatLng and as absolute pixels at _zoom.
+  private _center: L.LatLng | undefined;
+  private _centerPx: Point = { x: 0, y: 0 };
   // The zoom and canvas size it was drawn for ('' for none).
   private _drawn = '';
 
@@ -295,6 +298,8 @@ export class FastPolyline extends L.Layer {
     L.DomUtil.setPosition(canvas, topLeft);
     this._zoom = zoom;
     this._origin = { x: po.x + topLeft.x, y: po.y + topLeft.y };
+    this._centerPx = { x: this._origin.x + w / 2, y: this._origin.y + h / 2 };
+    this._center = map.unproject(this._centerPx as L.Point, zoom);
     canvas.style.width = `${w}px`;
     canvas.style.height = `${h}px`;
     if (canvas.width !== bw || canvas.height !== bh) {
@@ -375,8 +380,18 @@ export class FastPolyline extends L.Layer {
   }
 
   private _updateTransform(zoom: number, pixelOrigin: Point): void {
-    const scale = this._map!.getZoomScale(zoom, this._zoom);
-    const pos = new L.Point(this._origin.x * scale - pixelOrigin.x, this._origin.y * scale - pixelOrigin.y);
+    const map = this._map!;
+    const scale = map.getZoomScale(zoom, this._zoom);
+    let x = this._origin.x * scale;
+    let y = this._origin.y * scale;
+    // A CRS with its own latLngToPoint may also shift pixels per zoom: place the canvas by its centre projected at the
+    // new zoom, as L.Renderer does.
+    if (this._worldMode === 2 && this._center) {
+      const c = map.project(this._center, zoom);
+      x = c.x - (this._centerPx.x - this._origin.x) * scale;
+      y = c.y - (this._centerPx.y - this._origin.y) * scale;
+    }
+    const pos = new L.Point(x - pixelOrigin.x, y - pixelOrigin.y);
     if (ANY_3D) L.DomUtil.setTransform(this._canvas!, pos, scale);
     // As L.Renderer: no zoom animation without 3D transforms, and setPosition in _reset uses left/top too.
     else L.DomUtil.setPosition(this._canvas!, pos);
