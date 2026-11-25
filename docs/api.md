@@ -3,7 +3,7 @@
 ```ts
 import { BD09, bd09, GCJ02, gcj02, tmerc, utm, utmFor, utmZoneFor, webMercator, WGS84, GRS80 } from 'fast-proj';
 import { positions, lineString, latLngs } from 'fast-proj/geojson';
-import { FastPolyline } from 'fast-proj/leaflet'; // needs leaflet ^1.9 or ^2.0
+import { FastPolyline } from 'fast-proj/leaflet'; // needs leaflet 1.x (1.3.4+) or 2.0
 import { loadWasm } from 'fast-proj/wasm';
 ```
 
@@ -326,10 +326,10 @@ order.
 
 ## Leaflet layer
 
-`fast-proj/leaflet` draws large polylines in Leaflet 1.9 and 2.0 (the `leaflet` peer dependency, imported as
-`import * as L from 'leaflet'`). With Leaflet 1.9, use a bundler, or an import map to `leaflet/dist/leaflet-src.esm.js`
-(1.9's package has no ESM entry, so plain Node ESM, such as a jsdom test, needs that alias too); TypeScript users of 1.9
-need `@types/leaflet`.
+`fast-proj/leaflet` draws large polylines in Leaflet 1.x (1.3.4 or later; checked on 1.3.4–1.9.4) and 2.0 (the
+optional `leaflet` peer dependency, imported as `import * as L from 'leaflet'`). With Leaflet 1.x, use a bundler, or an
+import map to `leaflet/dist/leaflet-src.esm.js` (1.x packages have no ESM entry, so plain Node ESM, such as a jsdom
+test, needs that alias too); TypeScript users of 1.x need `@types/leaflet`.
 
 ```ts
 class FastPolyline extends L.Layer {
@@ -346,7 +346,7 @@ interface FastPolylineOptions extends L.LayerOptions {
   lineCap?: CanvasLineCap; // default 'round'
   lineJoin?: CanvasLineJoin; // default 'round'
   basemap?: Geographic; // the basemap's system, e.g. GCJ02 for AMap or Tencent tiles; default WGS84
-  tolerance?: number; // simplification, device pixels, default 0.5; 0 keeps every visible point
+  tolerance?: number; // simplification, device pixels, default 0.5; 0 keeps every visible point except repeats
   padding?: number; // canvas beyond the view on each side, as a fraction, default 0.1 (as L.Renderer)
 }
 ```
@@ -368,6 +368,11 @@ new FastPolyline(gps, { basemap: GCJ02 }).addTo(amapMap); // WGS84 GPS points on
 - **What it does not do.** No events, popups or hit-testing (`pointer-events: none`), no fill or dash. `opacity` is the
   canvas's CSS opacity, so overlapping parts of the line do not darken. The data is read when the layer is added and
   on `setData`; to show an array changed in place, call `setData` again.
+- **One canvas per layer**, padded by `padding` around the map (`L.Canvas` shares one between its layers): about 30 MB
+  for a 1600×1200 map at DPR 2. Mobile Safari caps the total canvas memory of a page, so keep the layer count low
+  there.
+- **Custom CRSs.** Leaflet's own EPSG:3857 uses fast-proj's Web Mercator; any other CRS, including one that keeps the
+  code `EPSG:3857` with another scale or origin (Proj4Leaflet), goes through `map.project`, once per point when added.
 - **Differences from `L.Polyline`.** Points are not rounded to whole pixels (Leaflet 1.9 rounds them), and the default
   tolerance is half a device pixel (`smoothFactor` 1, one CSS pixel, in 1.9; 0.5 in 2.0). The result is within a
   pixel of `L.Polyline` with `smoothFactor: 0`; see `test/leaflet-browser.mts`.
@@ -391,7 +396,7 @@ interface ScreenView {
   minY: number;
   maxX: number;
   maxY: number;
-  tolerance: number; // in screen units; 0 keeps every visible point
+  tolerance: number; // in screen units; 0 keeps every visible point except repeats
 }
 interface ScreenPath {
   xy: Float32Array; // the runs' points, interleaved, back to back
@@ -409,8 +414,9 @@ for (let k = 0; k < p.runCount; k++) {
 }
 ```
 
-- The box must have `minX ≤ maxX` and `minY ≤ maxY`. A segment wholly outside it is skipped and ends the run; one that crosses it is cut at the box edge. A
-  non-finite coordinate breaks the line.
+- The box must have `minX ≤ maxX` and `minY ≤ maxY`, and be screen-sized: the output is `Float32Array`, about 7
+  significant digits. A segment wholly outside it is skipped and ends the run; one that crosses it is cut at the box
+  edge. A non-finite coordinate breaks the line.
 - Simplification is a corridor test (Reumann–Witkam), linear in the point count: a point is skipped while it stays
   within `tolerance` of the line from the last kept point and does not move back along it. Every visible input point
   is within twice the tolerance of the output. At half a device pixel the stroked result differs from the full line in

@@ -108,6 +108,26 @@ window.extra = () => {
   f = new FastPolyline(data, { tolerance: 0 }).addTo(m);
   f.remove(); data[2] = 0.2; f.addTo(m);
   out.push(['re-add reads the data', Math.abs(f._world[2] - (128 + 0.2 * 256 / 360)) < 1e-12, String(f._world[2])]);
+  // An infinite latitude breaks the line rather than reaching the top of the world.
+  m.fitBounds([[0, 0], [0.1, 0.4]], { animate: false });
+  f = new FastPolyline([0, 0, 0.1, 0.1, 0.2, Infinity, 0.3, 0, 0.4, 0.1], { tolerance: 0 }).addTo(m);
+  out.push(['infinite latitude', f._path.runCount === 2 && Number.isNaN(f._world[5]), f._path.runCount + ' runs, y ' + f._world[5]]);
+  // A straight translucent line, in pieces: one coverage everywhere (alpha 128), not darker where pieces meet.
+  m.setView([0, 0], 10, { animate: false });
+  const line = []; for (let i = 0; i < 2000; i++) line.push(-0.5 + i / 2000, 0);
+  f = new FastPolyline(line, { color: 'rgba(0,0,255,0.5)', weight: 6, tolerance: 0 }).addTo(m);
+  const alpha = (c) => { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let k = 0; for (let i = 3; i < d.length; i += 4) k = Math.max(k, d[i]); return k; };
+  out.push(['translucent color', alpha(f._canvas) <= 130, 'alpha ' + alpha(f._canvas)]);
+  // Weight 0 draws nothing (a canvas ignores lineWidth 0).
+  f.setStyle({ weight: 0 }); f._redraw();
+  out.push(['weight 0', alpha(f._canvas) === 0, 'alpha ' + alpha(f._canvas)]);
+  // A CRS with code EPSG:3857 but 512-pixel tiles projects through the map, not the fast path.
+  const base = v2 ? L.EPSG3857 : L.CRS.EPSG3857;
+  m = fresh({ crs: Object.assign(Object.create(base), { code: 'EPSG:3857', scale: (z) => 512 * 2 ** z, zoom: (k) => Math.log2(k / 512) }) });
+  m.setView([39.9, 116.3], 10);
+  f = new FastPolyline([116.3, 39.9, 116.4, 40]).addTo(m);
+  const q = m.project([39.9, 116.3], 0);
+  out.push(['custom EPSG:3857', Math.abs(f._world[0] - q.x) + Math.abs(f._world[1] - q.y) < 1e-9, f._world[0] + ' vs ' + q.x]);
   m.remove();
   return out;
 };

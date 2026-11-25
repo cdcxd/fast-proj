@@ -1,5 +1,5 @@
 /**
- * Leaflet layers for large typed-array data, for Leaflet 1.9 and 2.0.
+ * Leaflet layers for large typed-array data, for Leaflet 1.x (1.3.4+) and 2.0.
  *
  * Points are converted once, on setData, to Leaflet's zoom-0 pixels (with fast-proj's Web Mercator for EPSG:3857 maps,
  * after an optional datum shift such as GCJ-02 for Chinese basemaps). A redraw only scales them, clips and simplifies
@@ -41,6 +41,16 @@ type Point = { x: number; y: number };
 const defined = <T extends object>(o: T | undefined): T =>
   Object.fromEntries(Object.entries(o ?? {}).filter(([, v]) => v !== undefined)) as T;
 type ZoomAnimEvent = { center: L.LatLng; zoom: number };
+
+// Leaflet's own EPSG:3857, which the fast path reproduces: by its code and by two projected points, since a custom CRS
+// can keep the code with another scale or origin (a Proj4Leaflet tile cache, a 512-pixel scale).
+function isLeaflet3857(map: L.Map, crs: unknown): boolean {
+  if ((crs as { code?: string }).code !== 'EPSG:3857') return false;
+  const a = map.project([0, 0], 0);
+  const b = map.project([60, 90], 0);
+  const y60 = 128 - (128 / Math.PI) * Math.log(Math.tan(Math.PI / 4 + Math.PI / 6));
+  return Math.abs(a.x - 128) + Math.abs(a.y - 128) + Math.abs(b.x - 192) + Math.abs(b.y - y60) < 1e-6;
+}
 
 /**
  * A polyline from interleaved WGS84 [lon0, lat0, lon1, lat1, ...]. A NaN longitude or latitude breaks the line.
@@ -109,7 +119,12 @@ export class FastPolyline extends L.Layer {
     this._ctx = canvas.getContext('2d');
     this.getPane()!.appendChild(canvas);
     this._reset();
-    void map;
+    // Added during a zoom animation (in a zoomanim handler that runs before the map's own): start at its target.
+    const m = map as unknown as { _animatingZoom?: boolean; _animateToCenter?: L.LatLng; _animateToZoom?: number };
+    if (m._animatingZoom && m._animateToCenter) {
+      this._animateZoom({ center: m._animateToCenter, zoom: m._animateToZoom! } as ZoomAnimEvent);
+    }
+    this._watchDpr();
     return this;
   }
 
@@ -117,12 +132,32 @@ export class FastPolyline extends L.Layer {
     // Read the data again on the next add.
     this._worldCrs = null;
     this._drawn = '';
-    this._canvas?.remove();
+    if (this._canvas) {
+      // Frees the backing store now (WebKit keeps it until collection, against a total canvas memory cap).
+      this._canvas.width = 0;
+      this._canvas.height = 0;
+      this._canvas.remove();
+    }
     this._canvas = undefined;
+    this._dprQuery?.removeEventListener('change', this._onDpr);
+    this._dprQuery = undefined;
     this._ctx = null;
     if (this._frame) cancelAnimationFrame(this._frame);
     this._frame = 0;
     return this;
+  }
+
+  // A device pixel ratio change alone (a window moved to another screen) fires no map event.
+  private _dprQuery: MediaQueryList | undefined;
+  private _onDpr = (): void => {
+    this._watchDpr();
+    this._reset();
+  };
+  private _watchDpr(): void {
+    this._dprQuery?.removeEventListener('change', this._onDpr);
+    this._dprQuery =
+      typeof matchMedia === 'function' ? matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`) : undefined;
+    this._dprQuery?.addEventListener('change', this._onDpr);
   }
 
   override getEvents() {
@@ -146,13 +181,14 @@ export class FastPolyline extends L.Layer {
     const g = this._opts.basemap;
     if (g) ll = g.fromWgs84Interleaved(ll, ll);
     const world = n === this._world.length ? this._world : new Float64Array(n);
-    if ((crs as { code?: string }).code === 'EPSG:3857') {
+    if (isLeaflet3857(map, crs)) {
       // L.CRS.EPSG3857: x = 256 (1/2 + X / 2piR), y = 256 (1/2 - Y / 2piR) of the spherical Mercator X, Y, from a
       // latitude clamped as L.Projection.SphericalMercator does. x is linear in the longitude and, as in Leaflet, not
       // wrapped (webMercator wraps it to [-180, 180]): a track across the antimeridian stays continuous.
       for (let i = 1; i < n; i += 2) {
         const lat = ll[i]!;
-        if (lat > MAX_LAT) ll[i] = MAX_LAT;
+        if (lat - lat !== 0) ll[i] = NaN;
+        else if (lat > MAX_LAT) ll[i] = MAX_LAT;
         else if (lat < -MAX_LAT) ll[i] = -MAX_LAT;
       }
       webMercator().fromLonLatInterleaved(ll, world);
@@ -160,7 +196,7 @@ export class FastPolyline extends L.Layer {
       for (let i = 0; i < n; i += 2) {
         const lon = ll[i]!;
         const lat = ll[i + 1]!;
-        // Non-finite input breaks the line (a clamped infinite latitude would not).
+        // Non-finite input breaks the line (an infinite latitude became NaN above).
         const ok = lon - lon === 0 && lat - lat === 0;
         world[i] = ok ? 128 + lon * (256 / 360) : NaN;
         world[i + 1] = ok ? 128 - world[i + 1]! * k : NaN;
@@ -220,10 +256,14 @@ export class FastPolyline extends L.Layer {
     const canvas = this._canvas;
     const ctx = this._ctx;
     if (!map || !canvas || !ctx) return;
-    const world = this._project();
     const o = this._opts;
     const w = canvas.width;
     const h = canvas.height;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    // A canvas ignores lineWidth 0; L.Canvas skips the stroke too.
+    if (!(o.weight! > 0)) return;
+    const world = this._project();
     const dpr = w / parseFloat(canvas.style.width);
     const s = map.getZoomScale(this._zoom, 0) * dpr;
     // Clip a stroke width beyond the canvas, so joins at its edge are drawn whole.
@@ -242,16 +282,16 @@ export class FastPolyline extends L.Layer {
       },
       this._path,
     ));
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, w, h);
     ctx.lineWidth = o.weight! * dpr;
     ctx.strokeStyle = o.color!;
     ctx.lineCap = o.lineCap!;
     ctx.lineJoin = o.lineJoin!;
     const { xy, runs, runCount } = path;
-    // With round caps and joins, a path stroked in pieces of 256 points looks the same and strokes up to 40% faster
-    // in Chromium (opacity applies to the whole canvas, so overlapping pieces do not darken).
-    const piece = o.lineCap === 'round' && o.lineJoin === 'round' ? 256 : Infinity;
+    // With round caps and joins and an opaque color, a path stroked in pieces of 256 points looks the same and strokes
+    // up to 40% faster in Chromium (opacity applies to the whole canvas). A translucent color would darken where pieces
+    // overlap; the canvas reads an opaque color back as #rrggbb.
+    const opaque = typeof ctx.strokeStyle === 'string' && ctx.strokeStyle.startsWith('#');
+    const piece = opaque && o.lineCap === 'round' && o.lineJoin === 'round' ? 256 : Infinity;
     ctx.beginPath();
     for (let k = 0; k < runCount; k++) {
       const a = runs[k]!;

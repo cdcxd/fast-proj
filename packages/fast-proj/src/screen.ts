@@ -20,7 +20,7 @@ export interface ScreenView {
   minY: number;
   maxX: number;
   maxY: number;
-  /** Simplification tolerance in screen units; 0 keeps every visible point. */
+  /** Simplification tolerance in screen units; 0 keeps every visible point except repeats. */
   tolerance: number;
 }
 
