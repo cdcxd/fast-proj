@@ -132,13 +132,26 @@ window.extra = () => {
   const at = (x, y) => { const l = m.containerPointToLatLng([x, y]); return [l.lng, l.lat]; };
   f = new FastPolyline([...at(200 - 330 * t, -400), ...at(200, -70), ...at(200 + 330 * t, -400)], { weight: 20, lineJoin: 'miter', tolerance: 0 }).addTo(m);
   out.push(['miter beyond the canvas', alpha(f._canvas) > 0, 'alpha ' + alpha(f._canvas)]);
-  // A CRS with code EPSG:3857 but 512-pixel tiles projects through the map, not the fast path.
+  // Custom CRSs draw where the map projects, at each zoom: one with code EPSG:3857 but 512-pixel tiles, one with no
+  // scale below zoom 5, and one with a pixel offset that depends on the zoom (its own latLngToPoint).
   const base = v2 ? L.EPSG3857 : L.CRS.EPSG3857;
-  m = fresh({ crs: Object.assign(Object.create(base), { code: 'EPSG:3857', scale: (z) => 512 * 2 ** z, zoom: (k) => Math.log2(k / 512) }) });
-  m.setView([39.9, 116.3], 10);
-  f = new FastPolyline([116.3, 39.9, 116.4, 40]).addTo(m);
-  const q = m.project([39.9, 116.3], 0);
-  out.push(['custom EPSG:3857', Math.abs(f._world[0] - q.x) + Math.abs(f._world[1] - q.y) < 1e-9, f._world[0] + ' vs ' + q.x]);
+  const crss = {
+    '512-pixel tiles': { code: 'EPSG:3857', scale: (z) => 512 * 2 ** z, zoom: (k) => Math.log2(k / 512) },
+    'no scale below zoom 5': { code: 'X:1', scale: (z) => (z < 5 ? NaN : 256 * 2 ** z) },
+    'zoom-dependent offset': { code: 'X:2', latLngToPoint(ll, z) { const p = base.latLngToPoint.call(this, ll, z); p.x += 10 * z; return p; } },
+  };
+  for (const [name, o] of Object.entries(crss)) {
+    m = fresh({ crs: Object.assign(Object.create(base), o) });
+    m.setView([39.9, 116.3], 10);
+    f = new FastPolyline([116.3, 39.9, 116.4, 40], { tolerance: 0 }).addTo(m);
+    for (const z of [10, 12]) {
+      m.setZoom(z, { animate: false });
+      const q = m.project([39.9, 116.3], z);
+      const k = f._worldScale(z);
+      const d = Math.abs(f._world[0] * k - q.x) + Math.abs(f._world[1] * k - q.y);
+      out.push(['custom CRS, ' + name + ', zoom ' + z, d < 1e-6 && f._path.runCount === 1, 'off by ' + d + ', ' + f._path.runCount + ' runs']);
+    }
+  }
   // Leaflet 2.0 runs init hooks after the constructor (1.x runs them in super(), before it).
   if (v2) {
     let seen = '';

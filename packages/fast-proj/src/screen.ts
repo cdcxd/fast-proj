@@ -83,15 +83,37 @@ export function screenPath(
   out?: ScreenPath,
   blocks: Float64Array = NO_BLOCKS,
 ): ScreenPath {
+  // State between chunks (see chunk()): the module's, or new arrays for a call made while one runs (from a getter of
+  // world or out), which allocating per call would make 10x slower for a few points.
+  const nested = busy;
+  const F = nested ? new Float64Array(17) : F0;
+  const I = nested ? new Int32Array(6) : I0;
+  busy = true;
+  try {
+    return run(world, view, out, blocks, F, I);
+  } finally {
+    busy = nested;
+  }
+}
+
+let busy = false;
+const F0 = new Float64Array(17);
+const I0 = new Int32Array(6);
+
+function run(
+  world: ArrayLike<number>,
+  view: ScreenView,
+  out: ScreenPath | undefined,
+  blocks: Float64Array,
+  F: Float64Array,
+  I: Int32Array,
+): ScreenPath {
   const n = world.length >> 1;
   let xy = out?.xy ?? new Float32Array(4096);
   let runs = out?.runs ?? new Uint32Array(256);
   const { scale, offsetX, offsetY, minX, minY, maxX, maxY } = view;
   const tol2 = view.tolerance * view.tolerance;
-
-  // State between chunks, per call (a getter of world or out could call screenPath): see chunk().
-  const F = new Float64Array(17);
-  const I = new Int32Array(6);
+  I.fill(0);
   const px = world[0]! * scale + offsetX;
   const py = world[1]! * scale + offsetY;
   F[0] = px;

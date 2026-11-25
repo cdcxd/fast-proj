@@ -47,6 +47,17 @@ type ZoomAnimEvent = { center: L.LatLng; zoom: number };
 // and goes through map.project.
 const LEAFLET_3857: unknown =
   (L as unknown as { CRS?: { EPSG3857?: unknown } }).CRS?.EPSG3857 ?? (L as unknown as { EPSG3857?: unknown }).EPSG3857;
+// Leaflet's own latLngToPoint and Transformation#_transform: a CRS that keeps them maps to pixels as
+// scale(zoom) · transformation(projection.project(latlng)) at scale 1, for any zoom (CRS#latLngToPoint).
+type Crs = {
+  latLngToPoint: unknown;
+  transformation: { _transform: unknown; _a: number; _b: number; _c: number; _d: number };
+  projection: { project(ll: L.LatLng): Point };
+  scale(zoom: number): number;
+};
+const LEAFLET_LATLNG_TO_POINT = (L as unknown as { CRS: Crs }).CRS.latLngToPoint;
+const LEAFLET_TRANSFORM = (L as unknown as { Transformation: { prototype: { _transform: unknown } } }).Transformation
+  .prototype._transform;
 // Leaflet 1.x without 3D transforms (L_DISABLE_3D, old browsers) positions with left/top; 2.0 always transforms.
 const ANY_3D = (L as unknown as { Browser?: { any3d?: boolean } }).Browser?.any3d !== false;
 
@@ -72,6 +83,8 @@ export class FastPolyline extends L.Layer {
   private _world = new Float64Array(0);
   private _blocks = new Float64Array(0);
   private _worldCrs: unknown = null;
+  private _worldMode = 0;
+  private _worldZoom = 0;
   private _canvas: HTMLCanvasElement | undefined;
   private _ctx: CanvasRenderingContext2D | null = null;
   private _path: ScreenPath | undefined;
@@ -174,18 +187,30 @@ export class FastPolyline extends L.Layer {
     } as unknown as ReturnType<NonNullable<L.Layer['getEvents']>>;
   }
 
-  /** Leaflet's zoom-0 pixels of the points, cached per CRS. */
-  private _project(): Float64Array {
+  /**
+   * The points in world units, cached per CRS: pixels at a zoom are world · _worldScale(zoom). Leaflet's EPSG:3857: its
+   * zoom-0 pixels; a CRS with Leaflet's latLngToPoint: transformed projected units, scaled by crs.scale(zoom) (which
+   * may be undefined at zoom 0); any other: the pixels at the given zoom, projected again for another zoom.
+   */
+  private _project(zoom: number): Float64Array {
     const map = this._map!;
-    const crs = map.options.crs;
-    if (this._worldCrs === crs) return this._world;
+    const crs = map.options.crs as unknown as Crs;
+    if (this._worldCrs === crs && (this._worldMode !== 2 || this._worldZoom === zoom)) return this._world;
     const src = this._lonlat;
     const n = src.length;
     // Read in place without a datum shift (no copy of a large input).
     const g = this._opts.basemap;
     const ll: ArrayLike<number> = g ? g.fromWgs84Interleaved(src, new Float64Array(n)) : src;
     const world = n === this._world.length ? this._world : new Float64Array(n);
-    if (crs === LEAFLET_3857) {
+    const t = crs.transformation;
+    this._worldMode =
+      crs === LEAFLET_3857
+        ? 0
+        : crs.latLngToPoint === LEAFLET_LATLNG_TO_POINT && t._transform === LEAFLET_TRANSFORM
+          ? 1
+          : 2;
+    this._worldZoom = zoom;
+    if (this._worldMode === 0) {
       // L.CRS.EPSG3857: x = 256 (1/2 + X / 2piR), y = 256 (1/2 - Y / 2piR) of the spherical Mercator X, Y, from a
       // latitude clamped as L.Projection.SphericalMercator does (every clamped latitude has the same y). x is linear in
       // the longitude and, as in Leaflet, not wrapped (webMercator wraps it to [-180, 180]): a track across the
@@ -206,9 +231,15 @@ export class FastPolyline extends L.Layer {
         const lon = ll[i]!;
         const lat = ll[i + 1]!;
         if (lon - lon === 0 && lat - lat === 0) {
-          const p = map.project([lat, lon], 0);
-          world[i] = p.x;
-          world[i + 1] = p.y;
+          if (this._worldMode === 1) {
+            const p = crs.projection.project(new L.LatLng(lat, lon));
+            world[i] = t._a * p.x + t._b;
+            world[i + 1] = t._c * p.y + t._d;
+          } else {
+            const p = map.project([lat, lon], zoom);
+            world[i] = p.x;
+            world[i + 1] = p.y;
+          }
         } else {
           // A break; LatLng rejects NaN.
           world[i] = NaN;
@@ -220,6 +251,11 @@ export class FastPolyline extends L.Layer {
     this._blocks = pathBlocks(world);
     this._worldCrs = crs;
     return world;
+  }
+
+  private _worldScale(zoom: number): number {
+    const crs = this._map!.options.crs as unknown as Crs;
+    return this._worldMode === 0 ? this._map!.getZoomScale(zoom, 0) : this._worldMode === 1 ? crs.scale(zoom) : 1;
   }
 
   private _reset(): void {
@@ -283,9 +319,9 @@ export class FastPolyline extends L.Layer {
     ctx.clearRect(0, 0, w, h);
     // A canvas ignores lineWidth 0; L.Canvas skips the stroke too.
     if (!(o.weight! > 0)) return;
-    const world = this._project();
+    const world = this._project(this._zoom);
     const dpr = w / parseFloat(canvas.style.width);
-    const s = map.getZoomScale(this._zoom, 0) * dpr;
+    const s = this._worldScale(this._zoom) * dpr;
     // Clip beyond the canvas by the furthest a join reaches from its point, so joins at its edge are drawn whole: half
     // the width for round and bevel joins, up to half the width times the miter limit (10) for miters.
     const reach = o.lineJoin === 'miter' ? Math.max(1, ctx.miterLimit / 2) : 1;

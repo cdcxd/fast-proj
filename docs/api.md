@@ -371,9 +371,10 @@ new FastPolyline(gps, { basemap: GCJ02 }).addTo(amapMap); // WGS84 GPS points on
 - **One canvas per layer**, padded by `padding` around the map (`L.Canvas` shares one between its layers): about 44 MB
   for a 1600×1200 map at DPR 2. Mobile Safari caps the total canvas memory of a page, so keep the layer count low
   there.
-- **Custom CRSs.** Leaflet's own `EPSG3857` object uses fast-proj's Web Mercator; any other CRS, including one that
-  keeps the code `EPSG:3857` with another scale, origin or wrapping (Proj4Leaflet), goes through `map.project`, once
-  per point when added.
+- **Custom CRSs.** Leaflet's own `EPSG3857` object uses fast-proj's Web Mercator. Another CRS that keeps Leaflet's
+  `latLngToPoint` (a projection, a transformation and a `scale(zoom)`, as `EPSG4326` or Proj4Leaflet's) is projected
+  once when added and scaled per zoom, as Leaflet does. One with its own `latLngToPoint` is projected through
+  `map.project` again on each zoom, as `L.Polyline` is.
 - **Differences from `L.Polyline`.** Points are not rounded to whole pixels (Leaflet 1.9 rounds them), and the default
   tolerance is half a device pixel (`smoothFactor` 1, one CSS pixel, in 1.9; 0.5 in 2.0). The result is within a
   pixel of `L.Polyline` with `smoothFactor: 0`; see `test/leaflet-browser.mts`.
