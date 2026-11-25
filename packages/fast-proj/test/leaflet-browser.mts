@@ -11,11 +11,14 @@ declare const map: any;
 const pkg = fileURLToPath(new URL('../', import.meta.url));
 const modules = fileURLToPath(new URL('../../../node_modules/', import.meta.url));
 const versions = [
-  { name: '1.9', dir: `${modules}leaflet1/dist/`, entry: 'leaflet-src.esm.js' },
-  { name: '2.0', dir: `${modules}leaflet/dist/`, entry: 'leaflet.js' },
+  { name: '1.9', dir: `${modules}leaflet1/dist/`, entry: 'leaflet-src.esm.js', no3d: false },
+  // Positions with left/top, and no zoom animation.
+  { name: '1.9 without 3D', dir: `${modules}leaflet1/dist/`, entry: 'leaflet-src.esm.js', no3d: true },
+  { name: '2.0', dir: `${modules}leaflet/dist/`, entry: 'leaflet.js', no3d: false },
 ];
 
-const page = (entry: string) => `<!doctype html><meta charset="utf-8">
+const page = (entry: string, no3d: boolean) => `<!doctype html><meta charset="utf-8">
+<script>window.L_DISABLE_3D = ${no3d};</script>
 <link rel="stylesheet" href="/leaflet/leaflet.css">
 <style>.leaflet-zoom-anim .leaflet-zoom-animated { transition: none !important; }</style>
 <script type="importmap">{"imports":{"leaflet":"/leaflet/${entry}"}}</script>
@@ -102,7 +105,9 @@ window.extra = () => {
   let draws = 0; const orig = f._redraw; f._redraw = function () { draws++; return orig.call(this); };
   m.setView([0.006, 0.25], 15, { animate: false });
   const a = draws; m.invalidateSize(); m.panBy([10, 0], { animate: false });
-  out.push(['draws per change', a === 1 && draws === 2, a + ', then ' + draws]);
+  const b = draws; m.panBy([100, 0], { animate: false });
+  // A pan within the padding moves the drawn canvas; one beyond it redraws.
+  out.push(['draws per change', a === 1 && b === 1 && draws === 2, a + ', ' + b + ', then ' + draws]);
   // Data changed in place is read again when the layer is added again.
   const data = new Float64Array([0, 0, 0.1, 0]);
   f = new FastPolyline(data, { tolerance: 0 }).addTo(m);
@@ -128,6 +133,13 @@ window.extra = () => {
   f = new FastPolyline([116.3, 39.9, 116.4, 40]).addTo(m);
   const q = m.project([39.9, 116.3], 0);
   out.push(['custom EPSG:3857', Math.abs(f._world[0] - q.x) + Math.abs(f._world[1] - q.y) < 1e-9, f._world[0] + ' vs ' + q.x]);
+  // Leaflet 2.0 runs init hooks after the constructor (1.x runs them in super(), before it).
+  if (v2) {
+    let seen = '';
+    FastPolyline.addInitHook(function () { seen = this._lonlat.length + ' ' + this.options.color; });
+    new FastPolyline([1, 2], { color: 'red' });
+    out.push(['init hooks', seen === '2 red', seen]);
+  }
   m.remove();
   return out;
 };
@@ -149,13 +161,13 @@ const check = (ok: boolean, msg: string) => {
 
 const browser = await chromium.launch();
 for (const v of versions) {
-  for (const dpr of [1, 2]) {
-    for (const gcj of [false, true]) {
+  for (const dpr of v.no3d ? [1] : [1, 2]) {
+    for (const gcj of v.no3d ? [false] : [false, true]) {
       const p = await browser.newPage({ viewport: { width: 900, height: 640 }, deviceScaleFactor: dpr });
       p.on('pageerror', (e) => failures.push(`${v.name}: page error ${e.message}`));
       await p.route('http://check.local/**', (r) => {
         const u = new URL(r.request().url()).pathname;
-        if (u === '/') return r.fulfill({ body: page(v.entry), contentType: 'text/html' });
+        if (u === '/') return r.fulfill({ body: page(v.entry, v.no3d), contentType: 'text/html' });
         const f = u.startsWith('/leaflet/') ? v.dir + u.slice(9) : pkg + u.slice(1);
         const type = f.endsWith('.css') ? 'text/css' : 'text/javascript';
         try {
@@ -179,7 +191,7 @@ for (const v of versions) {
       const compare = async (label: string) => {
         await p.waitForTimeout(50);
         // Leaflet 1.9 rounds points to whole CSS pixels; 2.0 does not.
-        const radius = v.name === '1.9' ? dpr : 0;
+        const radius = v.name.startsWith('1.') ? dpr : 0;
         const [on, diff] = await p.evaluate(
           async ([a64, b64, r]) => {
             const masks = await Promise.all(
@@ -230,21 +242,25 @@ for (const v of versions) {
       await compare('fit');
       await p.evaluate(() => map.panBy([123.4, -57.3], { animate: false }));
       await compare('pan');
+      // Within the canvas padding: moved, not redrawn.
+      await p.evaluate(() => map.panBy([-30.6, 20.2], { animate: false }));
+      await compare('small pan');
       await p.evaluate(() => map.setZoom(map.getZoom() + 2.37, { animate: false }));
       await compare('zoom +2.37');
       await p.evaluate(() => map.setView(map.getCenter(), map.getZoom() - 3.1, { animate: false }));
       await compare('zoom -3.1');
       // During zoom animations (a whole level and a fraction) and after, the canvas moves with the tiles.
       // Leaflet 1.9 rounds tile level transforms to whole pixels; 2.0 does not.
-      const slack = v.name === '1.9' ? 0.5 : 0.01;
+      const slack = v.name.startsWith('1.') ? 0.5 : 0.01;
       for (const dz of [1, -0.6]) {
+        // Without 3D, Leaflet zooms without an animation.
         const mid = await p.evaluate(
-          (d) =>
+          ([d, ev]) =>
             new Promise<number[]>((done) => {
-              map.once('zoomanim', () => setTimeout(() => done((window as any).tileOffsets()), 0));
+              map.once(ev, () => setTimeout(() => done((window as any).tileOffsets()), 0));
               map.setZoom(map.getZoom() + d);
             }),
-          dz,
+          [dz, v.no3d ? 'zoomend' : 'zoomanim'] as const,
         );
         check(
           mid.length > 0 && Math.max(...mid) < slack,

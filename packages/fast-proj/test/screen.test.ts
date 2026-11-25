@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type ScreenPath, type ScreenView, screenPath } from '../src/screen.js';
+import { pathBlocks, type ScreenPath, type ScreenView, screenPath } from '../src/screen.js';
 
 function rng(seed: number) {
   let s = seed >>> 0;
@@ -143,6 +143,42 @@ describe('screenPath', () => {
     expect(runsOf(screenPath([0, 0, 1, 1], view({}), empty()))).toEqual([[0, 0, 1, 1]]);
     expect(screenPath([5, 5], view({}), empty()).runs[0]).toBe(0);
     expect(screenPath([], view({}), empty()).runs[0]).toBe(0);
+  });
+
+  it('gives the same result with blocks', () => {
+    const r = rng(11);
+    for (let t = 0; t < 400; t++) {
+      const n = Math.floor(r() * 9000);
+      const w = walk(n, t, 0.1 + r() * 3);
+      // Breaks, and runs of a repeated point.
+      for (let k = r() * 4; k > 0; k--) w[Math.floor(r() * 2 * n)] = r() < 0.5 ? NaN : -Infinity;
+      if (n > 10) w.fill(w[10]!, 10, 10 + Math.floor(r() * 200));
+      const zoom = 2 ** (r() * 10 - 3);
+      const c = Math.floor(r() * n);
+      const v = view({
+        scale: r() < 0.1 ? -zoom : zoom,
+        offsetX: 500 - (w[2 * c] || 0) * zoom,
+        offsetY: 500 - (w[2 * c + 1] || 0) * zoom,
+        tolerance: r() < 0.3 ? 0 : 0.5,
+      });
+      const a = runsOf(screenPath(w, v));
+      const b = runsOf(screenPath(w, v, undefined, pathBlocks(w)));
+      expect(b).toEqual(a);
+    }
+  });
+
+  it('survives a call from a getter of its input', () => {
+    const w = walk(10000, 5);
+    const v = view({ scale: 2, offsetX: 500 - w[0]! * 2, offsetY: 500 - w[1]! * 2, tolerance: 0.5 });
+    const want = runsOf(screenPath(w, v));
+    const other = view({ scale: 100, minX: -5, maxX: 5 });
+    const tricky = new Proxy(w, {
+      get: (t, k) => {
+        if (k === '6000') screenPath([0, 0, 1, 1], other);
+        return Reflect.get(t, k);
+      },
+    }) as ArrayLike<number>;
+    expect(runsOf(screenPath(tricky, v))).toEqual(want);
   });
 
   it('gives the same result when called again with its output', () => {

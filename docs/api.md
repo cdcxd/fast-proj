@@ -26,7 +26,7 @@ or re-entering one throws a plain `Error`. Messages start with `fast-proj:`.
 - [Ellipsoids](#ellipsoids)
 - [GeoJSON and Leaflet helpers](#geojson-and-leaflet-helpers)
 - [Leaflet layer: `FastPolyline`](#leaflet-layer)
-- [Screen paths: `screenPath`](#screen-paths)
+- [Screen paths: `screenPath`, `pathBlocks`](#screen-paths)
 - [WebAssembly backend](#webassembly-backend)
 - [Domain and accuracy](#domain-and-accuracy)
 - [Chaining](#chaining)
@@ -368,16 +368,17 @@ new FastPolyline(gps, { basemap: GCJ02 }).addTo(amapMap); // WGS84 GPS points on
 - **What it does not do.** No events, popups or hit-testing (`pointer-events: none`), no fill or dash. `opacity` is the
   canvas's CSS opacity, so overlapping parts of the line do not darken. The data is read when the layer is added and
   on `setData`; to show an array changed in place, call `setData` again.
-- **One canvas per layer**, padded by `padding` around the map (`L.Canvas` shares one between its layers): about 30 MB
+- **One canvas per layer**, padded by `padding` around the map (`L.Canvas` shares one between its layers): about 44 MB
   for a 1600×1200 map at DPR 2. Mobile Safari caps the total canvas memory of a page, so keep the layer count low
   there.
-- **Custom CRSs.** Leaflet's own EPSG:3857 uses fast-proj's Web Mercator; any other CRS, including one that keeps the
-  code `EPSG:3857` with another scale or origin (Proj4Leaflet), goes through `map.project`, once per point when added.
+- **Custom CRSs.** Leaflet's own `EPSG3857` object uses fast-proj's Web Mercator; any other CRS, including one that
+  keeps the code `EPSG:3857` with another scale, origin or wrapping (Proj4Leaflet), goes through `map.project`, once
+  per point when added.
 - **Differences from `L.Polyline`.** Points are not rounded to whole pixels (Leaflet 1.9 rounds them), and the default
   tolerance is half a device pixel (`smoothFactor` 1, one CSS pixel, in 1.9; 0.5 in 2.0). The result is within a
   pixel of `L.Polyline` with `smoothFactor: 0`; see `test/leaflet-browser.mts`.
 - **Speed.** For 1M points in Chromium: adding the layer 5× faster than `L.Polyline` (no `LatLng` objects) and zooming
-  30-60× faster (no re-projection); panning 2× faster with the whole line in view, and about the same when zoomed in.
+  20-45× faster (no re-projection); panning about 2× faster, and a pan within the canvas padding redraws nothing.
   See [benchmarks](benchmarks.md#leaflet).
 
 ## Screen paths
@@ -385,7 +386,8 @@ new FastPolyline(gps, { basemap: GCJ02 }).addTo(amapMap); // WGS84 GPS points on
 `screenPath` (from the root entry) turns a polyline in world coordinates into canvas or WebGL coordinates: it scales
 and offsets the points, clips each segment to a box (Liang–Barsky), and simplifies what is visible to within a
 tolerance, in one pass with no per-point allocation (`FastPolyline` redraws with it). Pass the last result as `out` to
-reuse its buffers, which grow as needed.
+reuse its buffers, which grow as needed. Pass `pathBlocks(world)`, computed once per polyline, to skip the blocks of 64
+points wholly outside the box: the same result, at about the cost of the visible part of a zoomed-in line.
 
 ```ts
 interface ScreenView {
@@ -403,11 +405,13 @@ interface ScreenPath {
   runs: Uint32Array; // run k is points runs[k] to runs[k + 1] (exclusive)
   runCount: number;
 }
-function screenPath(world: ArrayLike<number>, view: ScreenView, out?: ScreenPath): ScreenPath;
+function screenPath(world: ArrayLike<number>, view: ScreenView, out?: ScreenPath, blocks?: Float64Array): ScreenPath;
+function pathBlocks(world: ArrayLike<number>): Float64Array; // [minX, minY, maxX, maxY] per 64 points
 ```
 
 ```ts
-const p = (path = screenPath(world, view, path)); // reuses the buffers of the last call
+const blocks = pathBlocks(world); // once
+const p = (path = screenPath(world, view, path, blocks)); // reuses the buffers of the last call
 for (let k = 0; k < p.runCount; k++) {
   ctx.moveTo(p.xy[2 * p.runs[k]], p.xy[2 * p.runs[k] + 1]);
   for (let j = p.runs[k] + 1; j < p.runs[k + 1]; j++) ctx.lineTo(p.xy[2 * j], p.xy[2 * j + 1]);

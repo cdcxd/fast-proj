@@ -97,19 +97,22 @@ canvas rasterization, without the wait for the next frame; `add` includes buildi
 
 | Leaflet | Step              | L.Polyline | FastPolyline | Speedup |
 | ------- | ----------------- | ---------: | -----------: | ------: |
-| 1.9.4   | add               |   420.8 ms |      92.4 ms |    4.6× |
-|         | pan (whole track) |    30.3 ms |      15.2 ms |    2.0× |
-|         | zoom in 3 levels  |   413.6 ms |       6.8 ms |   60.8× |
-|         | pan (zoomed in)   |     6.3 ms |       6.5 ms |    1.0× |
-|         | zoom out 3 levels |   466.2 ms |      14.3 ms |   32.6× |
-| 2.0 β5  | add               |   436.9 ms |      90.1 ms |    4.8× |
-|         | pan (whole track) |    32.6 ms |      15.3 ms |    2.1× |
-|         | zoom in 3 levels  |   370.5 ms |       6.7 ms |   55.3× |
-|         | pan (zoomed in)   |     7.1 ms |       6.6 ms |    1.1× |
-|         | zoom out 3 levels |   408.2 ms |      14.3 ms |   28.5× |
+| 1.9.4   | add               |   437.2 ms |      89.1 ms |    4.9× |
+|         | pan (whole track) |    38.0 ms |      17.7 ms |    2.1× |
+|         | zoom in 3 levels  |   460.0 ms |      10.3 ms |   44.7× |
+|         | pan (zoomed in)   |    13.9 ms |       8.3 ms |    1.7× |
+|         | zoom out 3 levels |   491.1 ms |      17.4 ms |   28.2× |
+| 2.0 β5  | add               |   453.7 ms |      99.3 ms |    4.6× |
+|         | pan (whole track) |    36.2 ms |      17.9 ms |    2.0× |
+|         | zoom in 3 levels  |   403.3 ms |      10.3 ms |   39.2× |
+|         | pan (zoomed in)   |    14.9 ms |       8.4 ms |    1.8× |
+|         | zoom out 3 levels |   418.5 ms |      18.5 ms |   22.6× |
 
-Leaflet re-projects every point on each zoom; `FastPolyline` projects once and only rescales. Pans are close because
-Leaflet only clips and simplifies on a pan (no re-projection), and both spend most of a pan stroking the canvas.
+The zooms and the zoomed-in pans are centred on a point of the track. Leaflet re-projects every point on each zoom;
+`FastPolyline` projects once and only rescales, and skips the blocks of 64 points outside the view (`pathBlocks`), so a
+zoomed-in redraw costs about the visible part of the track. A pan only clips and simplifies in Leaflet (no
+re-projection), and both spend most of a pan stroking the canvas. A pan within the canvas padding (10% of the view on
+each side) redraws nothing.
 
 ## Notes
 

@@ -91,6 +91,10 @@ window.run = async (kind, n) => {
     }
     return t.sort((a, b) => a - b)[2];
   };
+  // Zoomed in on a point of the track, so that the zooms and pans draw part of it.
+  const mid = n >> 1;
+  map.setView([ll[2 * mid + 1], ll[2 * mid]], z, { animate: false });
+  flushFrames();
   out.zoomIn = await zoom(z, z + 3);
   out.panZoomedIn = await median(pan);
   out.zoomOut = await zoom(z + 3, z);

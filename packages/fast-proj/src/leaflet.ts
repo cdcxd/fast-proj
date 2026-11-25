@@ -10,7 +10,7 @@
 import * as L from 'leaflet';
 import type { Geographic } from './types.js';
 import { webMercator } from './webmerc.js';
-import { type ScreenPath, screenPath } from './screen.js';
+import { pathBlocks, type ScreenPath, screenPath } from './screen.js';
 
 export interface FastPolylineOptions extends L.LayerOptions {
   /** Stroke color. Default '#3388ff', as L.Path. */
@@ -42,15 +42,13 @@ const defined = <T extends object>(o: T | undefined): T =>
   Object.fromEntries(Object.entries(o ?? {}).filter(([, v]) => v !== undefined)) as T;
 type ZoomAnimEvent = { center: L.LatLng; zoom: number };
 
-// Leaflet's own EPSG:3857, which the fast path reproduces: by its code and by two projected points, since a custom CRS
-// can keep the code with another scale or origin (a Proj4Leaflet tile cache, a 512-pixel scale).
-function isLeaflet3857(map: L.Map, crs: unknown): boolean {
-  if ((crs as { code?: string }).code !== 'EPSG:3857') return false;
-  const a = map.project([0, 0], 0);
-  const b = map.project([60, 90], 0);
-  const y60 = 128 - (128 / Math.PI) * Math.log(Math.tan(Math.PI / 4 + Math.PI / 6));
-  return Math.abs(a.x - 128) + Math.abs(a.y - 128) + Math.abs(b.x - 192) + Math.abs(b.y - y60) < 1e-6;
-}
+// Leaflet's own EPSG:3857 (L.CRS.EPSG3857 in 1.x, L.EPSG3857 in 2.0), which the fast path reproduces. By identity:
+// a custom CRS can keep the code with another scale, origin or wrapping (a Proj4Leaflet tile cache, 512-pixel tiles),
+// and goes through map.project.
+const LEAFLET_3857: unknown =
+  (L as unknown as { CRS?: { EPSG3857?: unknown } }).CRS?.EPSG3857 ?? (L as unknown as { EPSG3857?: unknown }).EPSG3857;
+// Leaflet 1.x without 3D transforms (L_DISABLE_3D, old browsers) positions with left/top; 2.0 always transforms.
+const ANY_3D = (L as unknown as { Browser?: { any3d?: boolean } }).Browser?.any3d !== false;
 
 /**
  * A polyline from interleaved WGS84 [lon0, lat0, lon1, lat1, ...]. A NaN longitude or latitude breaks the line.
@@ -63,12 +61,16 @@ function isLeaflet3857(map: L.Map, crs: unknown): boolean {
 // Extends the plain L.Layer so the declarations work with Leaflet 2's types and with @types/leaflet for 1.9, whose Layer
 // is not generic; the options are read through `_opts`.
 export class FastPolyline extends L.Layer {
+  // Leaflet 2.0 runs init hooks (FastPolyline.addInitHook) at the end of the constructor, not inside super().
+  static initHooks = true;
+
   private get _opts(): Required<Omit<FastPolylineOptions, 'basemap'>> & FastPolylineOptions {
     return this.options as never;
   }
 
   private _lonlat: ArrayLike<number>;
   private _world = new Float64Array(0);
+  private _blocks = new Float64Array(0);
   private _worldCrs: unknown = null;
   private _canvas: HTMLCanvasElement | undefined;
   private _ctx: CanvasRenderingContext2D | null = null;
@@ -77,7 +79,7 @@ export class FastPolyline extends L.Layer {
   // The canvas was drawn at _zoom with its top left corner at the absolute pixel _origin.
   private _zoom = 0;
   private _origin: Point = { x: 0, y: 0 };
-  // The view the canvas was last drawn for: viewreset, resize and moveend often come together for one change.
+  // The zoom and canvas size it was drawn for ('' for none).
   private _drawn = '';
 
   constructor(lonlat: ArrayLike<number>, options?: FastPolylineOptions) {
@@ -85,6 +87,8 @@ export class FastPolyline extends L.Layer {
     if (lonlat.length % 2) throw new RangeError('fast-proj: lonlat must have an even length');
     this._lonlat = lonlat;
     L.Util.setOptions(this, defined(options));
+    // Leaflet 1.x ran the hooks in super() already, and this is a no-op there.
+    (this as unknown as { callInitHooks(): void }).callInitHooks();
   }
 
   /** Replaces the points. */
@@ -177,29 +181,25 @@ export class FastPolyline extends L.Layer {
     if (this._worldCrs === crs) return this._world;
     const src = this._lonlat;
     const n = src.length;
-    let ll = Float64Array.from(src);
+    // Read in place without a datum shift (no copy of a large input).
     const g = this._opts.basemap;
-    if (g) ll = g.fromWgs84Interleaved(ll, ll);
+    const ll: ArrayLike<number> = g ? g.fromWgs84Interleaved(src, new Float64Array(n)) : src;
     const world = n === this._world.length ? this._world : new Float64Array(n);
-    if (isLeaflet3857(map, crs)) {
+    if (crs === LEAFLET_3857) {
       // L.CRS.EPSG3857: x = 256 (1/2 + X / 2piR), y = 256 (1/2 - Y / 2piR) of the spherical Mercator X, Y, from a
-      // latitude clamped as L.Projection.SphericalMercator does. x is linear in the longitude and, as in Leaflet, not
-      // wrapped (webMercator wraps it to [-180, 180]): a track across the antimeridian stays continuous.
-      for (let i = 1; i < n; i += 2) {
-        const lat = ll[i]!;
-        if (lat - lat !== 0) ll[i] = NaN;
-        else if (lat > MAX_LAT) ll[i] = MAX_LAT;
-        else if (lat < -MAX_LAT) ll[i] = -MAX_LAT;
-      }
+      // latitude clamped as L.Projection.SphericalMercator does (every clamped latitude has the same y). x is linear in
+      // the longitude and, as in Leaflet, not wrapped (webMercator wraps it to [-180, 180]): a track across the
+      // antimeridian stays continuous.
       webMercator().fromLonLatInterleaved(ll, world);
       const k = 256 / (2 * Math.PI * R);
+      const top = 128 - k * R * Math.log(Math.tan(Math.PI / 4 + (MAX_LAT * Math.PI) / 360));
       for (let i = 0; i < n; i += 2) {
         const lon = ll[i]!;
         const lat = ll[i + 1]!;
-        // Non-finite input breaks the line (an infinite latitude became NaN above).
+        // Non-finite input breaks the line.
         const ok = lon - lon === 0 && lat - lat === 0;
         world[i] = ok ? 128 + lon * (256 / 360) : NaN;
-        world[i + 1] = ok ? 128 - world[i + 1]! * k : NaN;
+        world[i + 1] = !ok ? NaN : lat > MAX_LAT ? top : lat < -MAX_LAT ? 256 - top : 128 - world[i + 1]! * k;
       }
     } else {
       for (let i = 0; i < n; i += 2) {
@@ -217,6 +217,7 @@ export class FastPolyline extends L.Layer {
       }
     }
     this._world = world;
+    this._blocks = pathBlocks(world);
     this._worldCrs = crs;
     return world;
   }
@@ -227,25 +228,44 @@ export class FastPolyline extends L.Layer {
     if (!map || !canvas) return;
     const size = map.getSize();
     const pad = this._opts.padding!;
-    const topLeft = map.containerPointToLayerPoint([-pad * size.x, -pad * size.y]).round();
-    L.DomUtil.setPosition(canvas, topLeft);
-    this._zoom = map.getZoom();
-    const po = map.getPixelOrigin();
-    this._origin = { x: po.x + topLeft.x, y: po.y + topLeft.y };
     const w = Math.round(size.x * (1 + 2 * pad));
     const h = Math.round(size.y * (1 + 2 * pad));
     const dpr = window.devicePixelRatio || 1;
-    canvas.style.width = `${w}px`;
-    canvas.style.height = `${h}px`;
     const bw = Math.round(w * dpr);
     const bh = Math.round(h * dpr);
-    const view = `${this._zoom} ${this._origin.x} ${this._origin.y} ${bw} ${bh}`;
-    if (view === this._drawn && canvas.width === bw && canvas.height === bh) return;
+    const zoom = map.getZoom();
+    const po = map.getPixelOrigin();
+    const key = `${zoom} ${bw} ${bh}`;
+    // The view in absolute pixels. Still inside the drawn canvas (a pan within the padding, or viewreset, resize and
+    // moveend for one change): the drawing holds, and only the position, relative to a pixel origin a viewreset can
+    // move, is set again.
+    const v = map.containerPointToLayerPoint([0, 0]);
+    const vx = po.x + v.x;
+    const vy = po.y + v.y;
+    const o = this._origin;
+    if (
+      key === this._drawn &&
+      vx >= o.x &&
+      vy >= o.y &&
+      vx + size.x <= o.x + w &&
+      vy + size.y <= o.y + h &&
+      canvas.width === bw &&
+      canvas.height === bh
+    ) {
+      L.DomUtil.setPosition(canvas, new L.Point(o.x - po.x, o.y - po.y));
+      return;
+    }
+    const topLeft = map.containerPointToLayerPoint([-pad * size.x, -pad * size.y]).round();
+    L.DomUtil.setPosition(canvas, topLeft);
+    this._zoom = zoom;
+    this._origin = { x: po.x + topLeft.x, y: po.y + topLeft.y };
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
     if (canvas.width !== bw || canvas.height !== bh) {
       canvas.width = bw;
       canvas.height = bh;
     }
-    this._drawn = view;
+    this._drawn = key;
     this._redraw();
   }
 
@@ -281,31 +301,20 @@ export class FastPolyline extends L.Layer {
         tolerance: o.tolerance!,
       },
       this._path,
+      this._blocks,
     ));
     ctx.lineWidth = o.weight! * dpr;
     ctx.strokeStyle = o.color!;
     ctx.lineCap = o.lineCap!;
     ctx.lineJoin = o.lineJoin!;
     const { xy, runs, runCount } = path;
-    // With round caps and joins and an opaque color, a path stroked in pieces of 256 points looks the same and strokes
-    // up to 40% faster in Chromium (opacity applies to the whole canvas). A translucent color would darken where pieces
-    // overlap; the canvas reads an opaque color back as #rrggbb.
-    const opaque = typeof ctx.strokeStyle === 'string' && ctx.strokeStyle.startsWith('#');
-    const piece = opaque && o.lineCap === 'round' && o.lineJoin === 'round' ? 256 : Infinity;
+    // One stroke, as L.Canvas: strokes in pieces were 10% faster, but darken antialiased edges where pieces cross.
     ctx.beginPath();
     for (let k = 0; k < runCount; k++) {
       const a = runs[k]!;
       const b = runs[k + 1]!;
       ctx.moveTo(xy[2 * a]!, xy[2 * a + 1]!);
-      for (let j = a + 1, c = 0; j < b; j++) {
-        ctx.lineTo(xy[2 * j]!, xy[2 * j + 1]!);
-        if (++c === piece && j + 1 < b) {
-          c = 0;
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(xy[2 * j]!, xy[2 * j + 1]!);
-        }
-      }
+      for (let j = a + 1; j < b; j++) ctx.lineTo(xy[2 * j]!, xy[2 * j + 1]!);
     }
     ctx.stroke();
   }
@@ -330,7 +339,9 @@ export class FastPolyline extends L.Layer {
   private _updateTransform(zoom: number, pixelOrigin: Point): void {
     const scale = this._map!.getZoomScale(zoom, this._zoom);
     const pos = new L.Point(this._origin.x * scale - pixelOrigin.x, this._origin.y * scale - pixelOrigin.y);
-    L.DomUtil.setTransform(this._canvas!, pos, scale);
+    if (ANY_3D) L.DomUtil.setTransform(this._canvas!, pos, scale);
+    // As L.Renderer: no zoom animation without 3D transforms, and setPosition in _reset uses left/top too.
+    else L.DomUtil.setPosition(this._canvas!, pos);
   }
 }
 

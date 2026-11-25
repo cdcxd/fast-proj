@@ -33,11 +33,56 @@ export interface ScreenPath {
   runCount: number;
 }
 
+/** Points per block of {@link pathBlocks}. */
+const B = 64;
+const NO_BLOCKS = new Float64Array(0);
+
+/**
+ * Bounding boxes of the points in blocks of 64, [minX, minY, maxX, maxY] each (NaN for a block with a non-finite
+ * coordinate), for {@link screenPath} to skip the blocks outside its box. Compute once per world polyline.
+ */
+export function pathBlocks(world: ArrayLike<number>): Float64Array<ArrayBuffer> {
+  const n = world.length >> 1;
+  const out = new Float64Array(4 * Math.ceil(n / B));
+  for (let b = 0, i = 0; i < n; b += 4) {
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    const end = Math.min(i + B, n);
+    for (; i < end; i++) {
+      const x = world[2 * i]!;
+      const y = world[2 * i + 1]!;
+      if (x - x !== 0 || y - y !== 0) {
+        x0 = y0 = x1 = y1 = NaN;
+        i = end;
+        break;
+      }
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+    out[b] = x0;
+    out[b + 1] = y0;
+    out[b + 2] = x1;
+    out[b + 3] = y1;
+  }
+  return out;
+}
+
 /**
  * Screen paths of an interleaved world polyline [x0, y0, x1, y1, ...]. A NaN or infinite coordinate breaks the line.
- * Pass the previous result back as `out` to reuse its buffers; they grow as needed.
+ * Pass the previous result back as `out` to reuse its buffers; they grow as needed. With `blocks` from
+ * {@link pathBlocks} of the same points, it skips the blocks wholly outside the box: the same result, and redraws of a
+ * zoomed-in view cost about the visible part of the line rather than all of it.
  */
-export function screenPath(world: ArrayLike<number>, view: ScreenView, out?: ScreenPath): ScreenPath {
+export function screenPath(
+  world: ArrayLike<number>,
+  view: ScreenView,
+  out?: ScreenPath,
+  blocks: Float64Array = NO_BLOCKS,
+): ScreenPath {
   const n = world.length >> 1;
   let xy = out?.xy ?? new Float32Array(4096);
   let runs = out?.runs ?? new Uint32Array(256);
@@ -62,15 +107,16 @@ export function screenPath(world: ArrayLike<number>, view: ScreenView, out?: Scr
   // replacement, which in Chromium 156 runs the first redraws about 4x slower. i = n is a break that closes the last
   // run, inside the loop: code after a loop entered by on-stack replacement has no type feedback, and V8 deoptimized
   // there on every call.
-  for (let i0 = 1; i0 <= n; i0 += CHUNK) {
-    const i1 = Math.min(i0 + CHUNK, n + 1);
+  // Chunks end at multiples of CHUNK, so that no block of B points spans two.
+  for (let i0 = 1, i1 = 0; i0 <= n; i0 = i1) {
+    i1 = Math.min((i0 & ~(CHUNK - 1)) + CHUNK, n + 1);
     // Room for the chunk's worst case: each segment writes at most its clipped end, plus its start when it opens a
     // run; the buffers grow by doubling, so they stay near the output size rather than the input size.
     const points = I[1]! + 2 * (i1 - i0) + 1;
     if (xy.length < 2 * points) xy = grow(xy, 2 * points) as Float32Array;
     const starts = I[2]! + (i1 - i0) + 2;
     if (runs.length < starts) runs = grow(runs, starts) as Uint32Array;
-    chunk(world, i0, i1, n, xy, runs);
+    chunk(world, i0, i1, n, xy, runs, blocks);
   }
   const m = I[1]!;
   const r = I[2]!;
@@ -105,7 +151,15 @@ function outcode(x: number, y: number, minX: number, minY: number, maxX: number,
   return x - x !== 0 || y - y !== 0 ? 16 : (x < minX ? 1 : x > maxX ? 2 : 0) | (y < minY ? 4 : y > maxY ? 8 : 0);
 }
 
-function chunk(world: ArrayLike<number>, i0: number, i1: number, n: number, xy: Float32Array, runs: Uint32Array): void {
+function chunk(
+  world: ArrayLike<number>,
+  i0: number,
+  i1: number,
+  n: number,
+  xy: Float32Array,
+  runs: Uint32Array,
+  blocks: Float64Array,
+): void {
   const scale = F[8]!;
   const offsetX = F[9]!;
   const offsetY = F[10]!;
@@ -129,6 +183,9 @@ function chunk(world: ArrayLike<number>, i0: number, i1: number, n: number, xy: 
   let open = I[3] === 1;
   let hasDir = I[4] === 1;
   let pend = I[5] === 1;
+  // The next block start: after its first point, a block wholly on one side outside the box is skipped to its last
+  // point, as each segment in it would be skipped.
+  let next = blocks.length ? Math.ceil(i0 / B) * B : Infinity;
   for (let i = i0; i < i1; i++) {
     const qx = i < n ? world[2 * i]! * scale + offsetX : NaN;
     const qy = i < n ? world[2 * i + 1]! * scale + offsetY : NaN;
@@ -266,7 +323,39 @@ function chunk(world: ArrayLike<number>, i0: number, i1: number, n: number, xy: 
     px = qx;
     py = qy;
     pc = qc;
+    if (i === next) {
+      next += B;
+      const last = (i + B < i1 ? i + B : i1 <= n ? i1 : n) - 1;
+      if (last > i) {
+        const b = (i / B) * 4;
+        const xa = blocks[b]! * scale + offsetX;
+        const xb = blocks[b + 2]! * scale + offsetX;
+        const ya = blocks[b + 1]! * scale + offsetY;
+        const yb = blocks[b + 3]! * scale + offsetY;
+        if (
+          (xa < minX && xb < minX) ||
+          (xa > maxX && xb > maxX) ||
+          (ya < minY && yb < minY) ||
+          (ya > maxY && yb > maxY)
+        ) {
+          // Its first point, outside, has closed the run.
+          px = world[2 * last]! * scale + offsetX;
+          py = world[2 * last + 1]! * scale + offsetY;
+          pc = outcode(px, py, minX, minY, maxX, maxY);
+          i = last;
+        }
+      }
+    }
   }
+  // The view too: a getter of world can call screenPath, which overwrites F.
+  F[8] = scale;
+  F[9] = offsetX;
+  F[10] = offsetY;
+  F[11] = minX;
+  F[12] = minY;
+  F[13] = maxX;
+  F[14] = maxY;
+  F[15] = tol2;
   F[0] = px;
   F[1] = py;
   F[2] = ax;
