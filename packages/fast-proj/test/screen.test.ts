@@ -1,3 +1,4 @@
+import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
 import { pathBlocks, type ScreenPath, type ScreenView, screenPath } from '../src/screen.js';
 
@@ -179,6 +180,45 @@ describe('screenPath', () => {
       },
     }) as ArrayLike<number>;
     expect(runsOf(screenPath(tricky, v))).toEqual(want);
+  });
+
+  it('survives a call from a length getter of its output', () => {
+    class Tricky extends Float32Array {
+      override get length() {
+        screenPath([0, 0, 1, 1], view({ scale: 100, minX: -5, maxX: 5 }));
+        return super.length;
+      }
+    }
+    const out = { xy: new Tricky(0), runs: new Uint32Array(0), runCount: 0 };
+    expect(runsOf(screenPath([10, 10, 20, 20], view({}), out))).toEqual([[10, 10, 20, 20]]);
+  });
+
+  it('grows buffers from another realm as their kind', () => {
+    const out: ScreenPath = {
+      xy: runInNewContext('new Float32Array(2)') as Float32Array,
+      runs: runInNewContext('new Uint32Array(1)') as Uint32Array,
+      runCount: 0,
+    };
+    expect(runsOf(screenPath([-1.75, 2, 3, 4], view({ minX: -10 }), out))).toEqual([[-1.75, 2, 3, 4]]);
+  });
+
+  it('keeps skipping blocks after a segment misses the box at a corner', () => {
+    // Left of the box, then a segment past its top-left corner at a block start, then above it.
+    const n = 4000;
+    const w = new Float64Array(2 * n);
+    for (let i = 0; i < n; i++) {
+      w[2 * i] = i < 64 ? -100 : 50 + (i % 7);
+      w[2 * i + 1] = i < 64 ? 50 : -100 - (i % 5);
+    }
+    let reads = 0;
+    const counted = new Proxy(w, {
+      get: (t, k) => {
+        if (typeof k === 'string' && k >= '0' && k <= '9') reads++;
+        return Reflect.get(t, k);
+      },
+    }) as ArrayLike<number>;
+    expect(screenPath(counted, view({}), undefined, pathBlocks(w)).runCount).toBe(0);
+    expect(reads).toBeLessThan(n / 4);
   });
 
   it('gives the same result when called again with its output', () => {

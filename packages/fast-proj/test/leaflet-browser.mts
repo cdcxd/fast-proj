@@ -126,6 +126,12 @@ window.extra = () => {
   // Weight 0 draws nothing (a canvas ignores lineWidth 0).
   f.setStyle({ weight: 0 }); f._redraw();
   out.push(['weight 0', alpha(f._canvas) === 0, 'alpha ' + alpha(f._canvas)]);
+  // A miter join (ratio 9, under the limit 10: 90 px for weight 20) from a point 70 px above the view, beyond the
+  // canvas (padding 30 px) and a stroke width more, reaches 20 px into the view.
+  const t = 1 / Math.sqrt(80);
+  const at = (x, y) => { const l = m.containerPointToLatLng([x, y]); return [l.lng, l.lat]; };
+  f = new FastPolyline([...at(200 - 330 * t, -400), ...at(200, -70), ...at(200 + 330 * t, -400)], { weight: 20, lineJoin: 'miter', tolerance: 0 }).addTo(m);
+  out.push(['miter beyond the canvas', alpha(f._canvas) > 0, 'alpha ' + alpha(f._canvas)]);
   // A CRS with code EPSG:3857 but 512-pixel tiles projects through the map, not the fast path.
   const base = v2 ? L.EPSG3857 : L.CRS.EPSG3857;
   m = fresh({ crs: Object.assign(Object.create(base), { code: 'EPSG:3857', scale: (z) => 512 * 2 ** z, zoom: (k) => Math.log2(k / 512) }) });

@@ -286,8 +286,10 @@ export class FastPolyline extends L.Layer {
     const world = this._project();
     const dpr = w / parseFloat(canvas.style.width);
     const s = map.getZoomScale(this._zoom, 0) * dpr;
-    // Clip a stroke width beyond the canvas, so joins at its edge are drawn whole.
-    const m = o.weight! * dpr + 2;
+    // Clip beyond the canvas by the furthest a join reaches from its point, so joins at its edge are drawn whole: half
+    // the width for round and bevel joins, up to half the width times the miter limit (10) for miters.
+    const reach = o.lineJoin === 'miter' ? Math.max(1, ctx.miterLimit / 2) : 1;
+    const m = o.weight! * dpr * reach + 2;
     const path = (this._path = screenPath(
       world,
       {

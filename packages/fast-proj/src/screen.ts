@@ -89,11 +89,13 @@ export function screenPath(
   const { scale, offsetX, offsetY, minX, minY, maxX, maxY } = view;
   const tol2 = view.tolerance * view.tolerance;
 
+  // State between chunks, per call (a getter of world or out could call screenPath): see chunk().
+  const F = new Float64Array(17);
+  const I = new Int32Array(6);
   const px = world[0]! * scale + offsetX;
   const py = world[1]! * scale + offsetY;
   F[0] = px;
   F[1] = py;
-  I.fill(0);
   I[0] = outcode(px, py, minX, minY, maxX, maxY);
   F[8] = scale;
   F[9] = offsetX;
@@ -113,14 +115,14 @@ export function screenPath(
     // Room for the chunk's worst case: each segment writes at most its clipped end, plus its start when it opens a
     // run; the buffers grow by doubling, so they stay near the output size rather than the input size.
     const points = I[1]! + 2 * (i1 - i0) + 1;
-    if (xy.length < 2 * points) xy = grow(xy, 2 * points) as Float32Array;
+    if (xy.length < 2 * points) xy = grow(xy, 2 * points, true) as Float32Array;
     const starts = I[2]! + (i1 - i0) + 2;
-    if (runs.length < starts) runs = grow(runs, starts) as Uint32Array;
-    chunk(world, i0, i1, n, xy, runs, blocks);
+    if (runs.length < starts) runs = grow(runs, starts, false) as Uint32Array;
+    chunk(world, i0, i1, n, xy, runs, blocks, F, I);
   }
   const m = I[1]!;
   const r = I[2]!;
-  if (runs.length <= r) runs = grow(runs, r + 1) as Uint32Array;
+  if (runs.length <= r) runs = grow(runs, r + 1, false) as Uint32Array;
   runs[r] = m;
   if (out) {
     out.xy = xy;
@@ -131,19 +133,19 @@ export function screenPath(
   return { xy, runs, runCount: r };
 }
 
-function grow(a: Float32Array | Uint32Array, min: number): Float32Array | Uint32Array {
+// By kind, not instanceof: a buffer from another realm (an iframe, a vm context) fails instanceof.
+function grow(a: Float32Array | Uint32Array, min: number, coords: boolean): Float32Array | Uint32Array {
   let k = Math.max(a.length * 2, 16);
   while (k < min) k *= 2;
-  const b = a instanceof Float32Array ? new Float32Array(k) : new Uint32Array(k);
+  const b = coords ? new Float32Array(k) : new Uint32Array(k);
   b.set(a);
   return b;
 }
 
-// State between chunks: px, py (the previous point), ax, ay (the anchor, the last point written), ux, uy (the corridor
-// direction), cx, cy (the pending point, the furthest one skipped) and cf (its distance along the corridor); pc (its outcode), m (points written), r (runs
-// started), open, hasDir, pend.
-const F = new Float64Array(17);
-const I = new Int32Array(6);
+// State between chunks, in F: px, py (the previous point), ax, ay (the anchor, the last point written), ux, uy (the
+// corridor direction), cx, cy (the pending point, the furthest one skipped), the view (scale, offsetX, offsetY, minX,
+// minY, maxX, maxY, tolerance²) and cf (the pending point's distance along the corridor); in I: pc (the previous point's
+// outcode), m (points written), r (runs started), open, hasDir, pend.
 const CHUNK = 4096;
 
 // Outcodes: 1 left, 2 right, 4 above, 8 below; 16 not finite.
@@ -159,6 +161,8 @@ function chunk(
   xy: Float32Array,
   runs: Uint32Array,
   blocks: Float64Array,
+  F: Float64Array,
+  I: Int32Array,
 ): void {
   const scale = F[8]!;
   const offsetX = F[9]!;
@@ -323,11 +327,13 @@ function chunk(
     px = qx;
     py = qy;
     pc = qc;
-    if (i === next) {
-      next += B;
-      const last = (i + B < i1 ? i + B : i1 <= n ? i1 : n) - 1;
+    if (i >= next) {
+      // Usually the block's first point; a later one when a corner miss continued past it.
+      const start = Math.floor(i / B) * B;
+      next = start + B;
+      const last = (next < i1 ? next : i1 <= n ? i1 : n) - 1;
       if (last > i) {
-        const b = (i / B) * 4;
+        const b = (start / B) * 4;
         const xa = blocks[b]! * scale + offsetX;
         const xb = blocks[b + 2]! * scale + offsetX;
         const ya = blocks[b + 1]! * scale + offsetY;
@@ -347,15 +353,6 @@ function chunk(
       }
     }
   }
-  // The view too: a getter of world can call screenPath, which overwrites F.
-  F[8] = scale;
-  F[9] = offsetX;
-  F[10] = offsetY;
-  F[11] = minX;
-  F[12] = minY;
-  F[13] = maxX;
-  F[14] = maxY;
-  F[15] = tol2;
   F[0] = px;
   F[1] = py;
   F[2] = ax;
