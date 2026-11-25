@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
-import { BD09, GCJ02, GRS80, WGS84, gcj02, tmerc, utm, utmFor, utmZoneFor } from 'fast-proj';
+import { BD09, GCJ02, GRS80, WGS84, gcj02, pathBlocks, screenPath, tmerc, utm, utmFor, utmZoneFor } from 'fast-proj';
 import { latLngs, lineString } from 'fast-proj/geojson';
 import { loadWasm } from 'fast-proj/wasm';
 
@@ -31,6 +31,19 @@ const [el, ep] = GCJ02.fromWgs84Point(116.391, 39.907);
 assert.ok(Math.abs(al - el) < 1e-12 && Math.abs(ap - ep) < 1e-12);
 const [bl, bp] = BD09.toWgs84Point(...BD09.fromWgs84Point(116.391, 39.907));
 assert.ok(Math.abs(bl - 116.391) < 1e-10 && Math.abs(bp - 39.907) < 1e-10);
+
+const sp = screenPath([0, 0, 10, 0, 10, 10], {
+  scale: 2,
+  offsetX: 1,
+  offsetY: 1,
+  minX: 0,
+  minY: 0,
+  maxX: 100,
+  maxY: 100,
+  tolerance: 0,
+});
+assert.deepEqual(Array.from(sp.xy.subarray(0, 2 * sp.runs[sp.runCount])), [1, 1, 21, 1, 21, 21]);
+assert.deepEqual(Array.from(pathBlocks([0, 0, 10, 0, 10, 10])), [0, 0, 10, 10]);
 
 const ctx = await loadWasm();
 assert.equal(ctx.backend, 'wasm');

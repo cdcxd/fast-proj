@@ -40,6 +40,10 @@
       "types": "./dist/geojson.d.ts",
       "default": "./dist/geojson.js"
     },
+    "./leaflet": {
+      "types": "./dist/leaflet.d.ts",
+      "default": "./dist/leaflet.js"
+    },
     "./wasm": {
       "types": "./dist/wasm.d.ts",
       "default": "./dist/wasm.js"
@@ -57,7 +61,17 @@
     "prepack": "bun run build",
     "test": "vitest run",
     "bench:charts": "node bench/charts.mts",
+    "bench:leaflet": "node bench/leaflet.mts",
+    "test:browser": "node test/leaflet-browser.mts",
     "bench": "bun run build && node bench/run.mts && bun bench/run.mts && node bench/run.mts --browser"
+  },
+  "peerDependencies": {
+    "leaflet": "^1.3.4 || ^2.0.0-beta.5"
+  },
+  "peerDependenciesMeta": {
+    "leaflet": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=20"

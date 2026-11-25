@@ -30,6 +30,8 @@ jobs:
           workspaces: packages/fast-proj/wasm -> target
       - run: bun install --frozen-lockfile
       - run: bun run check
+      - run: bunx playwright install --with-deps chromium
+      - run: node packages/fast-proj/test/leaflet-browser.mts
       - run: cargo test --release --locked --manifest-path packages/fast-proj/wasm/Cargo.toml
       - run: bash packages/fast-proj/wasm/build.sh --bench
       - run: node packages/fast-proj/wasm/bench/checks.mts

@@ -10,6 +10,8 @@ and WGS84 ↔ GCJ-02 ↔ BD-09 for maps of China, with typed-array APIs and an o
 - BD-09 (Baidu), from WGS84 or directly from GCJ-02: 7–14× faster than gcoord through WGS84 (10–16× with
   WebAssembly); both directions within 1.5e-14° of the formula (gcoord's inverse: 2e-6°).
 - Web Mercator (EPSG:3857): within five ulps of the correctly rounded exact value up to the poles; no clamping at ±85.05°.
+- Leaflet 1.x and 2.0 layer for million-point tracks (`fast-proj/leaflet`): 20-45× faster zooms than `L.Polyline`, and an
+  optional WGS84 → GCJ-02 shift for AMap and Tencent basemaps.
 - No per-point allocations in the batch APIs; optional output buffers, in-place conversion.
 - No dependencies, ESM-only, tree-shakeable. Node ≥ 20 and modern browsers.
 
@@ -32,6 +34,9 @@ utm({ zone: 50, geographic: GCJ02 }).toLonLatInterleaved(xy, xy); // UTM -> GCJ-
 GCJ02.fromWgs84Interleaved(lonlat, lonlat); // WGS84 -> GCJ-02, in place
 BD09.fromGcj02Interleaved(lonlat, lonlat); // GCJ-02 -> BD-09 for Baidu (or BD09.fromWgs84Interleaved)
 webMercator().fromLonLatInterleaved(lonlat, lonlat); // lon/lat -> EPSG:3857 x/y (on GCJ-02 lon/lat: AMap tiles)
+
+import { FastPolyline } from 'fast-proj/leaflet';
+new FastPolyline(lonlat, { color: '#e34948', weight: 2 }).addTo(leafletMap); // 1M points: redraws in 7-15 ms
 
 import { loadWasm } from 'fast-proj/wasm'; // opt-in, ~72 kB
 const wasm = await loadWasm();

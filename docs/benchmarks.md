@@ -89,6 +89,31 @@ same baselines, which convert one point per call too. Point methods run the Java
 | WGS84 → Web Mercator | proj4          | 0.52 ms vs 1.15 (2.2×)  | 0.31 ms vs 0.75 (2.4×)   | 0.44 ms vs 1.09 (2.5×)   |
 | Web Mercator → WGS84 | proj4          | 0.33 ms vs 1.21 (3.6×)  | 0.40 ms vs 0.77 (1.9×)   | 0.34 ms vs 1.37 (4.0×)   |
 
+## Leaflet
+
+`FastPolyline` against `L.Polyline` on Leaflet's canvas renderer (`bun run bench:leaflet`): a 1M-point drive (one fix
+per second over about 11 days of driving), 1024×768 at DPR 2, Chromium 156. Times are the work of each step, including
+canvas rasterization, without the wait for the next frame; `add` includes building `L.Polyline`'s `[lat, lng]` arrays.
+
+| Leaflet | Step              | L.Polyline | FastPolyline | Speedup |
+| ------- | ----------------- | ---------: | -----------: | ------: |
+| 1.9.4   | add               |   437.2 ms |      89.1 ms |    4.9× |
+|         | pan (whole track) |    38.0 ms |      17.7 ms |    2.1× |
+|         | zoom in 3 levels  |   460.0 ms |      10.3 ms |   44.7× |
+|         | pan (zoomed in)   |    13.9 ms |       8.3 ms |    1.7× |
+|         | zoom out 3 levels |   491.1 ms |      17.4 ms |   28.2× |
+| 2.0 β5  | add               |   453.7 ms |      99.3 ms |    4.6× |
+|         | pan (whole track) |    36.2 ms |      17.9 ms |    2.0× |
+|         | zoom in 3 levels  |   403.3 ms |      10.3 ms |   39.2× |
+|         | pan (zoomed in)   |    14.9 ms |       8.4 ms |    1.8× |
+|         | zoom out 3 levels |   418.5 ms |      18.5 ms |   22.6× |
+
+The zooms and the zoomed-in pans are centred on a point of the track. Leaflet re-projects every point on each zoom;
+`FastPolyline` projects once and only rescales, and skips the blocks of 64 points outside the view (`pathBlocks`), so a
+zoomed-in redraw costs about the visible part of the track. A pan only clips and simplifies in Leaflet (no
+re-projection), and both spend most of a pan stroking the canvas. A pan within the canvas padding (10% of the view on
+each side) redraws nothing.
+
 ## Notes
 
 The interleaved variants run at the same speed as the array form. Single runs: `node bench/run.mts`, `bun bench/run.mts`, `node bench/run.mts --browser` (needs

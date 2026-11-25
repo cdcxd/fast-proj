@@ -31,6 +31,8 @@ function parse(): { runtimes: string[]; batch: Group[]; point: Group[] } {
   for (let i = 0; i < lines.length; i++) {
     if (!lines[i]!.startsWith('|') || !lines[i + 1]?.startsWith('| --')) continue;
     const head = cells(lines[i]!);
+    // Only the conversion tables (the Leaflet table has its own layout).
+    if (head[0] !== 'Operation') continue;
     runtimes = head.slice(2);
     const isPoint = head[1] === 'Baseline';
     let op = '';
