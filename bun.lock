@@ -21,7 +21,13 @@
     },
     "packages/fast-proj": {
       "name": "fast-proj",
-      "version": "0.6.1",
+      "version": "0.7.0",
+      "peerDependencies": {
+        "leaflet": "^1.3.4 || ^2.0.0-beta.5",
+      },
+      "optionalPeers": [
+        "leaflet",
+      ],
     },
   },
   "packages": {
